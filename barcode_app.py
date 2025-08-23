@@ -16,7 +16,7 @@ from google.oauth2.service_account import Credentials
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="컨테이너 관리 시스템")
 
-# --- Google Sheets 연동 및 데이터 관리 함수들 (이전과 동일) ---
+# --- Google Sheets 연동 및 데이터 관리 함수들 ---
 SHEET_HEADERS = ['컨테이너 번호', '출고처', '씰 번호', '상태', '작업일자']
 
 @st.cache_resource
@@ -61,12 +61,12 @@ def update_row_in_gsheet(index, data):
     worksheet.update(f'A{index+2}:E{index+2}', [row_to_update])
 
 def send_excel_email(recipient, container_data):
-    # (이메일 발송 함수는 변경 없음)
     try:
         df_to_save = pd.DataFrame(container_data)
         df_to_save['작업일자'] = pd.to_datetime(df_to_save['작업일자']).dt.strftime('%Y-%m-%d')
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # 엑셀 파일 저장 시에도 컬럼 순서 지정
             df_to_save[SHEET_HEADERS].to_excel(writer, index=False, sheet_name='Sheet1')
         excel_data = output.getvalue()
         sender_email = st.secrets["email_credentials"]["username"]
@@ -94,7 +94,7 @@ if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
 # --- 화면 UI 구성 ---
-st.header("🚢 컨테이너 관리 시스템")
+st.subheader("🚢 컨테이너 관리 시스템")
 
 # --- 1. (상단) 바코드 생성 섹션 (변경 없음) ---
 with st.expander("🔳 바코드 생성", expanded=True):
@@ -116,20 +116,21 @@ with st.expander("🔳 바코드 생성", expanded=True):
 st.divider()
 
 # --- 2. (중단) 전체 목록 및 신규 등록 ---
-# <<<<<<<<<<<<<<< [변경점] st.subheader를 st.markdown("#### ...")으로 변경 >>>>>>>>>>>>>>>>>
 st.markdown("#### 📋 컨테이너 목록")
 if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
     df = pd.DataFrame(st.session_state.container_list)
+    # <<<<<<<<<<<<<<< [변경점] 데이터프레임 표시 전, 컬럼 순서를 명확하게 지정 >>>>>>>>>>>>>>>>>
     if not df.empty and all(col in df.columns for col in SHEET_HEADERS):
         df['작업일자'] = df['작업일자'].apply(lambda x: pd.to_datetime(x).strftime('%Y-%m-%d') if pd.notna(x) else '')
+        # SHEET_HEADERS 리스트를 사용하여 컬럼 순서를 강제합니다.
         st.dataframe(df[SHEET_HEADERS], use_container_width=True, hide_index=True)
+    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.divider()
 
 st.markdown("#### 📝 신규 컨테이너 등록하기")
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 with st.form(key="new_container_form"):
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567")
@@ -151,10 +152,8 @@ with st.form(key="new_container_form"):
 
 st.divider()
 
-# --- 3. (하단) 데이터 수정 섹션 ---
-# <<<<<<<<<<<<<<< [변경점] st.subheader를 st.markdown("#### ...")으로 변경 >>>>>>>>>>>>>>>>>
+# --- 3. (하단) 데이터 수정 섹션 (변경 없음) ---
 st.markdown("#### ✏️ 개별 데이터 수정")
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 if not st.session_state.container_list:
     st.warning("수정할 데이터가 없습니다.")
 else:
@@ -186,10 +185,8 @@ else:
 
 st.divider()
 
-# --- 4. (최하단) 하루 마감 및 데이터 관리 섹션 ---
-# <<<<<<<<<<<<<<< [변경점] st.subheader를 st.markdown("#### ...")으로 변경 >>>>>>>>>>>>>>>>>
+# --- 4. (최하단) 하루 마감 및 데이터 관리 섹션 (변경 없음) ---
 st.markdown("#### 📁 하루 마감 및 데이터 관리")
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 st.info("데이터는 모든 사용자가 공유하는 중앙 데이터베이스에 실시간으로 저장됩니다.")
 recipient_email = st.text_input("데이터 백업 파일을 수신할 이메일 주소를 입력하세요:", key="recipient_email_main")
 if st.button("🚀 이메일 발송 후 새로 시작 (하루 마감)", use_container_width=True, type="primary"):
