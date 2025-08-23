@@ -10,16 +10,23 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
+import streamlit_session_storage as ss # 자동 저장을 위한 라이브러리
 
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="컨테이너 관리 시스템")
 
 # --- 데이터 관리 ---
+# 앱 시작 시, 브라우저 저장소에서 'container_list'를 가져옵니다.
+# 저장된 데이터가 없으면, st.session_state에 빈 리스트를 생성합니다.
 if 'container_list' not in st.session_state:
-    st.session_state.container_list = []
+    st.session_state.container_list = ss.get(key='container_list', default=[])
 
 # --- 이메일 발송 공통 함수 ---
 def send_excel_email(recipient, container_data):
+    """
+    데이터를 엑셀 파일로 만들어 이메일로 발송하는 공통 함수.
+    성공 시 (True, None), 실패 시 (False, error_message)를 반환.
+    """
     try:
         df_to_save = pd.DataFrame(container_data)
         df_to_save['작업일자'] = pd.to_datetime(df_to_save['작업일자']).dt.strftime('%Y-%m-%d')
@@ -49,9 +56,7 @@ def send_excel_email(recipient, container_data):
         return False, str(e)
 
 # --- 화면 UI 구성 ---
-# <<<<<<<<<<<<<<< [변경점] st.title을 st.header로 변경하여 제목 크기 축소 >>>>>>>>>>>>>>>>>
 st.header("🚢 컨테이너 관리 시스템")
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 1. (상단) 바코드 생성 섹션 ---
 with st.expander("🔳 바코드 생성", expanded=True):
@@ -142,27 +147,12 @@ st.divider()
 # --- 4. (최하단) 하루 마감 및 데이터 관리 섹션 ---
 st.subheader("📁 하루 마감 및 데이터 관리")
 
-st.info("데이터는 브라우저를 새로고침하거나 탭을 닫으면 사라질 수 있습니다. 중요한 작업 후에는 **중간 백업**을 권장합니다.")
+st.info("현재 데이터는 브라우저에 자동 저장됩니다. 하루 작업을 마친 후 아래 기능을 사용하세요.")
 
 recipient_email = st.text_input("데이터 백업 파일을 수신할 이메일 주소를 입력하세요:", key="recipient_email_main")
 
-# 중간 백업 기능
-if st.button("📧 현재 데이터 이메일로 중간 백업", use_container_width=True):
-    if not st.session_state.container_list:
-        st.warning("백업할 데이터가 없습니다.")
-    elif not recipient_email:
-        st.error("수신자 이메일 주소를 반드시 입력해야 합니다.")
-    else:
-        success, error_msg = send_excel_email(recipient_email, st.session_state.container_list)
-        if success:
-            st.success(f"'{recipient_email}' 주소로 중간 백업 이메일을 성공적으로 발송했습니다! 작업은 계속 유지됩니다.")
-        else:
-            st.error(f"백업 이메일 발송 중 오류가 발생했습니다: {error_msg}")
-
-st.write("---")
-
 # 하루 마감 기능 (이메일 발송 + 초기화)
-st.error("주의: 아래 버튼은 데이터를 이메일로 보낸 후 **목록을 완전히 초기화**합니다. 하루 작업을 마칠 때만 사용하세요.")
+st.error("주의: 아래 버튼은 데이터를 이메일로 보낸 후 **목록을 완전히 초기화**합니다.")
 if st.button("🚀 이메일 발송 후 새로 시작 (하루 마감)", use_container_width=True, type="primary"):
     if not st.session_state.container_list:
         st.warning("마감할 데이터가 없습니다.")
@@ -177,7 +167,7 @@ if st.button("🚀 이메일 발송 후 새로 시작 (하루 마감)", use_cont
             st.rerun()
         else:
             st.error(f"최종 백업 이메일 발송 중 오류가 발생했습니다: {error_msg}")
-            st.warning("이메일 발송에 실패하여 데이터를 초기화하지 않았습니다. Secrets 설정을 확인 후 다시 시도해주세요.")
+            st.warning("이메일 발송에 실패하여 데이터를 초기화하지 않았습니다.")
 
 st.write("---")
 
@@ -208,3 +198,7 @@ with st.expander("⬆️ (필요시 사용) 백업 파일로 데이터 복구/�
                 st.rerun()
         except Exception as e:
             st.error(f"파일을 읽는 중 오류가 발생했습니다: {e}")
+
+# --- 스크립트의 맨 마지막 ---
+# 모든 상호작용이 끝난 후, 현재 최신 데이터를 브라우저 저장소에 자동으로 덮어씁니다.
+ss.set(key='container_list', value=st.session_state.container_list)
