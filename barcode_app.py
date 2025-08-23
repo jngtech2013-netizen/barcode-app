@@ -8,9 +8,7 @@ import re
 import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-# <<<<<<<<<<<<<<< [변경점] MediaIoUploader 대신 MediaIoBaseUpload를 임포트 >>>>>>>>>>>>>>>>>
 from googleapiclient.http import MediaIoBaseUpload
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="컨테이너 관리 시스템")
@@ -57,7 +55,8 @@ def load_data_from_gsheet():
     data = all_values[1:]
     df = pd.DataFrame(data)
     num_data_columns = len(df.columns)
-    df.columns = SHEET_HEADERS[:num_data_columns]
+    if num_data_columns > 0:
+        df.columns = SHEET_HEADERS[:num_data_columns]
     df.replace('', pd.NA, inplace=True)
     if '작업일자' in df.columns:
         df['작업일자'] = pd.to_datetime(df['작업일자'], errors='coerce').dt.date
@@ -85,47 +84,39 @@ def delete_row_from_gsheet(index, container_no):
     worksheet.delete_rows(index + 2)
     log_change(f"데이터 삭제: {container_no}")
 
-# <<<<<<<<<<<<<<< [변경점] Google Drive 백업 함수를 최신 방식으로 수정 >>>>>>>>>>>>>>>>>
+# --- Google Drive 백업 함수 ---
 def save_excel_to_drive(container_data):
     try:
+        if drive_service is None:
+            raise Exception("Google Drive 서비스에 연결되지 않았습니다.")
         df_to_save = pd.DataFrame(container_data)
         df_to_save['작업일자'] = pd.to_datetime(df_to_save['작업일자']).dt.strftime('%Y-%m-%d')
-        
         output = BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_to_save[SHEET_HEADERS].to_excel(writer, index=False, sheet_name='Sheet1')
-        
-        # BytesIO 객체의 포인터를 처음으로 되돌립니다.
         output.seek(0)
-
         file_name = f"container_data_{date.today().isoformat()}.xlsx"
         file_metadata = {
             'name': file_name,
             'parents': [st.secrets["google_drive"]["backup_folder_id"]]
         }
-        
-        # MediaIoBaseUpload를 사용하여 미디어 객체를 생성합니다.
         media = MediaIoBaseUpload(output, 
                                   mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                                   resumable=True)
-        
-        # 파일을 생성하고 업로드합니다.
         drive_service.files().create(
             body=file_metadata,
             media_body=media,
             fields='id'
         ).execute()
-        
         return True, None
     except Exception as e:
         return False, str(e)
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 데이터 초기화 ---
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
-# --- 화면 UI 구성 (이하 모든 UI 코드는 변경 없음) ---
+# --- 화면 UI 구성 ---
 st.subheader("🚢 컨테이너 관리 시스템")
 
 with st.expander("🔳 바코드 생성", expanded=True):
@@ -196,7 +187,7 @@ else:
             current_dest_idx = dest_options.index(selected_data.get('출고처', dest_options[0]))
             new_dest = st.radio("출고처 수정", options=dest_options, index=current_dest_idx, horizontal=True)
             feet_options = ['20', '40']
-            current_feet_idx = feet_options.index(str(selected_data.get('피트수', feet_options[0])))
+            current_feet_idx = feet_options.index(str(selected_data.get('피트수', '20')))
             new_feet = st.radio("피트수 수정", options=feet_options, index=current_feet_idx, horizontal=True)
             new_seal = st.text_input("씰 번호 수정", value=selected_data.get('씰 번호', ''))
             status_options = ['선적중', '선적완료']
