@@ -94,7 +94,7 @@ if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
 # --- 화면 UI 구성 ---
-st.subheader("🚢 컨테이너 관리 시스템")
+st.header("🚢 컨테이너 관리 시스템")
 
 # --- 1. (상단) 바코드 생성 섹션 (변경 없음) ---
 with st.expander("🔳 바코드 생성", expanded=True):
@@ -116,7 +116,8 @@ with st.expander("🔳 바코드 생성", expanded=True):
 st.divider()
 
 # --- 2. (중단) 전체 목록 및 신규 등록 ---
-st.subheader("📋 컨테이너 목록")
+# <<<<<<<<<<<<<<< [변경점] st.subheader를 st.markdown("#### ...")으로 변경 >>>>>>>>>>>>>>>>>
+st.markdown("#### 📋 컨테이너 목록")
 if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
@@ -127,7 +128,8 @@ else:
 
 st.divider()
 
-st.subheader("📝 신규 컨테이너 등록하기")
+st.markdown("#### 📝 신규 컨테이너 등록하기")
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 with st.form(key="new_container_form"):
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567")
@@ -150,7 +152,9 @@ with st.form(key="new_container_form"):
 st.divider()
 
 # --- 3. (하단) 데이터 수정 섹션 ---
-st.subheader("✏️ 개별 데이터 수정")
+# <<<<<<<<<<<<<<< [변경점] st.subheader를 st.markdown("#### ...")으로 변경 >>>>>>>>>>>>>>>>>
+st.markdown("#### ✏️ 개별 데이터 수정")
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 if not st.session_state.container_list:
     st.warning("수정할 데이터가 없습니다.")
 else:
@@ -162,24 +166,17 @@ else:
         with st.form(key=f"edit_form_{selected_for_edit}"):
             st.write(f"**'{selected_for_edit}' 정보 수정**")
             dest_options = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
-            
-            # <<<<<<<<<<<<<<< [변경점] st.selectbox를 st.radio로 변경 >>>>>>>>>>>>>>>>>
             current_dest_idx = dest_options.index(selected_data.get('출고처', dest_options[0]))
             new_dest = st.radio("출고처 수정", options=dest_options, index=current_dest_idx, horizontal=True)
-            
             new_seal = st.text_input("씰 번호 수정", value=selected_data.get('씰 번호', ''))
-            
             status_options = ['선적중', '선적완료']
             current_status_idx = status_options.index(selected_data.get('상태', status_options[0]))
             new_status = st.radio("상태 변경", options=status_options, index=current_status_idx, horizontal=True)
-            # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-            
             work_date_value = selected_data.get('작업일자', date.today())
             if not isinstance(work_date_value, date):
                 try: work_date_value = datetime.strptime(str(work_date_value), '%Y-%m-%d').date()
                 except (ValueError, TypeError): work_date_value = date.today()
             new_work_date = st.date_input("작업일자 수정", value=work_date_value)
-            
             if st.form_submit_button("💾 수정사항 저장", use_container_width=True):
                 updated_data = {'컨테이너 번호': selected_for_edit, '출고처': new_dest, '씰 번호': new_seal, '상태': new_status, '작업일자': new_work_date}
                 st.session_state.container_list[selected_idx] = updated_data
@@ -189,8 +186,10 @@ else:
 
 st.divider()
 
-# --- 4. (최하단) 하루 마감 및 데이터 관리 섹션 (변경 없음) ---
-st.subheader("📁 하루 마감 및 데이터 관리")
+# --- 4. (최하단) 하루 마감 및 데이터 관리 섹션 ---
+# <<<<<<<<<<<<<<< [변경점] st.subheader를 st.markdown("#### ...")으로 변경 >>>>>>>>>>>>>>>>>
+st.markdown("#### 📁 하루 마감 및 데이터 관리")
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 st.info("데이터는 모든 사용자가 공유하는 중앙 데이터베이스에 실시간으로 저장됩니다.")
 recipient_email = st.text_input("데이터 백업 파일을 수신할 이메일 주소를 입력하세요:", key="recipient_email_main")
 if st.button("🚀 이메일 발송 후 새로 시작 (하루 마감)", use_container_width=True, type="primary"):
