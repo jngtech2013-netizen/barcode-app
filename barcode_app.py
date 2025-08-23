@@ -32,7 +32,7 @@ def connect_to_gsheet():
 
 spreadsheet = connect_to_gsheet()
 
-# --- 로그 기록 함수 (변경 없음) ---
+# --- 로그 기록 함수 ---
 def log_change(action):
     if spreadsheet is None: return
     try:
@@ -42,7 +42,7 @@ def log_change(action):
     except Exception as e:
         st.warning(f"로그 기록 중 오류 발생: {e}")
 
-# --- 데이터 관리 함수들 (변경 없음) ---
+# --- 데이터 관리 함수들 ---
 def load_data_from_gsheet():
     if spreadsheet is None: return []
     try:
@@ -112,11 +112,10 @@ def backup_data_to_new_sheet(container_data):
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
-# --- 화면 UI 구성 (상단 ~ 개별 수정까지는 이전과 동일) ---
+# --- 화면 UI 구성 ---
 st.subheader("🚢 컨테이너 관리 시스템")
 
 with st.expander("🔳 바코드 생성", expanded=True):
-    # (내용 변경 없음)
     shippable_containers = [c['컨테이너 번호'] for c in st.session_state.container_list if c.get('상태') == '선적중']
     if not shippable_containers: st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
     else:
@@ -128,22 +127,39 @@ with st.expander("🔳 바코드 생성", expanded=True):
         Code128(barcode_data, writer=ImageWriter()).write(fp)
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2: st.image(fp)
+
 st.divider()
 
 st.markdown("#### 📋 컨테이너 목록")
-# (내용 변경 없음)
-if not st.session_state.container_list: st.info("등록된 컨테이너가 없습니다.")
+if not st.session_state.container_list:
+    st.info("등록된 컨테이너가 없습니다.")
 else:
     df = pd.DataFrame(st.session_state.container_list)
     if not df.empty:
+        df.index = range(1, len(df) + 1)
+        df.index.name = "번호"
+        
         for col in SHEET_HEADERS:
             if col not in df.columns: df[col] = pd.NA
+        
         df['작업일자'] = df['작업일자'].apply(lambda x: pd.to_datetime(x).strftime('%Y-%m-%d') if pd.notna(x) else '')
-        st.dataframe(df[SHEET_HEADERS], use_container_width=True, hide_index=True)
+        
+        columns_to_center = ['출고처', '피트수', '씰 번호', '상태', '작업일자']
+        
+        styler = df[SHEET_HEADERS].style.set_table_styles(
+            [
+                {'selector': 'th', 'props': [('text-align', 'center')]}
+            ]
+        ).set_properties(
+            subset=columns_to_center,
+            **{'text-align': 'center'}
+        )
+        
+        st.dataframe(styler, use_container_width=True)
+
 st.divider()
 
 st.markdown("#### 📝 신규 컨테이너 등록하기")
-# (내용 변경 없음)
 with st.form(key="new_container_form"):
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567")
@@ -163,10 +179,10 @@ with st.form(key="new_container_form"):
             add_row_to_gsheet(new_container)
             st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
             st.rerun()
+
 st.divider()
 
 st.markdown("#### ✏️ 개별 데이터 수정 및 삭제")
-# (내용 변경 없음)
 if not st.session_state.container_list: st.warning("수정할 데이터가 없습니다.")
 else:
     container_numbers_for_edit = [c.get('컨테이너 번호', '') for c in st.session_state.container_list]
@@ -204,6 +220,7 @@ else:
             st.session_state.container_list.pop(selected_idx)
             st.success(f"'{selected_for_edit}' 컨테이너 정보가 삭제되었습니다.")
             st.rerun()
+
 st.divider()
 
 st.markdown("#### 📁 하루 마감 및 데이터 관리")
@@ -228,13 +245,10 @@ if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", u
             st.warning("백업에 실패하여 데이터를 초기화하지 않았습니다.")
 
 st.write("---")
-
-# <<<<<<<<<<<<<<< [변경점] 일괄 재등록 섹션을 백업 시트 복구 기능으로 변경 >>>>>>>>>>>>>>>>>
 with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구"):
     st.info("실수로 데이터를 초기화했을 경우, 이전 백업 시트를 선택하여 현재 데이터로 덮어쓸 수 있습니다.")
     
     if spreadsheet:
-        # '백업_'으로 시작하는 모든 시트 목록을 가져옵니다.
         all_sheets = [s.title for s in spreadsheet.worksheets()]
         backup_sheets = sorted([s for s in all_sheets if s.startswith("백업_")], reverse=True)
         
@@ -246,21 +260,14 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
             st.error("주의: 이 작업은 현재 데이터를 **완전히 덮어씁니다.**")
             if st.button(f"'{selected_backup_sheet}' 시트로 복구하기", use_container_width=True):
                 try:
-                    # 1. 선택된 백업 시트의 모든 데이터를 가져옵니다.
                     backup_worksheet = spreadsheet.worksheet(selected_backup_sheet)
                     backup_values = backup_worksheet.get_all_values()
-                    
-                    # 2. 현재 데이터 시트를 깨끗하게 비웁니다.
                     main_worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
                     main_worksheet.clear()
-                    
-                    # 3. 백업 데이터를 현재 데이터 시트에 씁니다.
                     main_worksheet.update('A1', backup_values)
                     
                     log_change(f"데이터 복구: '{selected_backup_sheet}' 시트의 내용으로 덮어씀")
                     st.success(f"'{selected_backup_sheet}' 시트의 데이터로 성공적으로 복구했습니다!")
                     st.rerun()
-
                 except Exception as e:
                     st.error(f"복구 중 오류가 발생했습니다: {e}")
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
