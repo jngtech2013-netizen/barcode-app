@@ -94,9 +94,7 @@ if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
 # --- 화면 UI 구성 ---
-# <<<<<<<<<<<<<<< [변경점 1] 제목 크기를 st.subheader로 변경 >>>>>>>>>>>>>>>>>
 st.subheader("🚢 컨테이너 관리 시스템")
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 1. (상단) 바코드 생성 섹션 (변경 없음) ---
 with st.expander("🔳 바코드 생성", expanded=True):
@@ -119,7 +117,6 @@ st.divider()
 
 # --- 2. (중단) 전체 목록 및 신규 등록 ---
 st.subheader("📋 컨테이너 목록")
-
 if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
@@ -130,12 +127,15 @@ else:
 
 st.divider()
 
-# <<<<<<<<<<<<<<< [변경점 2] st.expander를 제거하고 항상 보이도록 변경 >>>>>>>>>>>>>>>>>
 st.subheader("📝 신규 컨테이너 등록하기")
 with st.form(key="new_container_form"):
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567")
-    destination = st.selectbox("2. 출고처", options=destinations)
+    
+    # <<<<<<<<<<<<<<< [변경점] st.selectbox를 st.radio로 변경 >>>>>>>>>>>>>>>>>
+    destination = st.radio("2. 출고처", options=destinations, horizontal=True) # horizontal=True로 가로 배치
+    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    
     seal_no = st.text_input("3. 씰 번호")
     work_date = st.date_input("4. 작업일자", value=date.today())
     submitted = st.form_submit_button("➕ 등록하기", use_container_width=True)
@@ -150,7 +150,6 @@ with st.form(key="new_container_form"):
             add_row_to_gsheet(new_container)
             st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
             st.rerun()
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.divider()
 
@@ -168,6 +167,7 @@ else:
         with st.form(key=f"edit_form_{selected_for_edit}"):
             st.write(f"**'{selected_for_edit}' 정보 수정**")
             dest_options = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
+            # 수정 폼의 selectbox는 그대로 둡니다. 키보드가 떠도 큰 문제가 되지 않기 때문입니다.
             current_dest_idx = dest_options.index(selected_data.get('출고처', dest_options[0]))
             new_dest = st.selectbox("출고처 수정", options=dest_options, index=current_dest_idx)
             new_seal = st.text_input("씰 번호 수정", value=selected_data.get('씰 번호', ''))
