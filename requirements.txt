@@ -3,4 +3,4 @@ pandas
 python-barcode
 Pillow
 openpyxl
-streamlit-session-storage
+streamlit-local-storage

@@ -3,30 +3,37 @@ import pandas as pd
 from barcode import Code128
 from barcode.writer import ImageWriter
 from io import BytesIO
-from datetime import date
+from datetime import date, datetime
 import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
-import streamlit_session_storage as ss # 자동 저장을 위한 라이브러리
+from streamlit_local_storage import LocalStorage # 올바른 라이브러리 이름
 
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="컨테이너 관리 시스템")
 
+# LocalStorage 객체 생성
+localS = LocalStorage()
+
 # --- 데이터 관리 ---
-# 앱 시작 시, 브라우저 저장소에서 'container_list'를 가져옵니다.
-# 저장된 데이터가 없으면, st.session_state에 빈 리스트를 생성합니다.
 if 'container_list' not in st.session_state:
-    st.session_state.container_list = ss.get(key='container_list', default=[])
+    saved_list = localS.getItem("container_list") or []
+    deserialized_list = []
+    for item in saved_list:
+        new_item = item.copy()
+        if isinstance(new_item.get('작업일자'), str):
+            try:
+                new_item['작업일자'] = datetime.fromisoformat(new_item['작업일자']).date()
+            except ValueError:
+                new_item['작업일자'] = date.today()
+        deserialized_list.append(new_item)
+    st.session_state.container_list = deserialized_list
 
 # --- 이메일 발송 공통 함수 ---
 def send_excel_email(recipient, container_data):
-    """
-    데이터를 엑셀 파일로 만들어 이메일로 발송하는 공통 함수.
-    성공 시 (True, None), 실패 시 (False, error_message)를 반환.
-    """
     try:
         df_to_save = pd.DataFrame(container_data)
         df_to_save['작업일자'] = pd.to_datetime(df_to_save['작업일자']).dt.strftime('%Y-%m-%d')
@@ -34,7 +41,6 @@ def send_excel_email(recipient, container_data):
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_to_save.to_excel(writer, index=False, sheet_name='Sheet1')
         excel_data = output.getvalue()
-
         sender_email = st.secrets["email_credentials"]["username"]
         sender_password = st.secrets["email_credentials"]["password"]
         msg = MIMEMultipart()
@@ -58,7 +64,6 @@ def send_excel_email(recipient, container_data):
 # --- 화면 UI 구성 ---
 st.header("🚢 컨테이너 관리 시스템")
 
-# --- 1. (상단) 바코드 생성 섹션 ---
 with st.expander("🔳 바코드 생성", expanded=True):
     shippable_containers = [c['컨테이너 번호'] for c in st.session_state.container_list if c['상태'] == '선적중']
     if not shippable_containers:
@@ -81,7 +86,6 @@ with st.expander("🔳 바코드 생성", expanded=True):
 
 st.divider()
 
-# --- 2. (중단) 신규 등록 및 전체 목록 ---
 st.subheader("📋 컨테이너 목록")
 with st.expander("📝 신규 컨테이너 등록하기"):
     with st.form(key="new_container_form"):
@@ -116,7 +120,6 @@ else:
 
 st.divider()
 
-# --- 3. (하단) 데이터 수정 섹션 ---
 st.subheader("✏️ 개별 데이터 수정")
 if not st.session_state.container_list:
     st.warning("수정할 데이터가 없습니다.")
@@ -144,14 +147,11 @@ else:
 
 st.divider()
 
-# --- 4. (최하단) 하루 마감 및 데이터 관리 섹션 ---
 st.subheader("📁 하루 마감 및 데이터 관리")
 
 st.info("현재 데이터는 브라우저에 자동 저장됩니다. 하루 작업을 마친 후 아래 기능을 사용하세요.")
-
 recipient_email = st.text_input("데이터 백업 파일을 수신할 이메일 주소를 입력하세요:", key="recipient_email_main")
 
-# 하루 마감 기능 (이메일 발송 + 초기화)
 st.error("주의: 아래 버튼은 데이터를 이메일로 보낸 후 **목록을 완전히 초기화**합니다.")
 if st.button("🚀 이메일 발송 후 새로 시작 (하루 마감)", use_container_width=True, type="primary"):
     if not st.session_state.container_list:
@@ -171,7 +171,6 @@ if st.button("🚀 이메일 발송 후 새로 시작 (하루 마감)", use_cont
 
 st.write("---")
 
-# 일괄 재등록 기능
 with st.expander("⬆️ (필요시 사용) 백업 파일로 데이터 복구/일괄 등록"):
     st.info("실수로 데이터를 삭제했거나, 이전 데이터를 불러올 때 사용하세요.")
     uploaded_file = st.file_uploader("백업된 엑셀(xlsx) 파일을 업로드하세요.", type=['xlsx'])
@@ -201,4 +200,11 @@ with st.expander("⬆️ (필요시 사용) 백업 파일로 데이터 복구/�
 
 # --- 스크립트의 맨 마지막 ---
 # 모든 상호작용이 끝난 후, 현재 최신 데이터를 브라우저 저장소에 자동으로 덮어씁니다.
-ss.set(key='container_list', value=st.session_state.container_list)
+list_to_save = []
+for item in st.session_state.container_list:
+    new_item = item.copy()
+    if isinstance(new_item['작업일자'], date):
+        new_item['작업일자'] = new_item['작업일자'].isoformat()
+    list_to_save.append(new_item)
+
+localS.setItem("container_list", list_to_save)
