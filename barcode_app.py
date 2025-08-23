@@ -222,6 +222,9 @@ else:
     def make_clickable(val):
         return f'<div style="text-align: center;">{val}</div>'
     
+    def make_left_align(val):
+        return f'<div style="text-align: left; font-family: monospace;">{val}</div>'
+    
     # 스타일 적용
     df_styled = df_display.copy()
     
@@ -246,8 +249,12 @@ else:
         html += f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center;">{i+1}</td>'
         
         for j, (col, value) in enumerate(row.items()):
-            # 모든 컬럼 가운데 정렬
-            html += f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center;">{value}</td>'
+            if col == '컨테이너 번호':
+                # 컨테이너 번호만 왼쪽 정렬
+                html += f'<td style="border: 1px solid #ddd; padding: 8px; text-align: left; font-family: monospace; font-weight: 500;">{value}</td>'
+            else:
+                # 나머지는 가운데 정렬
+                html += f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center;">{value}</td>'
         
         html += '</tr>'
     
