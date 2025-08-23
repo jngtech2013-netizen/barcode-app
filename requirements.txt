@@ -3,7 +3,7 @@ pandas
 python-barcode
 Pillow
 openpyxl
-gspread==5.12.4
-google-api-python-client==2.128.0
-google-auth-httplib2==0.2.0
-google-auth-oauthlib==1.2.0
+gspread
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib

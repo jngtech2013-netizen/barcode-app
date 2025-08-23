@@ -7,15 +7,14 @@ from datetime import date, datetime, timezone, timedelta
 import re
 import gspread
 from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
 
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="컨테이너 관리 시스템")
 
 # --- 상수 정의 ---
+MAIN_SHEET_NAME = "현재 데이터"
 SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '상태', '작업일자']
-LOG_SHEET_NAME = "업데이트 로그"
+LOG_SHEET_NAME = "업데이트 로그" # 로그 시트 이름 정의
 KST = timezone(timedelta(hours=9))
 
 # --- Google Sheets 연동 ---
@@ -26,45 +25,55 @@ def connect_to_gsheet():
         creds = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=scope)
         client = gspread.authorize(creds)
         spreadsheet = client.open("Container_Data_DB")
-        drive_service = build('drive', 'v3', credentials=creds)
-        return spreadsheet, drive_service
+        return spreadsheet
     except Exception as e:
-        st.error(f"Google 서비스 연결에 실패했습니다: {e}")
-        return None, None
+        st.error(f"Google Sheets 연결에 실패했습니다: {e}")
+        return None
 
-spreadsheet, drive_service = connect_to_gsheet()
+spreadsheet = connect_to_gsheet()
 
+# <<<<<<<<<<<<<<< [변경점] 로그 기록 함수 수정 >>>>>>>>>>>>>>>>>
 # --- 로그 기록 함수 ---
 def log_change(action):
     if spreadsheet is None: return
     try:
+        # 이제 spreadsheet 객체에서 직접 로그 시트를 찾습니다.
         log_sheet = spreadsheet.worksheet(LOG_SHEET_NAME)
         timestamp = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
         log_sheet.append_row([timestamp, action])
     except gspread.exceptions.WorksheetNotFound:
-        st.warning(f"'{LOG_SHEET_NAME}' 시트를 찾을 수 없어 로그를 기록하지 못했습니다.")
+        st.warning(f"'{LOG_SHEET_NAME}' 시트를 찾을 수 없습니다. 'Container_Data_DB' 파일 안에 해당 이름의 시트(탭)가 있는지 확인하세요.")
     except Exception as e:
         st.warning(f"로그 기록 중 오류 발생: {e}")
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-# --- 데이터 관리 함수 ---
+# --- 데이터 관리 함수들 (이하 변경 없음, 이전 최종 코드와 동일) ---
 def load_data_from_gsheet():
     if spreadsheet is None: return []
-    worksheet = spreadsheet.sheet1
-    all_values = worksheet.get_all_values()
-    if len(all_values) < 2: return []
-    data = all_values[1:]
-    df = pd.DataFrame(data)
-    num_data_columns = len(df.columns)
-    if num_data_columns > 0:
-        df.columns = SHEET_HEADERS[:num_data_columns]
-    df.replace('', pd.NA, inplace=True)
-    if '작업일자' in df.columns:
-        df['작업일자'] = pd.to_datetime(df['작업일자'], errors='coerce').dt.date
-    return df.to_dict('records')
+    try:
+        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        all_values = worksheet.get_all_values()
+        if len(all_values) < 2: return []
+        data = all_values[1:]
+        df = pd.DataFrame(data, columns=SHEET_HEADERS)
+        df.replace('', pd.NA, inplace=True)
+        if '작업일자' in df.columns:
+            df['작업일자'] = pd.to_datetime(df['작업일자'], errors='coerce').dt.date
+        return df.to_dict('records')
+    except gspread.exceptions.WorksheetNotFound:
+        st.error(f"'{MAIN_SHEET_NAME}' 시트를 찾을 수 없습니다. 'Container_Data_DB' 파일의 첫 번째 시트 이름을 확인해주세요.")
+        try:
+            worksheet = spreadsheet.add_worksheet(title=MAIN_SHEET_NAME, rows=100, cols=20)
+            worksheet.update('A1', [SHEET_HEADERS])
+            return []
+        except: return []
+    except Exception as e:
+        st.error(f"데이터 로딩 중 오류 발생: {e}")
+        return []
 
 def add_row_to_gsheet(data):
     if spreadsheet is None: return
-    worksheet = spreadsheet.sheet1
+    worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
     if isinstance(data.get('작업일자'), date): data['작업일자'] = data['작업일자'].isoformat()
     row_to_insert = [data.get(header, "") for header in SHEET_HEADERS]
     worksheet.append_row(row_to_insert)
@@ -72,7 +81,7 @@ def add_row_to_gsheet(data):
 
 def update_row_in_gsheet(index, data):
     if spreadsheet is None: return
-    worksheet = spreadsheet.sheet1
+    worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
     if isinstance(data.get('작업일자'), date): data['작업일자'] = data['작업일자'].isoformat()
     row_to_update = [data.get(header, "") for header in SHEET_HEADERS]
     worksheet.update(f'A{index+2}:F{index+2}', [row_to_update])
@@ -80,34 +89,21 @@ def update_row_in_gsheet(index, data):
 
 def delete_row_from_gsheet(index, container_no):
     if spreadsheet is None: return
-    worksheet = spreadsheet.sheet1
+    worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
     worksheet.delete_rows(index + 2)
     log_change(f"데이터 삭제: {container_no}")
 
-# --- Google Drive 백업 함수 ---
-def save_excel_to_drive(container_data):
+def backup_data_to_new_sheet(container_data):
     try:
-        if drive_service is None:
-            raise Exception("Google Drive 서비스에 연결되지 않았습니다.")
+        if spreadsheet is None: raise Exception("스프레드시트 연결 안됨")
+        today_str = date.today().isoformat()
+        backup_sheet_name = f"백업_{today_str}"
+        new_sheet = spreadsheet.add_worksheet(title=backup_sheet_name, rows=100, cols=20)
         df_to_save = pd.DataFrame(container_data)
         df_to_save['작업일자'] = pd.to_datetime(df_to_save['작업일자']).dt.strftime('%Y-%m-%d')
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_to_save[SHEET_HEADERS].to_excel(writer, index=False, sheet_name='Sheet1')
-        output.seek(0)
-        file_name = f"container_data_{date.today().isoformat()}.xlsx"
-        file_metadata = {
-            'name': file_name,
-            'parents': [st.secrets["google_drive"]["backup_folder_id"]]
-        }
-        media = MediaIoBaseUpload(output, 
-                                  mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                                  resumable=True)
-        drive_service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id'
-        ).execute()
+        new_sheet.update('A1', [SHEET_HEADERS])
+        new_sheet.update('A2', df_to_save.values.tolist())
+        log_change(f"데이터 백업: '{backup_sheet_name}' 시트 생성")
         return True, None
     except Exception as e:
         return False, str(e)
@@ -116,18 +112,16 @@ def save_excel_to_drive(container_data):
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
-# --- 화면 UI 구성 ---
+# --- 화면 UI 구성 (이하 변경 없음) ---
 st.subheader("🚢 컨테이너 관리 시스템")
 
 with st.expander("🔳 바코드 생성", expanded=True):
     shippable_containers = [c['컨테이너 번호'] for c in st.session_state.container_list if c.get('상태') == '선적중']
-    if not shippable_containers:
-        st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
+    if not shippable_containers: st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
     else:
         selected_for_barcode = st.selectbox("컨테이너를 선택하면 바코드가 자동 생성됩니다:", shippable_containers)
         container_info = next((c for c in st.session_state.container_list if c.get('컨테이너 번호') == selected_for_barcode), None)
-        if container_info:
-            st.info(f"**출고처:** {container_info.get('출고처', 'N/A')} / **피트수:** {container_info.get('피트수', 'N/A')}")
+        if container_info: st.info(f"**출고처:** {container_info.get('출고처', 'N/A')} / **피트수:** {container_info.get('피트수', 'N/A')}")
         barcode_data = selected_for_barcode
         fp = BytesIO()
         Code128(barcode_data, writer=ImageWriter()).write(fp)
@@ -137,8 +131,7 @@ with st.expander("🔳 바코드 생성", expanded=True):
 st.divider()
 
 st.markdown("#### 📋 컨테이너 목록")
-if not st.session_state.container_list:
-    st.info("등록된 컨테이너가 없습니다.")
+if not st.session_state.container_list: st.info("등록된 컨테이너가 없습니다.")
 else:
     df = pd.DataFrame(st.session_state.container_list)
     if not df.empty:
@@ -173,8 +166,7 @@ with st.form(key="new_container_form"):
 st.divider()
 
 st.markdown("#### ✏️ 개별 데이터 수정 및 삭제")
-if not st.session_state.container_list:
-    st.warning("수정할 데이터가 없습니다.")
+if not st.session_state.container_list: st.warning("수정할 데이터가 없습니다.")
 else:
     container_numbers_for_edit = [c.get('컨테이너 번호', '') for c in st.session_state.container_list]
     selected_for_edit = st.selectbox("수정 또는 삭제할 컨테이너를 선택하세요:", container_numbers_for_edit, key="edit_selector")
@@ -217,14 +209,16 @@ st.divider()
 
 st.markdown("#### 📁 하루 마감 및 데이터 관리")
 st.info("데이터는 모든 사용자가 공유하는 중앙 데이터베이스에 실시간으로 저장됩니다.")
-if st.button("🚀 Google Drive에 백업 후 새로 시작 (하루 마감)", use_container_width=True, type="primary"):
-    if not st.session_state.container_list: st.warning("마감할 데이터가 없습니다.")
+if st.button("🚀 새 시트에 백업 후 새로 시작 (하루 마감)", use_container_width=True, type="primary"):
+    if not st.session_state.container_list:
+        st.warning("마감할 데이터가 없습니다.")
     else:
-        success, error_msg = save_excel_to_drive(st.session_state.container_list)
+        success, error_msg = backup_data_to_new_sheet(st.session_state.container_list)
         if success:
-            st.success("Google Drive에 최종 백업 파일을 성공적으로 저장했습니다!")
-            if worksheet:
-                worksheet.clear()
+            st.success("현재 데이터를 새 시트에 성공적으로 백업했습니다!")
+            if spreadsheet:
+                worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+                worksheet.clear() 
                 worksheet.update('A1', [SHEET_HEADERS])
             st.session_state.container_list = []
             log_change("하루 마감 (데이터 초기화)")
@@ -253,7 +247,6 @@ with st.expander("⬆️ (필요시 사용) 백업 파일로 데이터 복구/�
                         new_entry = {'컨테이너 번호': row['컨테이너 번호'], '출고처': row['출고처'], '피트수': str(row['피트수']), '씰 번호': row['씰 번호'], '상태': row['상태'], '작업일자': work_date_obj}
                         st.session_state.container_list.append(new_entry)
                         temp_list_to_add.append(new_entry)
-                
                 if temp_list_to_add:
                     log_change(f"일괄 등록: {len(temp_list_to_add)}개 데이터 추가")
                     for entry in temp_list_to_add:
