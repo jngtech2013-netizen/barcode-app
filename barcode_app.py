@@ -18,8 +18,40 @@ st.set_page_config(page_title="컨테이너 관리 시스템")
 if 'container_list' not in st.session_state:
     st.session_state.container_list = []
 
+# --- 이메일 발송 공통 함수 ---
+def send_excel_email(recipient, container_data):
+    try:
+        df_to_save = pd.DataFrame(container_data)
+        df_to_save['작업일자'] = pd.to_datetime(df_to_save['작업일자']).dt.strftime('%Y-%m-%d')
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_to_save.to_excel(writer, index=False, sheet_name='Sheet1')
+        excel_data = output.getvalue()
+
+        sender_email = st.secrets["email_credentials"]["username"]
+        sender_password = st.secrets["email_credentials"]["password"]
+        msg = MIMEMultipart()
+        msg['From'] = sender_email
+        msg['To'] = recipient
+        msg['Subject'] = f"{date.today().isoformat()} 컨테이너 작업 데이터"
+        msg.attach(MIMEText(f"{date.today().isoformat()}자 컨테이너 작업 데이터를 첨부 파일로 발송합니다.", 'plain'))
+        part = MIMEBase('application', 'octet-stream')
+        part.set_payload(excel_data)
+        encoders.encode_base64(part)
+        file_name = f"container_data_{date.today().isoformat()}.xlsx"
+        part.add_header('Content-Disposition', f'attachment; filename="{file_name}"')
+        msg.attach(part)
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, recipient, msg.as_string())
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
 # --- 화면 UI 구성 ---
-st.title("🚢 컨테이너 관리 시스템")
+# <<<<<<<<<<<<<<< [변경점] st.title을 st.header로 변경하여 제목 크기 축소 >>>>>>>>>>>>>>>>>
+st.header("🚢 컨테이너 관리 시스템")
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 1. (상단) 바코드 생성 섹션 ---
 with st.expander("🔳 바코드 생성", expanded=True):
@@ -38,7 +70,6 @@ with st.expander("🔳 바코드 생성", expanded=True):
             fp = BytesIO()
             Code128(barcode_data, writer=ImageWriter()).write(fp)
             
-            # [개선 1] 바코드 캡션 제거
             col1, col2, col3 = st.columns([1, 2, 1])
             with col2:
                 st.image(fp)
@@ -48,7 +79,6 @@ st.divider()
 # --- 2. (중단) 신규 등록 및 전체 목록 ---
 st.subheader("📋 컨테이너 목록")
 with st.expander("📝 신규 컨테이너 등록하기"):
-    # [오류 수정] st.form으로 신규 등록 기능을 감싸 안정성 확보
     with st.form(key="new_container_form"):
         destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
         container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567")
@@ -76,7 +106,6 @@ if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
     df = pd.DataFrame(st.session_state.container_list)
-    # [오류 수정 2] 날짜 형식 올바르게 수정
     df['작업일자'] = pd.to_datetime(df['작업일자']).dt.strftime('%Y-%m-%d')
     st.dataframe(df, use_container_width=True, hide_index=True)
 
@@ -113,53 +142,47 @@ st.divider()
 # --- 4. (최하단) 하루 마감 및 데이터 관리 섹션 ---
 st.subheader("📁 하루 마감 및 데이터 관리")
 
-# 하루 마감 기능
-st.info("하루 작업을 마친 후, 아래 버튼을 눌러 데이터를 이메일로 백업하고 목록을 초기화하세요.")
-recipient_email = st.text_input("데이터 백업 파일을 수신할 이메일 주소를 입력하세요:")
+st.info("데이터는 브라우저를 새로고침하거나 탭을 닫으면 사라질 수 있습니다. 중요한 작업 후에는 **중간 백업**을 권장합니다.")
 
-if st.button("📧 이메일 발송 후 새로 시작", use_container_width=True, type="primary"):
+recipient_email = st.text_input("데이터 백업 파일을 수신할 이메일 주소를 입력하세요:", key="recipient_email_main")
+
+# 중간 백업 기능
+if st.button("📧 현재 데이터 이메일로 중간 백업", use_container_width=True):
     if not st.session_state.container_list:
-        st.warning("발송할 데이터가 없습니다.")
+        st.warning("백업할 데이터가 없습니다.")
     elif not recipient_email:
         st.error("수신자 이메일 주소를 반드시 입력해야 합니다.")
     else:
-        try:
-            df_to_save = pd.DataFrame(st.session_state.container_list)
-            df_to_save['작업일자'] = pd.to_datetime(df_to_save['작업일자']).dt.strftime('%Y-%m-%d')
-            output = BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df_to_save.to_excel(writer, index=False, sheet_name='Sheet1')
-            excel_data = output.getvalue()
-            
-            sender_email = st.secrets["email_credentials"]["username"]
-            sender_password = st.secrets["email_credentials"]["password"]
-            msg = MIMEMultipart()
-            msg['From'] = sender_email
-            msg['To'] = recipient_email
-            msg['Subject'] = f"{date.today().isoformat()} 컨테이너 작업 데이터"
-            msg.attach(MIMEText(f"{date.today().isoformat()}자 컨테이너 작업 데이터를 첨부 파일로 발송합니다.", 'plain'))
-            part = MIMEBase('application', 'octet-stream')
-            part.set_payload(excel_data)
-            encoders.encode_base64(part)
-            file_name = f"container_data_{date.today().isoformat()}.xlsx"
-            part.add_header('Content-Disposition', f'attachment; filename="{file_name}"')
-            msg.attach(part)
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-                server.login(sender_email, sender_password)
-                server.sendmail(sender_email, recipient_email, msg.as_string())
-            
-            st.success(f"'{recipient_email}' 주소로 이메일을 성공적으로 발송했습니다!")
+        success, error_msg = send_excel_email(recipient_email, st.session_state.container_list)
+        if success:
+            st.success(f"'{recipient_email}' 주소로 중간 백업 이메일을 성공적으로 발송했습니다! 작업은 계속 유지됩니다.")
+        else:
+            st.error(f"백업 이메일 발송 중 오류가 발생했습니다: {error_msg}")
+
+st.write("---")
+
+# 하루 마감 기능 (이메일 발송 + 초기화)
+st.error("주의: 아래 버튼은 데이터를 이메일로 보낸 후 **목록을 완전히 초기화**합니다. 하루 작업을 마칠 때만 사용하세요.")
+if st.button("🚀 이메일 발송 후 새로 시작 (하루 마감)", use_container_width=True, type="primary"):
+    if not st.session_state.container_list:
+        st.warning("마감할 데이터가 없습니다.")
+    elif not recipient_email:
+        st.error("수신자 이메일 주소를 반드시 입력해야 합니다.")
+    else:
+        success, error_msg = send_excel_email(recipient_email, st.session_state.container_list)
+        if success:
+            st.success(f"'{recipient_email}' 주소로 최종 백업 이메일을 성공적으로 발송했습니다!")
             st.session_state.container_list = []
             st.success("데이터를 백업하고 목록을 초기화했습니다. 새로운 하루를 시작하세요!")
             st.rerun()
-        except Exception as e:
-            st.error(f"작업 중 오류가 발생했습니다: {e}")
+        else:
+            st.error(f"최종 백업 이메일 발송 중 오류가 발생했습니다: {error_msg}")
             st.warning("이메일 발송에 실패하여 데이터를 초기화하지 않았습니다. Secrets 설정을 확인 후 다시 시도해주세요.")
 
 st.write("---")
 
 # 일괄 재등록 기능
-with st.expander("⬆️ (필요시 사용) 일괄 재등록"):
+with st.expander("⬆️ (필요시 사용) 백업 파일로 데이터 복구/일괄 등록"):
     st.info("실수로 데이터를 삭제했거나, 이전 데이터를 불러올 때 사용하세요.")
     uploaded_file = st.file_uploader("백업된 엑셀(xlsx) 파일을 업로드하세요.", type=['xlsx'])
     
