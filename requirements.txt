@@ -3,4 +3,5 @@ pandas
 python-barcode
 Pillow
 openpyxl
-streamlit-local-storage
+gspread
+oauth2client
