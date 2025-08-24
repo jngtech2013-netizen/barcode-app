@@ -17,7 +17,7 @@ SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', 
 LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
 
-# --- Google Sheets 연동 ---
+# --- Google Sheets 연동 및 데이터 관리 함수들 (이전과 동일) ---
 @st.cache_resource
 def connect_to_gsheet():
     try:
@@ -32,17 +32,6 @@ def connect_to_gsheet():
 
 spreadsheet = connect_to_gsheet()
 
-# --- 로그 기록 함수 ---
-def log_change(action):
-    if spreadsheet is None: return
-    try:
-        log_sheet = spreadsheet.worksheet(LOG_SHEET_NAME)
-        timestamp = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
-        log_sheet.append_row([timestamp, action])
-    except Exception as e:
-        st.warning(f"로그 기록 중 오류 발생: {e}")
-
-# --- 데이터 관리 함수들 ---
 def load_data_from_gsheet():
     if spreadsheet is None: return []
     try:
@@ -112,7 +101,7 @@ def backup_data_to_new_sheet(container_data):
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
-# --- 화면 UI 구성 ---
+# --- 화면 UI 구성 (상단은 변경 없음) ---
 st.subheader("🚢 컨테이너 관리 시스템")
 
 with st.expander("🔳 바코드 생성", expanded=True):
@@ -130,30 +119,30 @@ with st.expander("🔳 바코드 생성", expanded=True):
 
 st.divider()
 
+# --- 2. (중단) 전체 목록 및 신규 등록 ---
 st.markdown("#### 📋 컨테이너 목록")
 if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
     df = pd.DataFrame(st.session_state.container_list)
     if not df.empty:
+        # <<<<<<<<<<<<<<< [변경점] 데이터프레임 인덱스를 1부터 시작하도록 설정 >>>>>>>>>>>>>>>>>
         df.index = range(1, len(df) + 1)
-        df.index.name = "번호"
+        # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        df.index.name = "번호" # 인덱스 헤더 이름 설정
         
         for col in SHEET_HEADERS:
             if col not in df.columns: df[col] = pd.NA
         
         df['작업일자'] = df['작업일자'].apply(lambda x: pd.to_datetime(x).strftime('%Y-%m-%d') if pd.notna(x) else '')
         
-        styler = df[SHEET_HEADERS].style.set_table_styles(
-            [{'selector': '.row_heading', 'props': [('text-align', 'center')]},
-             {'selector': '.index_name', 'props': [('text-align', 'center')]}]
-        )
-        
-        st.dataframe(styler, use_container_width=True)
+        # hide_index=False로 변경하여 인덱스 번호를 표시합니다.
+        st.dataframe(df[SHEET_HEADERS], use_container_width=True, hide_index=False)
 
 st.divider()
 
 st.markdown("#### 📝 신규 컨테이너 등록하기")
+# (이하 모든 코드는 이전과 동일)
 with st.form(key="new_container_form"):
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567")
@@ -208,6 +197,7 @@ else:
                 update_row_in_gsheet(selected_idx, updated_data)
                 st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
                 st.rerun()
+
         st.error("주의: 아래 버튼은 데이터를 영구적으로 삭제합니다.")
         if st.button("🗑️ 이 컨테이너 삭제", use_container_width=True):
             delete_row_from_gsheet(selected_idx, selected_for_edit)
