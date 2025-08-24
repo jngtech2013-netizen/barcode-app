@@ -27,13 +27,12 @@ def connect_to_gsheet():
         spreadsheet = client.open("Container_Data_DB")
         return spreadsheet
     except Exception as e:
-        # 이 단계에서 실패하면 앱 실행이 거의 불가능하므로 st.exception을 사용해 상세 오류 표시
         st.exception(f"Google Sheets 연결에 심각한 오류가 발생했습니다: {e}")
         return None
 
 spreadsheet = connect_to_gsheet()
 
-# --- 로그 기록 함수 (예외 처리 강화) ---
+# --- 로그 기록 함수 ---
 def log_change(action):
     if spreadsheet is None: return
     try:
@@ -43,18 +42,24 @@ def log_change(action):
     except Exception as e:
         st.warning(f"로그 기록 중 오류 발생: {e}")
 
-# --- 데이터 관리 함수들 (모든 함수에 예외 처리 추가) ---
+# --- 데이터 관리 함수들 (안정성 강화) ---
 def load_data_from_gsheet():
     if spreadsheet is None: return []
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
         all_values = worksheet.get_all_values()
         if len(all_values) < 2: return []
+        
         data = all_values[1:]
         df = pd.DataFrame(data, columns=SHEET_HEADERS)
-        df.replace('', pd.NA, inplace=True)
+        
+        # 빈 값(None, NaN 등)을 빈 문자열('')로 안전하게 대체
+        df = df.fillna('')
+        
+        # '작업일자' 컬럼의 데이터 타입을 안전하게 변환
         if '작업일자' in df.columns:
             df['작업일자'] = pd.to_datetime(df['작업일자'], errors='coerce').dt.date
+            
         return df.to_dict('records')
     except Exception as e:
         st.error(f"데이터 로딩 중 오류가 발생했습니다: {e}")
@@ -67,7 +72,7 @@ def add_row_to_gsheet(data):
         if isinstance(data.get('작업일자'), date): data['작업일자'] = data['작업일자'].isoformat()
         row_to_insert = [data.get(header, "") for header in SHEET_HEADERS]
         worksheet.append_row(row_to_insert)
-        log_change(f"신규 등록: {data.get('컨테이너 번호')}")
+        log_change(f"신규 등록: {data.get('컨테이너 번호', '알 수 없음')}")
         return True
     except Exception as e:
         st.error(f"데이터 저장 중 오류가 발생했습니다: {e}")
@@ -80,7 +85,7 @@ def update_row_in_gsheet(index, data):
         if isinstance(data.get('작업일자'), date): data['작업일자'] = data['작업일자'].isoformat()
         row_to_update = [data.get(header, "") for header in SHEET_HEADERS]
         worksheet.update(f'A{index+2}:F{index+2}', [row_to_update])
-        log_change(f"데이터 수정: {data.get('컨테이너 번호')}")
+        log_change(f"데이터 수정: {data.get('컨테이너 번호', '알 수 없음')}")
         return True
     except Exception as e:
         st.error(f"데이터 업데이트 중 오류가 발생했습니다: {e}")
@@ -124,18 +129,15 @@ if 'container_list' not in st.session_state:
 # --- 화면 UI 구성 ---
 st.subheader("🚢 컨테이너 관리 시스템")
 
-# <<<<<<<<<<<<<<< [변경점] 바코드 생성 로직에 예외 처리 추가 >>>>>>>>>>>>>>>>>
 with st.expander("🔳 바코드 생성", expanded=True):
-    shippable_containers = [c['컨테이너 번호'] for c in st.session_state.container_list if c.get('상태') == '선적중']
+    shippable_containers = [c.get('컨테이너 번호') for c in st.session_state.container_list if c.get('상태') == '선적중']
+    shippable_containers = [c for c in shippable_containers if c]
     if not shippable_containers:
         st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
     else:
         selected_for_barcode = st.selectbox("컨테이너를 선택하면 바코드가 자동 생성됩니다:", shippable_containers)
-        container_info = next((c for c in st.session_state.container_list if c.get('컨테이너 번호') == selected_for_barcode), None)
-        if container_info:
-            st.info(f"**출고처:** {container_info.get('출고처', 'N/A')} / **피트수:** {container_info.get('피트수', 'N/A')}")
-        
-        # 바코드 생성 시 발생할 수 있는 오류를 잡기 위한 try...except 블록
+        container_info = next((c for c in st.session_state.container_list if c.get('컨테이너 번호') == selected_for_barcode), {})
+        st.info(f"**출고처:** {container_info.get('출고처', 'N/A')} / **피트수:** {container_info.get('피트수', 'N/A')}")
         try:
             barcode_data = selected_for_barcode
             fp = BytesIO()
@@ -145,8 +147,6 @@ with st.expander("🔳 바코드 생성", expanded=True):
                 st.image(fp)
         except Exception as e:
             st.error(f"바코드 생성 중 오류가 발생했습니다: {e}")
-            st.warning("컨테이너 번호에 바코드로 변환할 수 없는 특수문자가 포함되어 있는지 확인해주세요.")
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.divider()
 
@@ -155,13 +155,12 @@ if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
     df = pd.DataFrame(st.session_state.container_list)
-    if not df.empty:
-        df.index = range(1, len(df) + 1)
-        df.index.name = "번호"
-        for col in SHEET_HEADERS:
-            if col not in df.columns: df[col] = pd.NA
-        df['작업일자'] = df['작업일자'].apply(lambda x: pd.to_datetime(x).strftime('%Y-%m-%d') if pd.notna(x) else '')
-        st.dataframe(df[SHEET_HEADERS], use_container_width=True, hide_index=False)
+    df.index = range(1, len(df) + 1)
+    df.index.name = "번호"
+    for col in SHEET_HEADERS:
+        if col not in df.columns: df[col] = ''
+    df['작업일자'] = df['작업일자'].apply(lambda x: pd.to_datetime(x).strftime('%Y-%m-%d') if pd.notna(x) else '')
+    st.dataframe(df[SHEET_HEADERS], use_container_width=True, hide_index=False)
 
 st.divider()
 
@@ -181,7 +180,6 @@ with st.form(key="new_container_form"):
         elif any(c.get('컨테이너 번호') == container_no for c in st.session_state.container_list): st.warning(f"이미 등록된 컨테이너 번호입니다: {container_no}")
         else:
             new_container = {'컨테이너 번호': container_no, '출고처': destination, '피트수': feet, '씰 번호': seal_no, '작업일자': work_date, '상태': '선적중'}
-            # Google Sheet에 추가가 성공했을 때만 로컬 리스트에 추가하고 새로고침
             if add_row_to_gsheet(new_container):
                 st.session_state.container_list.append(new_container)
                 st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
@@ -190,45 +188,45 @@ with st.form(key="new_container_form"):
 st.divider()
 
 st.markdown("#### ✏️ 개별 데이터 수정 및 삭제")
-if not st.session_state.container_list:
-    st.warning("수정할 데이터가 없습니다.")
+if not st.session_state.container_list: st.warning("수정할 데이터가 없습니다.")
 else:
     container_numbers_for_edit = [c.get('컨테이너 번호', '') for c in st.session_state.container_list]
-    selected_for_edit = st.selectbox("수정 또는 삭제할 컨테이너를 선택하세요:", container_numbers_for_edit, key="edit_selector")
-    selected_data = next((c for c in st.session_state.container_list if c.get('컨테이너 번호') == selected_for_edit), None)
-    selected_idx = next((i for i, c in enumerate(st.session_state.container_list) if c.get('컨테이너 번호') == selected_for_edit), -1)
-    if selected_data:
-        with st.form(key=f"edit_form_{selected_for_edit}"):
-            st.write(f"**'{selected_for_edit}' 정보 수정**")
-            dest_options = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
-            current_dest_idx = dest_options.index(selected_data.get('출고처', dest_options[0]))
-            new_dest = st.radio("출고처 수정", options=dest_options, index=current_dest_idx, horizontal=True)
-            feet_options = ['40', '20']
-            current_feet_idx = feet_options.index(str(selected_data.get('피트수', '40')))
-            new_feet = st.radio("피트수 수정", options=feet_options, index=current_feet_idx, horizontal=True)
-            new_seal = st.text_input("씰 번호 수정", value=selected_data.get('씰 번호', ''))
-            status_options = ['선적중', '선적완료']
-            current_status_idx = status_options.index(selected_data.get('상태', status_options[0]))
-            new_status = st.radio("상태 변경", options=status_options, index=current_status_idx, horizontal=True)
-            work_date_value = selected_data.get('작업일자', date.today())
-            if not isinstance(work_date_value, date):
-                try: work_date_value = datetime.strptime(str(work_date_value), '%Y-%m-%d').date()
-                except (ValueError, TypeError): work_date_value = date.today()
-            new_work_date = st.date_input("작업일자 수정", value=work_date_value)
-            
-            if st.form_submit_button("💾 수정사항 저장", use_container_width=True):
-                updated_data = {'컨테이너 번호': selected_for_edit, '출고처': new_dest, '피트수': new_feet, '씰 번호': new_seal, '상태': new_status, '작업일자': new_work_date}
-                if update_row_in_gsheet(selected_idx, updated_data):
-                    st.session_state.container_list[selected_idx] = updated_data
-                    st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
-                    st.rerun()
+    container_numbers_for_edit = [c for c in container_numbers_for_edit if c]
+    if container_numbers_for_edit:
+        selected_for_edit = st.selectbox("수정 또는 삭제할 컨테이너를 선택하세요:", container_numbers_for_edit, key="edit_selector")
+        selected_data = next((c for c in st.session_state.container_list if c.get('컨테이너 번호') == selected_for_edit), {})
+        selected_idx = next((i for i, c in enumerate(st.session_state.container_list) if c.get('컨테이너 번호') == selected_for_edit), -1)
+        if selected_data:
+            with st.form(key=f"edit_form_{selected_for_edit}"):
+                st.write(f"**'{selected_for_edit}' 정보 수정**")
+                dest_options = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
+                current_dest_idx = dest_options.index(selected_data.get('출고처', dest_options[0]))
+                new_dest = st.radio("출고처 수정", options=dest_options, index=current_dest_idx, horizontal=True)
+                feet_options = ['40', '20']
+                current_feet_idx = feet_options.index(str(selected_data.get('피트수', '40')))
+                new_feet = st.radio("피트수 수정", options=feet_options, index=current_feet_idx, horizontal=True)
+                new_seal = st.text_input("씰 번호 수정", value=selected_data.get('씰 번호', ''))
+                status_options = ['선적중', '선적완료']
+                current_status_idx = status_options.index(selected_data.get('상태', status_options[0]))
+                new_status = st.radio("상태 변경", options=status_options, index=current_status_idx, horizontal=True)
+                work_date_value = selected_data.get('작업일자', date.today())
+                if not isinstance(work_date_value, date):
+                    try: work_date_value = datetime.strptime(str(work_date_value), '%Y-%m-%d').date()
+                    except (ValueError, TypeError): work_date_value = date.today()
+                new_work_date = st.date_input("작업일자 수정", value=work_date_value)
+                if st.form_submit_button("💾 수정사항 저장", use_container_width=True):
+                    updated_data = {'컨테이너 번호': selected_for_edit, '출고처': new_dest, '피트수': new_feet, '씰 번호': new_seal, '상태': new_status, '작업일자': new_work_date}
+                    if update_row_in_gsheet(selected_idx, updated_data):
+                        st.session_state.container_list[selected_idx] = updated_data
+                        st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
+                        st.rerun()
 
-        st.error("주의: 아래 버튼은 데이터를 영구적으로 삭제합니다.")
-        if st.button("🗑️ 이 컨테이너 삭제", use_container_width=True):
-            if delete_row_from_gsheet(selected_idx, selected_for_edit):
-                st.session_state.container_list.pop(selected_idx)
-                st.success(f"'{selected_for_edit}' 컨테이너 정보가 삭제되었습니다.")
-                st.rerun()
+            st.error("주의: 아래 버튼은 데이터를 영구적으로 삭제합니다.")
+            if st.button("🗑️ 이 컨테이너 삭제", use_container_width=True):
+                if delete_row_from_gsheet(selected_idx, selected_for_edit):
+                    st.session_state.container_list.pop(selected_idx)
+                    st.success(f"'{selected_for_edit}' 컨테이너 정보가 삭제되었습니다.")
+                    st.rerun()
 
 st.divider()
 
@@ -254,18 +252,16 @@ if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", u
             st.warning("백업에 실패하여 데이터를 초기화하지 않았습니다.")
 
 st.write("---")
+
 with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구"):
     st.info("실수로 데이터를 초기화했을 경우, 이전 백업 시트를 선택하여 현재 데이터로 덮어쓸 수 있습니다.")
-    
     if spreadsheet:
         all_sheets = [s.title for s in spreadsheet.worksheets()]
         backup_sheets = sorted([s for s in all_sheets if s.startswith("백업_")], reverse=True)
-        
         if not backup_sheets:
             st.warning("복구할 백업 시트가 없습니다.")
         else:
             selected_backup_sheet = st.selectbox("복구할 백업 시트를 선택하세요:", backup_sheets)
-            
             st.error("주의: 이 작업은 현재 데이터를 **완전히 덮어씁니다.**")
             if st.button(f"'{selected_backup_sheet}' 시트로 복구하기", use_container_width=True):
                 try:
@@ -274,7 +270,6 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
                     main_worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
                     main_worksheet.clear()
                     main_worksheet.update('A1', backup_values)
-                    
                     log_change(f"데이터 복구: '{selected_backup_sheet}' 시트의 내용으로 덮어씀")
                     st.success(f"'{selected_backup_sheet}' 시트의 데이터로 성공적으로 복구했습니다!")
                     st.rerun()
