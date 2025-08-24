@@ -17,7 +17,7 @@ SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', 
 LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
 
-# --- Google Sheets 연동 및 데이터 관리 함수들 (이전과 동일) ---
+# --- Google Sheets 연동 ---
 @st.cache_resource
 def connect_to_gsheet():
     try:
@@ -32,6 +32,21 @@ def connect_to_gsheet():
 
 spreadsheet = connect_to_gsheet()
 
+# <<<<<<<<<<<<<<< [변경점] 누락되었던 로그 기록 함수 추가 >>>>>>>>>>>>>>>>>
+# --- 로그 기록 함수 ---
+def log_change(action):
+    if spreadsheet is None: return
+    try:
+        log_sheet = spreadsheet.worksheet(LOG_SHEET_NAME)
+        timestamp = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
+        log_sheet.append_row([timestamp, action])
+    except gspread.exceptions.WorksheetNotFound:
+        st.warning(f"'{LOG_SHEET_NAME}' 시트를 찾을 수 없어 로그를 기록하지 못했습니다.")
+    except Exception as e:
+        st.warning(f"로그 기록 중 오류 발생: {e}")
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+# --- 데이터 관리 함수들 ---
 def load_data_from_gsheet():
     if spreadsheet is None: return []
     try:
@@ -77,7 +92,6 @@ def delete_row_from_gsheet(index, container_no):
     worksheet.delete_rows(index + 2)
     log_change(f"데이터 삭제: {container_no}")
 
-# <<<<<<<<<<<<<<< [변경점] 백업 함수에 중복 제거 로직 추가 >>>>>>>>>>>>>>>>>
 def backup_data_to_new_sheet(container_data):
     try:
         if spreadsheet is None: raise Exception("스프레드시트 연결 안됨")
@@ -85,32 +99,24 @@ def backup_data_to_new_sheet(container_data):
         today_str = date.today().isoformat()
         backup_sheet_name = f"백업_{today_str}"
         
-        # 백업할 현재 데이터를 데이터프레임으로 변환
         df_new = pd.DataFrame(container_data)
         df_new['작업일자'] = pd.to_datetime(df_new['작업일자']).dt.strftime('%Y-%m-%d')
         
         try:
-            # 1. 기존 백업 시트가 있는지 확인
             backup_sheet = spreadsheet.worksheet(backup_sheet_name)
-            
-            # 2. 기존 백업 시트의 모든 데이터를 읽어옴
             all_values = backup_sheet.get_all_values()
             if len(all_values) > 1:
                 df_existing = pd.DataFrame(all_values[1:], columns=SHEET_HEADERS)
-                # 3. 현재 데이터와 기존 데이터를 합친 후, '컨테이너 번호' 기준으로 중복 제거
                 df_combined = pd.concat([df_existing, df_new])
                 df_final = df_combined.drop_duplicates(subset=['컨테이너 번호'], keep='last')
             else:
-                # 기존 시트는 있으나 데이터가 없는 경우
                 df_final = df_new
             
-            # 4. 시트를 깨끗하게 비우고, 중복 제거된 최종 데이터로 덮어쓰기
             backup_sheet.clear()
             backup_sheet.update('A1', [SHEET_HEADERS])
             backup_sheet.update('A2', df_final.values.tolist())
             log_change(f"데이터 덮어쓰기 백업: '{backup_sheet_name}' 시트 업데이트")
 
-        # 5. 시트가 없으면 (WorksheetNotFound 예외 발생), 새로 생성
         except gspread.exceptions.WorksheetNotFound:
             new_sheet = spreadsheet.add_worksheet(title=backup_sheet_name, rows=100, cols=20)
             new_sheet.update('A1', [SHEET_HEADERS])
@@ -120,7 +126,6 @@ def backup_data_to_new_sheet(container_data):
         return True, None
     except Exception as e:
         return False, str(e)
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 데이터 초기화 ---
 if 'container_list' not in st.session_state:
@@ -128,7 +133,7 @@ if 'container_list' not in st.session_state:
 
 # --- 화면 UI 구성 (이하 변경 없음) ---
 st.subheader("🚢 컨테이너 관리 시스템")
-# (이하 모든 UI 및 기능 코드는 이전 최종 코드와 동일)
+
 with st.expander("🔳 바코드 생성", expanded=True):
     shippable_containers = [c['컨테이너 번호'] for c in st.session_state.container_list if c.get('상태') == '선적중']
     if not shippable_containers: st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
@@ -141,19 +146,25 @@ with st.expander("🔳 바코드 생성", expanded=True):
         Code128(barcode_data, writer=ImageWriter()).write(fp)
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2: st.image(fp)
+
 st.divider()
 
 st.markdown("#### 📋 컨테이너 목록")
-if not st.session_state.container_list: st.info("등록된 컨테이너가 없습니다.")
+if not st.session_state.container_list:
+    st.info("등록된 컨테이너가 없습니다.")
 else:
     df = pd.DataFrame(st.session_state.container_list)
     df.index = range(1, len(df) + 1)
     df.index.name = "번호"
+    
     if not df.empty:
         for col in SHEET_HEADERS:
             if col not in df.columns: df[col] = pd.NA
+        
         df['작업일자'] = df['작업일자'].apply(lambda x: pd.to_datetime(x).strftime('%Y-%m-%d') if pd.notna(x) else '')
+        
         st.dataframe(df[SHEET_HEADERS], use_container_width=True, hide_index=False)
+
 st.divider()
 
 st.markdown("#### 📝 신규 컨테이너 등록하기")
@@ -176,6 +187,7 @@ with st.form(key="new_container_form"):
             add_row_to_gsheet(new_container)
             st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
             st.rerun()
+
 st.divider()
 
 st.markdown("#### ✏️ 개별 데이터 수정 및 삭제")
@@ -216,6 +228,7 @@ else:
             st.session_state.container_list.pop(selected_idx)
             st.success(f"'{selected_for_edit}' 컨테이너 정보가 삭제되었습니다.")
             st.rerun()
+
 st.divider()
 
 st.markdown("#### 📁 하루 마감 및 데이터 관리")
