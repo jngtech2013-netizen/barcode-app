@@ -19,11 +19,15 @@ st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar
 st.markdown(
     """
     <style>
+    /* 사이드바의 전체 너비를 220px로 설정 */
     [data-testid="stSidebar"] {
-        width: 150px;
+        width: 220px;
     }
+    /* 사이드바 안의 메뉴 링크(<a> 태그)의 스타일 조정 */
     [data-testid="stSidebar"] .st-emotion-cache-17lntkn {
-        font-size: 30px;
+        font-size: 22px;      /* 글씨 크기를 22px로 더 크게 */
+        font-weight: bold;    /* 글씨를 굵게 하여 가독성 향상 */
+        margin-bottom: 10px;  /* 메뉴 항목 간의 간격을 약간 추가 */
     }
     </style>
     """,
