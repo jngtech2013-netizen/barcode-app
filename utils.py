@@ -25,10 +25,10 @@ def connect_to_gsheet():
         st.error(f"Google Sheets 연결에 실패했습니다: {e}")
         return None
 
-# --- 로그 기록 및 데이터 관리 함수들 (이전과 동일) ---
-# ... (log_change, load_data, add_row 등 모든 함수는 이전과 동일합니다)
+spreadsheet = connect_to_gsheet()
+
+# --- 로그 기록 함수 (공용) ---
 def log_change(action):
-    spreadsheet = connect_to_gsheet()
     if spreadsheet is None: return
     try:
         log_sheet = spreadsheet.worksheet(LOG_SHEET_NAME)
@@ -36,8 +36,9 @@ def log_change(action):
         log_sheet.append_row([timestamp, action])
     except Exception as e:
         st.warning(f"로그 기록 중 오류 발생: {e}")
+
+# --- 데이터 관리 함수들 (공용) ---
 def load_data_from_gsheet():
-    spreadsheet = connect_to_gsheet()
     if spreadsheet is None: return []
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
@@ -55,30 +56,30 @@ def load_data_from_gsheet():
     except Exception as e:
         st.error(f"데이터 로딩 중 오류 발생: {e}")
         return []
+
 def add_row_to_gsheet(data):
-    spreadsheet = connect_to_gsheet()
     if spreadsheet is None: return
     worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
     if isinstance(data.get('작업일자'), date): data['작업일자'] = data['작업일자'].isoformat()
     row_to_insert = [data.get(header, "") for header in SHEET_HEADERS]
     worksheet.append_row(row_to_insert)
     log_change(f"신규 등록: {data.get('컨테이너 번호')}")
+
 def update_row_in_gsheet(index, data):
-    spreadsheet = connect_to_gsheet()
     if spreadsheet is None: return
     worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
     if isinstance(data.get('작업일자'), date): data['작업일자'] = data['작업일자'].isoformat()
     row_to_update = [data.get(header, "") for header in SHEET_HEADERS]
     worksheet.update(f'A{index+2}:F{index+2}', [row_to_update])
     log_change(f"데이터 수정: {data.get('컨테이너 번호')}")
+
 def delete_row_from_gsheet(index, container_no):
-    spreadsheet = connect_to_gsheet()
     if spreadsheet is None: return
     worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
     worksheet.delete_rows(index + 2)
     log_change(f"데이터 삭제: {container_no}")
+
 def backup_data_to_new_sheet(container_data):
-    spreadsheet = connect_to_gsheet()
     if spreadsheet is None: return False, "스프레드시트 연결 안됨"
     try:
         today_str = date.today().isoformat()
@@ -106,56 +107,3 @@ def backup_data_to_new_sheet(container_data):
         return True, None
     except Exception as e:
         return False, str(e)
-
-
-# <<<<<<<<<<<<<<< [변경점] 하단 고정 탐색 바를 그리는 함수 추가 >>>>>>>>>>>>>>>>>
-def render_footer():
-    """
-    모든 페이지 하단에 고정된 탐색 바를 렌더링하는 함수.
-    HTML 링크를 사용하여 페이지를 전환합니다.
-    """
-    footer_html = """
-    <style>
-        .footer {
-            position: fixed;
-            left: 0;
-            bottom: 0;
-            width: 100%;
-            background-color: white;
-            border-top: 1px solid #EAEAEA;
-            text-align: center;
-            padding: 10px;
-            z-index: 99;
-            display: flex;
-            justify-content: space-around;
-            align-items: center;
-        }
-        .footer-link {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            text-decoration: none;
-            color: #333;
-            font-size: 14px;
-        }
-        .footer-link:hover {
-            color: #FF4B4B;
-        }
-        .footer-icon {
-            font-size: 24px;
-            margin-bottom: 4px;
-        }
-    </style>
-    <div class="footer">
-        <a href="/" target="_self" class="footer-link">
-            <div class="footer-icon">📝</div>
-            <div>등록</div>
-        </a>
-        <a href="/관리" target="_self" class="footer-link">
-            <div class="footer-icon">⚙️</div>
-            <div>관리</div>
-        </a>
-    </div>
-    """
-    st.markdown(footer_html, unsafe_allow_html=True)
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<

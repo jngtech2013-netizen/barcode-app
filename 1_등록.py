@@ -5,19 +5,19 @@ from barcode.writer import ImageWriter
 from io import BytesIO
 from datetime import date
 import re
-from utils import SHEET_HEADERS, load_data_from_gsheet, add_row_to_gsheet, render_footer
+from utils import SHEET_HEADERS, load_data_from_gsheet, add_row_to_gsheet
 
 # --- 앱 초기 설정 ---
-st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="collapsed")
+# <<<<<<<<<<<<<<< [변경점] 사이드바가 항상 보이도록 'expanded'로 변경 >>>>>>>>>>>>>>>>>
+st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="expanded")
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 데이터 초기화 ---
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
 # --- 화면 UI 구성 ---
-# <<<<<<<<<<<<<<< [변경점] 제목 중앙 정렬 및 여백 추가 >>>>>>>>>>>>>>>>>
 st.markdown("<h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>", unsafe_allow_html=True)
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 with st.expander("🔳 바코드 생성", expanded=True):
     shippable_containers = [c.get('컨테이너 번호', '') for c in st.session_state.container_list if c.get('상태') == '선적중']
@@ -61,13 +61,11 @@ if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
     df = pd.DataFrame(st.session_state.container_list)
-    df.index = range(1, len(df) + 1)
-    df.index.name = "번호"
     if not df.empty:
         for col in SHEET_HEADERS:
             if col not in df.columns: df[col] = pd.NA
         df['작업일자'] = df['작업일자'].apply(lambda x: pd.to_datetime(x).strftime('%Y-%m-%d') if pd.notna(x) else '')
-        st.dataframe(df[SHEET_HEADERS], use_container_width=True, hide_index=False)
+        st.dataframe(df[SHEET_HEADERS], use_container_width=True, hide_index=True)
 
 st.divider()
 
@@ -91,7 +89,3 @@ with st.form(key="new_container_form"):
             add_row_to_gsheet(new_container)
             st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
             st.rerun()
-
-# <<<<<<<<<<<<<<< [변경점] 기존 버튼을 제거하고 고정 바로 교체 >>>>>>>>>>>>>>>>>
-render_footer()
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<

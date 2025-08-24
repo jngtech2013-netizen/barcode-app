@@ -10,11 +10,13 @@ from utils import (
     delete_row_from_gsheet, 
     backup_data_to_new_sheet,
     log_change,
-    render_footer
+    connect_to_gsheet
 )
 
 # --- 앱 초기 설정 ---
-st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="collapsed")
+# <<<<<<<<<<<<<<< [변경점] 사이드바가 항상 보이도록 'expanded'로 변경 >>>>>>>>>>>>>>>>>
+st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 데이터 초기화 ---
 if 'container_list' not in st.session_state:
@@ -27,9 +29,7 @@ if not st.session_state.container_list:
     st.stop()
 
 # --- 화면 UI 구성 ---
-# <<<<<<<<<<<<<<< [변경점] 제목 중앙 정렬 및 여백 추가 >>>>>>>>>>>>>>>>>
 st.markdown("<h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>", unsafe_allow_html=True)
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.markdown("#### ✏️ 개별 데이터 수정 및 삭제")
 container_numbers_for_edit = [c.get('컨테이너 번호', '') for c in st.session_state.container_list]
@@ -145,7 +145,3 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
                         st.rerun()
                 except Exception as e:
                     st.error(f"복구 중 오류가 발생했습니다: {e}")
-
-# <<<<<<<<<<<<<<< [변경점] 기존 버튼을 제거하고 고정 바로 교체 >>>>>>>>>>>>>>>>>
-render_footer()
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
