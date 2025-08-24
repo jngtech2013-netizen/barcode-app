@@ -16,11 +16,11 @@ st.markdown(
     <style>
     /* 사이드바의 전체 너비를 줄입니다 (기본값: 320px) */
     [data-testid="stSidebar"] {
-        width: 250px;
+        width: 200px;
     }
     /* 사이드바 안의 메뉴 링크(<a> 태그)의 글씨 크기를 키웁니다 */
     [data-testid="stSidebar"] .st-emotion-cache-17lntkn {
-        font-size: 18px;
+        font-size: 20px;
     }
     </style>
     """,
