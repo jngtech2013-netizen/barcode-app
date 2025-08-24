@@ -14,9 +14,21 @@ from utils import (
 )
 
 # --- 앱 초기 설정 ---
-# <<<<<<<<<<<<<<< [변경점] 사이드바가 항상 보이도록 'expanded'로 변경 >>>>>>>>>>>>>>>>>
 st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+st.markdown(
+    """
+    <style>
+    [data-testid="stSidebar"] {
+        width: 250px;
+    }
+    [data-testid="stSidebar"] .st-emotion-cache-17lntkn {
+        font-size: 18px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # --- 데이터 초기화 ---
 if 'container_list' not in st.session_state:

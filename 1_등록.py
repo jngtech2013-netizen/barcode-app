@@ -8,9 +8,25 @@ import re
 from utils import SHEET_HEADERS, load_data_from_gsheet, add_row_to_gsheet
 
 # --- 앱 초기 설정 ---
-# <<<<<<<<<<<<<<< [변경점] 사이드바가 항상 보이도록 'expanded'로 변경 >>>>>>>>>>>>>>>>>
 st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="expanded")
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+# <<<<<<<<<<<<<<< [변경점 1] 사이드바 스타일을 CSS로 직접 제어 >>>>>>>>>>>>>>>>>
+st.markdown(
+    """
+    <style>
+    /* 사이드바의 전체 너비를 줄입니다 (기본값: 320px) */
+    [data-testid="stSidebar"] {
+        width: 250px;
+    }
+    /* 사이드바 안의 메뉴 링크(<a> 태그)의 글씨 크기를 키웁니다 */
+    [data-testid="stSidebar"] .st-emotion-cache-17lntkn {
+        font-size: 18px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 데이터 초기화 ---
 if 'container_list' not in st.session_state:
@@ -19,24 +35,33 @@ if 'container_list' not in st.session_state:
 # --- 화면 UI 구성 ---
 st.markdown("<h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>", unsafe_allow_html=True)
 
-with st.expander("🔳 바코드 생성", expanded=True):
+# <<<<<<<<<<<<<<< [변경점 2] 바코드 생성을 expander가 아닌 card 형태로 유지 >>>>>>>>>>>>>>>>>
+st.markdown("#### 🔳 바코드 생성")
+with st.container(border=True):
     shippable_containers = [c.get('컨테이너 번호', '') for c in st.session_state.container_list if c.get('상태') == '선적중']
     shippable_containers = [c for c in shippable_containers if c]
-    if not shippable_containers: st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
+    
+    if not shippable_containers:
+        st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
     else:
-        selected_for_barcode = st.selectbox("컨테이너를 선택하면 바코드가 자동 생성됩니다:", shippable_containers)
+        selected_for_barcode = st.selectbox("컨테이너를 선택하면 바코드가 자동 생성됩니다:", shippable_containers, label_visibility="collapsed")
         container_info = next((c for c in st.session_state.container_list if c.get('컨테이너 번호') == selected_for_barcode), {})
+        
         st.info(f"**출고처:** {container_info.get('출고처', 'N/A')} / **피트수:** {container_info.get('피트수', 'N/A')}")
+        
         barcode_data = selected_for_barcode
         fp = BytesIO()
         Code128(barcode_data, writer=ImageWriter()).write(fp)
+        
         col1, col2, col3 = st.columns([1, 2, 1])
-        with col2: st.image(fp)
+        with col2:
+            st.image(fp)
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.divider()
 
 st.markdown("#### 📋 컨테이너 현황")
-
+# (이하 모든 코드는 이전과 동일합니다)
 completed_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적완료'])
 pending_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적중'])
 
