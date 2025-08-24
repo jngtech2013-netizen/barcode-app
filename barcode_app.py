@@ -17,7 +17,7 @@ SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', 
 LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
 
-# --- Google Sheets 연동 및 데이터 관리 함수들 (이전과 동일) ---
+# --- Google Sheets 연동 ---
 @st.cache_resource
 def connect_to_gsheet():
     try:
@@ -27,11 +27,23 @@ def connect_to_gsheet():
         spreadsheet = client.open("Container_Data_DB")
         return spreadsheet
     except Exception as e:
-        st.error(f"Google Sheets 연결에 실패했습니다: {e}")
+        # 이 단계에서 실패하면 앱 실행이 거의 불가능하므로 st.exception을 사용해 상세 오류 표시
+        st.exception(f"Google Sheets 연결에 심각한 오류가 발생했습니다: {e}")
         return None
 
 spreadsheet = connect_to_gsheet()
 
+# --- 로그 기록 함수 (예외 처리 강화) ---
+def log_change(action):
+    if spreadsheet is None: return
+    try:
+        log_sheet = spreadsheet.worksheet(LOG_SHEET_NAME)
+        timestamp = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
+        log_sheet.append_row([timestamp, action])
+    except Exception as e:
+        st.warning(f"로그 기록 중 오류 발생: {e}")
+
+# --- 데이터 관리 함수들 (모든 함수에 예외 처리 추가) ---
 def load_data_from_gsheet():
     if spreadsheet is None: return []
     try:
@@ -44,38 +56,46 @@ def load_data_from_gsheet():
         if '작업일자' in df.columns:
             df['작업일자'] = pd.to_datetime(df['작업일자'], errors='coerce').dt.date
         return df.to_dict('records')
-    except gspread.exceptions.WorksheetNotFound:
-        st.error(f"'{MAIN_SHEET_NAME}' 시트를 찾을 수 없습니다.")
-        try:
-            worksheet = spreadsheet.add_worksheet(title=MAIN_SHEET_NAME, rows=100, cols=20)
-            worksheet.update('A1', [SHEET_HEADERS])
-            return []
-        except: return []
     except Exception as e:
-        st.error(f"데이터 로딩 중 오류 발생: {e}")
+        st.error(f"데이터 로딩 중 오류가 발생했습니다: {e}")
         return []
 
 def add_row_to_gsheet(data):
-    if spreadsheet is None: return
-    worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-    if isinstance(data.get('작업일자'), date): data['작업일자'] = data['작업일자'].isoformat()
-    row_to_insert = [data.get(header, "") for header in SHEET_HEADERS]
-    worksheet.append_row(row_to_insert)
-    log_change(f"신규 등록: {data.get('컨테이너 번호')}")
+    try:
+        if spreadsheet is None: raise Exception("스프레드시트 연결 안됨")
+        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        if isinstance(data.get('작업일자'), date): data['작업일자'] = data['작업일자'].isoformat()
+        row_to_insert = [data.get(header, "") for header in SHEET_HEADERS]
+        worksheet.append_row(row_to_insert)
+        log_change(f"신규 등록: {data.get('컨테이너 번호')}")
+        return True
+    except Exception as e:
+        st.error(f"데이터 저장 중 오류가 발생했습니다: {e}")
+        return False
 
 def update_row_in_gsheet(index, data):
-    if spreadsheet is None: return
-    worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-    if isinstance(data.get('작업일자'), date): data['작업일자'] = data['작업일자'].isoformat()
-    row_to_update = [data.get(header, "") for header in SHEET_HEADERS]
-    worksheet.update(f'A{index+2}:F{index+2}', [row_to_update])
-    log_change(f"데이터 수정: {data.get('컨테이너 번호')}")
+    try:
+        if spreadsheet is None: raise Exception("스프레드시트 연결 안됨")
+        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        if isinstance(data.get('작업일자'), date): data['작업일자'] = data['작업일자'].isoformat()
+        row_to_update = [data.get(header, "") for header in SHEET_HEADERS]
+        worksheet.update(f'A{index+2}:F{index+2}', [row_to_update])
+        log_change(f"데이터 수정: {data.get('컨테이너 번호')}")
+        return True
+    except Exception as e:
+        st.error(f"데이터 업데이트 중 오류가 발생했습니다: {e}")
+        return False
 
 def delete_row_from_gsheet(index, container_no):
-    if spreadsheet is None: return
-    worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-    worksheet.delete_rows(index + 2)
-    log_change(f"데이터 삭제: {container_no}")
+    try:
+        if spreadsheet is None: raise Exception("스프레드시트 연결 안됨")
+        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        worksheet.delete_rows(index + 2)
+        log_change(f"데이터 삭제: {container_no}")
+        return True
+    except Exception as e:
+        st.error(f"데이터 삭제 중 오류가 발생했습니다: {e}")
+        return False
 
 def backup_data_to_new_sheet(container_data):
     try:
@@ -101,48 +121,51 @@ def backup_data_to_new_sheet(container_data):
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
-# --- 화면 UI 구성 (상단은 변경 없음) ---
+# --- 화면 UI 구성 ---
 st.subheader("🚢 컨테이너 관리 시스템")
 
+# <<<<<<<<<<<<<<< [변경점] 바코드 생성 로직에 예외 처리 추가 >>>>>>>>>>>>>>>>>
 with st.expander("🔳 바코드 생성", expanded=True):
     shippable_containers = [c['컨테이너 번호'] for c in st.session_state.container_list if c.get('상태') == '선적중']
-    if not shippable_containers: st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
+    if not shippable_containers:
+        st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
     else:
         selected_for_barcode = st.selectbox("컨테이너를 선택하면 바코드가 자동 생성됩니다:", shippable_containers)
         container_info = next((c for c in st.session_state.container_list if c.get('컨테이너 번호') == selected_for_barcode), None)
-        if container_info: st.info(f"**출고처:** {container_info.get('출고처', 'N/A')} / **피트수:** {container_info.get('피트수', 'N/A')}")
-        barcode_data = selected_for_barcode
-        fp = BytesIO()
-        Code128(barcode_data, writer=ImageWriter()).write(fp)
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2: st.image(fp)
+        if container_info:
+            st.info(f"**출고처:** {container_info.get('출고처', 'N/A')} / **피트수:** {container_info.get('피트수', 'N/A')}")
+        
+        # 바코드 생성 시 발생할 수 있는 오류를 잡기 위한 try...except 블록
+        try:
+            barcode_data = selected_for_barcode
+            fp = BytesIO()
+            Code128(barcode_data, writer=ImageWriter()).write(fp)
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                st.image(fp)
+        except Exception as e:
+            st.error(f"바코드 생성 중 오류가 발생했습니다: {e}")
+            st.warning("컨테이너 번호에 바코드로 변환할 수 없는 특수문자가 포함되어 있는지 확인해주세요.")
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.divider()
 
-# --- 2. (중단) 전체 목록 및 신규 등록 ---
 st.markdown("#### 📋 컨테이너 목록")
 if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
     df = pd.DataFrame(st.session_state.container_list)
     if not df.empty:
-        # <<<<<<<<<<<<<<< [변경점] 데이터프레임 인덱스를 1부터 시작하도록 설정 >>>>>>>>>>>>>>>>>
         df.index = range(1, len(df) + 1)
-        # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-        df.index.name = "번호" # 인덱스 헤더 이름 설정
-        
+        df.index.name = "번호"
         for col in SHEET_HEADERS:
             if col not in df.columns: df[col] = pd.NA
-        
         df['작업일자'] = df['작업일자'].apply(lambda x: pd.to_datetime(x).strftime('%Y-%m-%d') if pd.notna(x) else '')
-        
-        # hide_index=False로 변경하여 인덱스 번호를 표시합니다.
         st.dataframe(df[SHEET_HEADERS], use_container_width=True, hide_index=False)
 
 st.divider()
 
 st.markdown("#### 📝 신규 컨테이너 등록하기")
-# (이하 모든 코드는 이전과 동일)
 with st.form(key="new_container_form"):
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567")
@@ -158,15 +181,17 @@ with st.form(key="new_container_form"):
         elif any(c.get('컨테이너 번호') == container_no for c in st.session_state.container_list): st.warning(f"이미 등록된 컨테이너 번호입니다: {container_no}")
         else:
             new_container = {'컨테이너 번호': container_no, '출고처': destination, '피트수': feet, '씰 번호': seal_no, '작업일자': work_date, '상태': '선적중'}
-            st.session_state.container_list.append(new_container)
-            add_row_to_gsheet(new_container)
-            st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
-            st.rerun()
+            # Google Sheet에 추가가 성공했을 때만 로컬 리스트에 추가하고 새로고침
+            if add_row_to_gsheet(new_container):
+                st.session_state.container_list.append(new_container)
+                st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
+                st.rerun()
 
 st.divider()
 
 st.markdown("#### ✏️ 개별 데이터 수정 및 삭제")
-if not st.session_state.container_list: st.warning("수정할 데이터가 없습니다.")
+if not st.session_state.container_list:
+    st.warning("수정할 데이터가 없습니다.")
 else:
     container_numbers_for_edit = [c.get('컨테이너 번호', '') for c in st.session_state.container_list]
     selected_for_edit = st.selectbox("수정 또는 삭제할 컨테이너를 선택하세요:", container_numbers_for_edit, key="edit_selector")
@@ -193,17 +218,17 @@ else:
             
             if st.form_submit_button("💾 수정사항 저장", use_container_width=True):
                 updated_data = {'컨테이너 번호': selected_for_edit, '출고처': new_dest, '피트수': new_feet, '씰 번호': new_seal, '상태': new_status, '작업일자': new_work_date}
-                st.session_state.container_list[selected_idx] = updated_data
-                update_row_in_gsheet(selected_idx, updated_data)
-                st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
-                st.rerun()
+                if update_row_in_gsheet(selected_idx, updated_data):
+                    st.session_state.container_list[selected_idx] = updated_data
+                    st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
+                    st.rerun()
 
         st.error("주의: 아래 버튼은 데이터를 영구적으로 삭제합니다.")
         if st.button("🗑️ 이 컨테이너 삭제", use_container_width=True):
-            delete_row_from_gsheet(selected_idx, selected_for_edit)
-            st.session_state.container_list.pop(selected_idx)
-            st.success(f"'{selected_for_edit}' 컨테이너 정보가 삭제되었습니다.")
-            st.rerun()
+            if delete_row_from_gsheet(selected_idx, selected_for_edit):
+                st.session_state.container_list.pop(selected_idx)
+                st.success(f"'{selected_for_edit}' 컨테이너 정보가 삭제되었습니다.")
+                st.rerun()
 
 st.divider()
 
