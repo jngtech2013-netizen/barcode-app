@@ -5,7 +5,6 @@ from barcode.writer import ImageWriter
 from io import BytesIO
 from datetime import date
 import re
-# 공용 부품 창고(utils.py)에서 필요한 모든 함수를 가져옵니다.
 from utils import SHEET_HEADERS, load_data_from_gsheet, add_row_to_gsheet
 
 # --- 앱 초기 설정 ---
@@ -14,7 +13,6 @@ st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar
 # --- 데이터 초기화 ---
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
-    st.session_state.retried = False
 
 # --- 화면 UI 구성 ---
 st.subheader("🚢 컨테이너 관리 시스템")
@@ -37,52 +35,25 @@ st.divider()
 
 st.markdown("#### 📋 컨테이너 현황")
 
-# <<<<<<<<<<<<<<< [변경점] st.metric을 HTML/CSS를 사용한 커스텀 카드로 변경 >>>>>>>>>>>>>>>>>
 completed_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적완료'])
 pending_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적중'])
 
-# Bootstrap 그리드 시스템과 커스텀 CSS를 사용하여 카드 디자인
 st.markdown(
     f"""
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
     <style>
-    .metric-card {{
-        padding: 1rem;
-        border: 1px solid #DCDCDC;
-        border-radius: 10px;
-        text-align: center;
-        margin-bottom: 10px;
-    }}
-    .metric-value {{
-        font-size: 2.5rem;
-        font-weight: bold;
-    }}
-    .metric-label {{
-        font-size: 1rem;
-        color: #555555;
-    }}
+    .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
+    .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
+    .metric-label {{ font-size: 1rem; color: #555555; }}
     .red-value {{ color: #FF4B4B; }}
     .green-value {{ color: #28A745; }}
     </style>
-    
     <div class="row">
-        <div class="col">
-            <div class="metric-card">
-                <div class="metric-value red-value">{pending_count}</div>
-                <div class="metric-label">선적중</div>
-            </div>
-        </div>
-        <div class="col">
-            <div class="metric-card">
-                <div class="metric-value green-value">{completed_count}</div>
-                <div class="metric-label">선적완료</div>
-            </div>
-        </div>
+        <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending_count}</div><div class="metric-label">선적중</div></div></div>
+        <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed_count}</div><div class="metric-label">선적완료</div></div></div>
     </div>
-    """,
-    unsafe_allow_html=True
+    """, unsafe_allow_html=True
 )
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
@@ -119,8 +90,8 @@ with st.form(key="new_container_form"):
             st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
             st.rerun()
 
-# --- 하단 페이지 이동 버튼 ---
 st.divider()
+
 col1, col2 = st.columns(2)
 with col1:
     if st.button("📝 등록", use_container_width=True, type="primary"):
