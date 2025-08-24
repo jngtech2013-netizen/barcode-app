@@ -25,10 +25,9 @@ def connect_to_gsheet():
         st.error(f"Google Sheets 연결에 실패했습니다: {e}")
         return None
 
-spreadsheet = connect_to_gsheet()
-
 # --- 로그 기록 함수 (공용) ---
 def log_change(action):
+    spreadsheet = connect_to_gsheet()
     if spreadsheet is None: return
     try:
         log_sheet = spreadsheet.worksheet(LOG_SHEET_NAME)
@@ -39,6 +38,7 @@ def log_change(action):
 
 # --- 데이터 관리 함수들 (공용) ---
 def load_data_from_gsheet():
+    spreadsheet = connect_to_gsheet()
     if spreadsheet is None: return []
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
@@ -58,6 +58,7 @@ def load_data_from_gsheet():
         return []
 
 def add_row_to_gsheet(data):
+    spreadsheet = connect_to_gsheet()
     if spreadsheet is None: return
     worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
     if isinstance(data.get('작업일자'), date): data['작업일자'] = data['작업일자'].isoformat()
@@ -66,6 +67,7 @@ def add_row_to_gsheet(data):
     log_change(f"신규 등록: {data.get('컨테이너 번호')}")
 
 def update_row_in_gsheet(index, data):
+    spreadsheet = connect_to_gsheet()
     if spreadsheet is None: return
     worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
     if isinstance(data.get('작업일자'), date): data['작업일자'] = data['작업일자'].isoformat()
@@ -74,12 +76,14 @@ def update_row_in_gsheet(index, data):
     log_change(f"데이터 수정: {data.get('컨테이너 번호')}")
 
 def delete_row_from_gsheet(index, container_no):
+    spreadsheet = connect_to_gsheet()
     if spreadsheet is None: return
     worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
     worksheet.delete_rows(index + 2)
     log_change(f"데이터 삭제: {container_no}")
 
 def backup_data_to_new_sheet(container_data):
+    spreadsheet = connect_to_gsheet()
     if spreadsheet is None: return False, "스프레드시트 연결 안됨"
     try:
         today_str = date.today().isoformat()

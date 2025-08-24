@@ -1,19 +1,17 @@
 import streamlit as st
 import pandas as pd
 from datetime import date, datetime
-# <<<<<<<<<<<<<<< [변경점] 필요한 모든 것을 utils에서 가져옵니다. >>>>>>>>>>>>>>>>>
 from utils import (
     SHEET_HEADERS,
-    MAIN_SHEET_NAME, # MAIN_SHEET_NAME 추가
+    MAIN_SHEET_NAME,
+    connect_to_gsheet,
     load_data_from_gsheet, 
     add_row_to_gsheet, 
     update_row_in_gsheet, 
     delete_row_from_gsheet, 
     backup_data_to_new_sheet,
-    log_change,
-    connect_to_gsheet # connect_to_gsheet 추가
+    log_change
 )
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="collapsed")
@@ -91,8 +89,7 @@ if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", u
         st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
         backup_success = True
     if backup_success:
-        # <<<<<<<<<<<<<<< [변경점] 중복 호출을 제거하고 utils의 연결을 사용 >>>>>>>>>>>>>>>>>
-        spreadsheet = connect_to_gsheet() # 이미 캐시된 연결을 가져옴
+        spreadsheet = connect_to_gsheet()
         if spreadsheet:
             worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
             worksheet.clear()
@@ -108,14 +105,11 @@ if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", u
         st.session_state.container_list = pending_data
         st.success("중앙 데이터베이스를 정리했습니다. 새로운 하루를 시작하세요!")
         st.rerun()
-        # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.write("---")
 with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구"):
     st.info("실수로 데이터를 초기화했거나 이전 데이터를 추가할 때 사용하세요.")
-    # <<<<<<<<<<<<<<< [변경점] 중복 호출 제거 >>>>>>>>>>>>>>>>>
     spreadsheet = connect_to_gsheet()
-    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
     if spreadsheet:
         all_sheets = [s.title for s in spreadsheet.worksheets()]
         backup_sheets = sorted([s for s in all_sheets if s.startswith("백업_")], reverse=True)
