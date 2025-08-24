@@ -17,19 +17,30 @@ if 'container_list' not in st.session_state:
 # --- 화면 UI 구성 ---
 st.subheader("🚢 컨테이너 관리 시스템")
 
-with st.expander("🔳 바코드 생성", expanded=True):
+# <<<<<<<<<<<<<<< [변경점] '바코드 생성' 섹션을 서브타이틀과 카드 디자인으로 변경 >>>>>>>>>>>>>>>>>
+st.markdown("#### 🔳 바코드 생성")
+
+# 카드 디자인을 위한 컨테이너 생성
+with st.container(border=True):
     shippable_containers = [c.get('컨테이너 번호', '') for c in st.session_state.container_list if c.get('상태') == '선적중']
     shippable_containers = [c for c in shippable_containers if c]
-    if not shippable_containers: st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
+    
+    if not shippable_containers:
+        st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
     else:
         selected_for_barcode = st.selectbox("컨테이너를 선택하면 바코드가 자동 생성됩니다:", shippable_containers)
         container_info = next((c for c in st.session_state.container_list if c.get('컨테이너 번호') == selected_for_barcode), {})
+        
         st.info(f"**출고처:** {container_info.get('출고처', 'N/A')} / **피트수:** {container_info.get('피트수', 'N/A')}")
+        
         barcode_data = selected_for_barcode
         fp = BytesIO()
         Code128(barcode_data, writer=ImageWriter()).write(fp)
+        
         col1, col2, col3 = st.columns([1, 2, 1])
-        with col2: st.image(fp)
+        with col2:
+            st.image(fp)
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.divider()
 
@@ -58,15 +69,12 @@ st.markdown(
 if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
-    # <<<<<<<<<<<<<<< [변경점] 번호 인덱스를 생성하지 않고, 바로 숨김 처리 >>>>>>>>>>>>>>>>>
     df = pd.DataFrame(st.session_state.container_list)
     if not df.empty:
         for col in SHEET_HEADERS:
             if col not in df.columns: df[col] = pd.NA
         df['작업일자'] = df['작업일자'].apply(lambda x: pd.to_datetime(x).strftime('%Y-%m-%d') if pd.notna(x) else '')
-        # hide_index=True로 설정하여 번호 컬럼을 숨깁니다.
         st.dataframe(df[SHEET_HEADERS], use_container_width=True, hide_index=True)
-    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.divider()
 
