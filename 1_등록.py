@@ -58,20 +58,19 @@ st.markdown(
 if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
+    # <<<<<<<<<<<<<<< [변경점] 번호 인덱스를 생성하지 않고, 바로 숨김 처리 >>>>>>>>>>>>>>>>>
     df = pd.DataFrame(st.session_state.container_list)
-    df.index = range(1, len(df) + 1)
-    df.index.name = "번호"
     if not df.empty:
         for col in SHEET_HEADERS:
             if col not in df.columns: df[col] = pd.NA
         df['작업일자'] = df['작업일자'].apply(lambda x: pd.to_datetime(x).strftime('%Y-%m-%d') if pd.notna(x) else '')
-        st.dataframe(df[SHEET_HEADERS], use_container_width=True, hide_index=False)
+        # hide_index=True로 설정하여 번호 컬럼을 숨깁니다.
+        st.dataframe(df[SHEET_HEADERS], use_container_width=True, hide_index=True)
+    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.divider()
 
-# <<<<<<<<<<<<<<< [변경점] 제목을 "신규 컨테이너 등록"으로 수정 >>>>>>>>>>>>>>>>>
 st.markdown("#### 📝 신규 컨테이너 등록")
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 with st.form(key="new_container_form"):
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567")
