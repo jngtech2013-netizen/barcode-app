@@ -21,8 +21,19 @@ st.markdown(
     
     /* 사이드바 안의 모든 링크(<a> 태그)에 스타일 적용 */
     [data-testid="stSidebar"] a {
-        font-size: 22px;      /* 글씨 크기를 22px로 더 크게 */
+        font-size: 28px;      /* 글씨 크기를 28px로 더 크게 변경 (기존 22px에서 증가) */
         font-weight: bold;    /* 글씨를 굵게 하여 가독성 향상 */
+    }
+    
+    /* 사이드바의 다른 텍스트 요소들도 함께 크게 만들기 */
+    [data-testid="stSidebar"] .css-1d391kg {
+        font-size: 26px;
+    }
+    
+    /* 사이드바 라벨 텍스트 크기도 증가 */
+    [data-testid="stSidebar"] label {
+        font-size: 24px;
+        font-weight: bold;
     }
     </style>
     """,
