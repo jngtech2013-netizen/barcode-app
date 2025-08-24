@@ -16,23 +16,24 @@ from utils import (
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
 
+# <<<<<<<<<<<<<<< [변경점 1] 사이드바 스타일을 CSS로 직접 제어 >>>>>>>>>>>>>>>>>
 st.markdown(
     """
     <style>
-    /* 사이드바의 전체 너비를 220px로 설정 */
+    /* 사이드바의 전체 너비를 170px로 설정 */
     [data-testid="stSidebar"] {
-        width: 220px !important;
+        width: 170px !important;
     }
     
-    /* 사이드바의 모든 텍스트 요소에 강제로 큰 글씨 적용 */
+    /* 사이드바의 모든 텍스트 요소에 24px 글씨 적용 */
     [data-testid="stSidebar"] * {
-        font-size: 28px !important;
+        font-size: 24px !important;
         font-weight: bold !important;
     }
     
     /* 사이드바 안의 모든 링크(<a> 태그)에 스타일 적용 */
     [data-testid="stSidebar"] a {
-        font-size: 32px !important;
+        font-size: 24px !important;
         font-weight: bold !important;
     }
     
@@ -42,19 +43,19 @@ st.markdown(
     [data-testid="stSidebar"] div,
     [data-testid="stSidebar"] span,
     [data-testid="stSidebar"] button {
-        font-size: 28px !important;
+        font-size: 24px !important;
         font-weight: bold !important;
     }
     
     /* 모바일 환경에서도 동일하게 적용 */
     @media (max-width: 768px) {
         [data-testid="stSidebar"] * {
-            font-size: 30px !important;
+            font-size: 24px !important;
             font-weight: bold !important;
         }
         
         [data-testid="stSidebar"] a {
-            font-size: 34px !important;
+            font-size: 24px !important;
             font-weight: bold !important;
         }
     }
@@ -62,6 +63,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 데이터 초기화 ---
 if 'container_list' not in st.session_state:
