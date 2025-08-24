@@ -16,24 +16,42 @@ st.markdown(
     <style>
     /* 사이드바의 전체 너비를 220px로 설정 */
     [data-testid="stSidebar"] {
-        width: 220px;
+        width: 220px !important;
+    }
+    
+    /* 사이드바의 모든 텍스트 요소에 강제로 큰 글씨 적용 */
+    [data-testid="stSidebar"] * {
+        font-size: 28px !important;
+        font-weight: bold !important;
     }
     
     /* 사이드바 안의 모든 링크(<a> 태그)에 스타일 적용 */
     [data-testid="stSidebar"] a {
-        font-size: 28px;      /* 글씨 크기를 28px로 더 크게 변경 (기존 22px에서 증가) */
-        font-weight: bold;    /* 글씨를 굵게 하여 가독성 향상 */
+        font-size: 32px !important;
+        font-weight: bold !important;
     }
     
-    /* 사이드바의 다른 텍스트 요소들도 함께 크게 만들기 */
-    [data-testid="stSidebar"] .css-1d391kg {
-        font-size: 26px;
+    /* 사이드바의 버튼, 라벨, 텍스트 등 모든 요소 */
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] div,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] button {
+        font-size: 28px !important;
+        font-weight: bold !important;
     }
     
-    /* 사이드바 라벨 텍스트 크기도 증가 */
-    [data-testid="stSidebar"] label {
-        font-size: 24px;
-        font-weight: bold;
+    /* 모바일 환경에서도 동일하게 적용 */
+    @media (max-width: 768px) {
+        [data-testid="stSidebar"] * {
+            font-size: 30px !important;
+            font-weight: bold !important;
+        }
+        
+        [data-testid="stSidebar"] a {
+            font-size: 34px !important;
+            font-weight: bold !important;
+        }
     }
     </style>
     """,
