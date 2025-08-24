@@ -32,7 +32,6 @@ def connect_to_gsheet():
 
 spreadsheet = connect_to_gsheet()
 
-# <<<<<<<<<<<<<<< [변경점] 누락되었던 로그 기록 함수 추가 >>>>>>>>>>>>>>>>>
 # --- 로그 기록 함수 ---
 def log_change(action):
     if spreadsheet is None: return
@@ -44,7 +43,6 @@ def log_change(action):
         st.warning(f"'{LOG_SHEET_NAME}' 시트를 찾을 수 없어 로그를 기록하지 못했습니다.")
     except Exception as e:
         st.warning(f"로그 기록 중 오류 발생: {e}")
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 데이터 관리 함수들 ---
 def load_data_from_gsheet():
@@ -131,7 +129,7 @@ def backup_data_to_new_sheet(container_data):
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
-# --- 화면 UI 구성 (이하 변경 없음) ---
+# --- 화면 UI 구성 ---
 st.subheader("🚢 컨테이너 관리 시스템")
 
 with st.expander("🔳 바코드 생성", expanded=True):
@@ -232,25 +230,47 @@ else:
 st.divider()
 
 st.markdown("#### 📁 하루 마감 및 데이터 관리")
-st.info("데이터는 모든 사용자가 공유하는 중앙 데이터베이스에 실시간으로 저장됩니다.")
+st.info("하루 작업을 마친 후, 아래 버튼을 눌러 **'선적완료'된 데이터만 백업**하고, **'선적중'인 데이터는 내일로 이월**합니다.")
+
 if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", use_container_width=True, type="primary"):
     if not st.session_state.container_list:
         st.warning("마감할 데이터가 없습니다.")
     else:
-        success, error_msg = backup_data_to_new_sheet(st.session_state.container_list)
-        if success:
-            st.success("현재 데이터를 백업 시트에 성공적으로 저장(또는 덮어쓰기)했습니다!")
+        completed_data = [item for item in st.session_state.container_list if item.get('상태') == '선적완료']
+        pending_data = [item for item in st.session_state.container_list if item.get('상태') == '선적중']
+        total_count = len(st.session_state.container_list)
+        completed_count = len(completed_data)
+        pending_count = len(pending_data)
+
+        backup_success = False
+        if completed_data:
+            success, error_msg = backup_data_to_new_sheet(completed_data)
+            if success:
+                st.success(f"'선적완료'된 {completed_count}개의 데이터를 백업 시트에 성공적으로 저장(또는 추가)했습니다!")
+                backup_success = True
+            else:
+                st.error(f"백업 중 오류가 발생했습니다: {error_msg}")
+        else:
+            st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
+            backup_success = True
+
+        if backup_success:
             if spreadsheet:
                 worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-                worksheet.clear() 
+                worksheet.clear()
                 worksheet.update('A1', [SHEET_HEADERS])
-            st.session_state.container_list = []
-            log_change("하루 마감 (데이터 초기화)")
-            st.success("중앙 데이터베이스를 초기화했습니다. 새로운 하루를 시작하세요!")
+                if pending_data:
+                    df_pending = pd.DataFrame(pending_data)
+                    df_pending['작업일자'] = df_pending['작업일자'].apply(lambda x: x.isoformat() if isinstance(x, date) else x)
+                    worksheet.update('A2', df_pending[SHEET_HEADERS].values.tolist())
+            
+            log_message = f"하루 마감: 총 {total_count}개 중 {completed_count}개 백업, {pending_count}개 이월."
+            log_change(log_message)
+            
+            st.session_state.container_list = pending_data
+            st.success("중앙 데이터베이스를 정리했습니다. 새로운 하루를 시작하세요!")
             st.rerun()
-        else:
-            st.error(f"최종 백업 중 오류가 발생했습니다: {error_msg}")
-            st.warning("백업에 실패하여 데이터를 초기화하지 않았습니다.")
+
 st.write("---")
 with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구"):
     st.info("실수로 데이터를 초기화했을 경우, 이전 백업 시트를 선택하여 현재 데이터로 덮어쓸 수 있습니다.")
