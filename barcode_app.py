@@ -32,7 +32,7 @@ def connect_to_gsheet():
 
 spreadsheet = connect_to_gsheet()
 
-# <<<<<<<<<<<<<<< [변경점] 누락되었던 로그 기록 함수 추가 >>>>>>>>>>>>>>>>>
+# <<<<<<<<<<<<<<< [수정 1] 누락되었던 로그 기록 함수 추가 >>>>>>>>>>>>>>>>>
 # --- 로그 기록 함수 ---
 def log_change(action):
     if spreadsheet is None: return
@@ -275,6 +275,10 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
                     
                     log_change(f"데이터 복구: '{selected_backup_sheet}' 시트의 내용으로 덮어씀")
                     st.success(f"'{selected_backup_sheet}' 시트의 데이터로 성공적으로 복구했습니다!")
+                    
+                    # <<<<<<<<<<<<<<< [수정 2] 복구 후 자동 새로고침 >>>>>>>>>>>>>>>>>
                     st.rerun()
+                    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
                 except Exception as e:
                     st.error(f"복구 중 오류가 발생했습니다: {e}")
