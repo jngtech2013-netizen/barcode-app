@@ -17,7 +17,7 @@ SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', 
 LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
 
-# --- Google Sheets 연동 및 데이터 관리 함수들 (이전과 동일) ---
+# --- Google Sheets 연동 ---
 @st.cache_resource
 def connect_to_gsheet():
     try:
@@ -32,6 +32,17 @@ def connect_to_gsheet():
 
 spreadsheet = connect_to_gsheet()
 
+# --- 로그 기록 함수 ---
+def log_change(action):
+    if spreadsheet is None: return
+    try:
+        log_sheet = spreadsheet.worksheet(LOG_SHEET_NAME)
+        timestamp = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
+        log_sheet.append_row([timestamp, action])
+    except Exception as e:
+        st.warning(f"로그 기록 중 오류 발생: {e}")
+
+# --- 데이터 관리 함수들 ---
 def load_data_from_gsheet():
     if spreadsheet is None: return []
     try:
@@ -110,8 +121,9 @@ def backup_data_to_new_sheet(container_data):
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
-# --- 화면 UI 구성 (상단은 변경 없음) ---
+# --- 화면 UI 구성 ---
 st.subheader("🚢 컨테이너 관리 시스템")
+
 with st.expander("🔳 바코드 생성", expanded=True):
     shippable_containers = [c['컨테이너 번호'] for c in st.session_state.container_list if c.get('상태') == '선적중']
     if not shippable_containers: st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
@@ -124,36 +136,72 @@ with st.expander("🔳 바코드 생성", expanded=True):
         Code128(barcode_data, writer=ImageWriter()).write(fp)
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2: st.image(fp)
+
 st.divider()
 
-# --- 2. (중단) 전체 목록 및 신규 등록 ---
 st.markdown("#### 📋 컨테이너 현황")
 
-# <<<<<<<<<<<<<<< [변경점 1] 상태별 개수 카드 표시 >>>>>>>>>>>>>>>>>
-# 1. 상태별로 데이터 필터링
 completed_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적완료'])
 pending_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적중'])
 
-# 2. st.columns를 사용하여 카드를 가로로 배치
-col1, col2 = st.columns(2)
-with col1:
-    st.metric(label="🟥 선적중", value=f"{pending_count} 건")
-with col2:
-    st.metric(label="🟩 선적완료", value=f"{completed_count} 건")
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+# HTML과 CSS를 사용하여 카드 디자인
+# Bootstrap 그리드 시스템(col-sm-6)을 사용하여 가로로 배치합니다.
+# Streamlit은 기본적으로 Bootstrap을 지원하므로 바로 사용할 수 있습니다.
+st.markdown(
+    f"""
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+    <style>
+    .metric-card {{
+        padding: 1rem;
+        border: 1px solid #DCDCDC;
+        border-radius: 10px;
+        text-align: center;
+        margin-bottom: 10px;
+    }}
+    .metric-value {{
+        font-size: 2.5rem;
+        font-weight: bold;
+    }}
+    .metric-label {{
+        font-size: 1rem;
+        color: #555555;
+    }}
+    .red-value {{
+        color: #FF4B4B;
+    }}
+    .green-value {{
+        color: #28A745;
+    }}
+    </style>
+    
+    <div class="row">
+        <div class="col">
+            <div class="metric-card">
+                <div class="metric-value red-value">{pending_count}</div>
+                <div class="metric-label">선적중</div>
+            </div>
+        </div>
+        <div class="col">
+            <div class="metric-card">
+                <div class="metric-value green-value">{completed_count}</div>
+                <div class="metric-label">선적완료</div>
+            </div>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
 
 if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
-    # <<<<<<<<<<<<<<< [변경점 2] 번호 인덱스 제거 >>>>>>>>>>>>>>>>>
     df = pd.DataFrame(st.session_state.container_list)
     if not df.empty:
         for col in SHEET_HEADERS:
             if col not in df.columns: df[col] = pd.NA
         df['작업일자'] = df['작업일자'].apply(lambda x: pd.to_datetime(x).strftime('%Y-%m-%d') if pd.notna(x) else '')
-        # hide_index=True로 설정하여 번호 컬럼을 숨깁니다.
         st.dataframe(df[SHEET_HEADERS], use_container_width=True, hide_index=True)
-    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.divider()
 
@@ -181,8 +229,7 @@ with st.form(key="new_container_form"):
 st.divider()
 
 st.markdown("#### ✏️ 개별 데이터 수정 및 삭제")
-if not st.session_state.container_list:
-    st.warning("수정할 데이터가 없습니다.")
+if not st.session_state.container_list: st.warning("수정할 데이터가 없습니다.")
 else:
     container_numbers_for_edit = [c.get('컨테이너 번호', '') for c in st.session_state.container_list]
     selected_for_edit = st.selectbox("수정 또는 삭제할 컨테이너를 선택하세요:", container_numbers_for_edit, key="edit_selector")
