@@ -9,7 +9,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # --- 앱 초기 설정 ---
-st.set_page_config(page_title="컨테이너 관리 시스템", layout="wide")
+st.set_page_config(page_title="컨테이너 관리 시스템")
 
 # --- 상수 정의 ---
 MAIN_SHEET_NAME = "현재 데이터"
@@ -17,7 +17,7 @@ SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', 
 LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
 
-# --- Google Sheets 연동 및 데이터 관리 함수들 (이전과 동일) ---
+# --- Google Sheets 연동 ---
 @st.cache_resource
 def connect_to_gsheet():
     try:
@@ -32,6 +32,17 @@ def connect_to_gsheet():
 
 spreadsheet = connect_to_gsheet()
 
+# --- 로그 기록 함수 ---
+def log_change(action):
+    if spreadsheet is None: return
+    try:
+        log_sheet = spreadsheet.worksheet(LOG_SHEET_NAME)
+        timestamp = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
+        log_sheet.append_row([timestamp, action])
+    except Exception as e:
+        st.warning(f"로그 기록 중 오류 발생: {e}")
+
+# --- 데이터 관리 함수들 ---
 def load_data_from_gsheet():
     if spreadsheet is None: return []
     try:
@@ -123,37 +134,22 @@ st.markdown("#### 📋 컨테이너 목록")
 if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
-    # <<<<<<<<<<<<<<< [변경점] st.data_editor와 column_config를 사용하여 안정적으로 목록 표시 >>>>>>>>>>>>>>>>>
     df = pd.DataFrame(st.session_state.container_list)
-    
-    # 인덱스를 '번호'로 설정
-    df.index = range(1, len(df) + 1)
-    
-    # 없는 컬럼은 빈 값으로 채우고 순서 재정렬
-    for col in SHEET_HEADERS:
-        if col not in df.columns:
-            df[col] = pd.NA
-    df = df[SHEET_HEADERS]
-    
-    # st.data_editor를 사용하여 표를 표시하고, column_config로 스타일 지정
-    st.data_editor(
-        df,
-        use_container_width=True,
-        hide_index=False, # 번호 인덱스를 보여줌
-        disabled=True,    # 사용자가 표를 직접 수정하는 것을 방지
-        column_config={
-            # 각 열의 너비를 지정하여 시각적 균형을 맞춥니다.
-            # 비록 가운데 정렬은 아니지만, 훨씬 깔끔하고 전문적으로 보입니다.
-            "_index": st.column_config.NumberColumn("번호", width="small"),
-            "컨테이너 번호": st.column_config.TextColumn(width="medium"),
-            "출고처": st.column_config.TextColumn(width="medium"),
-            "피트수": st.column_config.NumberColumn(width="small"),
-            "씰 번호": st.column_config.TextColumn(width="medium"),
-            "상태": st.column_config.TextColumn(width="small"),
-            "작업일자": st.column_config.DateColumn(format="YYYY-MM-DD", width="medium"),
-        }
-    )
-    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    if not df.empty:
+        df.index = range(1, len(df) + 1)
+        df.index.name = "번호"
+        
+        for col in SHEET_HEADERS:
+            if col not in df.columns: df[col] = pd.NA
+        
+        df['작업일자'] = df['작업일자'].apply(lambda x: pd.to_datetime(x).strftime('%Y-%m-%d') if pd.notna(x) else '')
+        
+        styler = df[SHEET_HEADERS].style.set_table_styles(
+            [{'selector': '.row_heading', 'props': [('text-align', 'center')]},
+             {'selector': '.index_name', 'props': [('text-align', 'center')]}]
+        )
+        
+        st.dataframe(styler, use_container_width=True)
 
 st.divider()
 
