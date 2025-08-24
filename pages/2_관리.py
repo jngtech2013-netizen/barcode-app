@@ -20,10 +20,10 @@ st.markdown(
     """
     <style>
     [data-testid="stSidebar"] {
-        width: 250px;
+        width: 150px;
     }
     [data-testid="stSidebar"] .st-emotion-cache-17lntkn {
-        font-size: 18px;
+        font-size: 30px;
     }
     </style>
     """,
