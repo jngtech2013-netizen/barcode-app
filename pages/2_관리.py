@@ -4,13 +4,13 @@ from datetime import date, datetime
 from utils import (
     SHEET_HEADERS,
     MAIN_SHEET_NAME,
-    connect_to_gsheet,
     load_data_from_gsheet, 
     add_row_to_gsheet, 
     update_row_in_gsheet, 
     delete_row_from_gsheet, 
     backup_data_to_new_sheet,
-    log_change
+    log_change,
+    render_footer
 )
 
 # --- 앱 초기 설정 ---
@@ -27,7 +27,9 @@ if not st.session_state.container_list:
     st.stop()
 
 # --- 화면 UI 구성 ---
-st.subheader("🚢 컨테이너 관리 시스템")
+# <<<<<<<<<<<<<<< [변경점] 제목 중앙 정렬 및 여백 추가 >>>>>>>>>>>>>>>>>
+st.markdown("<h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>", unsafe_allow_html=True)
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.markdown("#### ✏️ 개별 데이터 수정 및 삭제")
 container_numbers_for_edit = [c.get('컨테이너 번호', '') for c in st.session_state.container_list]
@@ -144,12 +146,6 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
                 except Exception as e:
                     st.error(f"복구 중 오류가 발생했습니다: {e}")
 
-# --- 하단 페이지 이동 버튼 ---
-st.divider()
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("📝 등록", use_container_width=True):
-        st.switch_page("1_등록.py")
-with col2:
-    if st.button("⚙️ 관리", use_container_width=True, type="primary"):
-        st.switch_page("pages/2_관리.py")
+# <<<<<<<<<<<<<<< [변경점] 기존 버튼을 제거하고 고정 바로 교체 >>>>>>>>>>>>>>>>>
+render_footer()
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
