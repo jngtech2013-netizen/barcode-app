@@ -32,15 +32,6 @@ def connect_to_gsheet():
 
 spreadsheet = connect_to_gsheet()
 
-def log_change(action):
-    if spreadsheet is None: return
-    try:
-        log_sheet = spreadsheet.worksheet(LOG_SHEET_NAME)
-        timestamp = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
-        log_sheet.append_row([timestamp, action])
-    except Exception as e:
-        st.warning(f"로그 기록 중 오류 발생: {e}")
-
 def load_data_from_gsheet():
     if spreadsheet is None: return []
     try:
@@ -119,9 +110,8 @@ def backup_data_to_new_sheet(container_data):
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
-# --- 화면 UI 구성 (상단 ~ 개별 수정까지는 이전과 동일) ---
+# --- 화면 UI 구성 (상단은 변경 없음) ---
 st.subheader("🚢 컨테이너 관리 시스템")
-# (바코드 생성, 목록, 신규 등록, 개별 수정 섹션 코드는 이전과 동일)
 with st.expander("🔳 바코드 생성", expanded=True):
     shippable_containers = [c['컨테이너 번호'] for c in st.session_state.container_list if c.get('상태') == '선적중']
     if not shippable_containers: st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
@@ -136,17 +126,35 @@ with st.expander("🔳 바코드 생성", expanded=True):
         with col2: st.image(fp)
 st.divider()
 
-st.markdown("#### 📋 컨테이너 목록")
-if not st.session_state.container_list: st.info("등록된 컨테이너가 없습니다.")
+# --- 2. (중단) 전체 목록 및 신규 등록 ---
+st.markdown("#### 📋 컨테이너 현황")
+
+# <<<<<<<<<<<<<<< [변경점 1] 상태별 개수 카드 표시 >>>>>>>>>>>>>>>>>
+# 1. 상태별로 데이터 필터링
+completed_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적완료'])
+pending_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적중'])
+
+# 2. st.columns를 사용하여 카드를 가로로 배치
+col1, col2 = st.columns(2)
+with col1:
+    st.metric(label="🟥 선적중", value=f"{pending_count} 건")
+with col2:
+    st.metric(label="🟩 선적완료", value=f"{completed_count} 건")
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+if not st.session_state.container_list:
+    st.info("등록된 컨테이너가 없습니다.")
 else:
+    # <<<<<<<<<<<<<<< [변경점 2] 번호 인덱스 제거 >>>>>>>>>>>>>>>>>
     df = pd.DataFrame(st.session_state.container_list)
-    df.index = range(1, len(df) + 1)
-    df.index.name = "번호"
     if not df.empty:
         for col in SHEET_HEADERS:
             if col not in df.columns: df[col] = pd.NA
         df['작업일자'] = df['작업일자'].apply(lambda x: pd.to_datetime(x).strftime('%Y-%m-%d') if pd.notna(x) else '')
-        st.dataframe(df[SHEET_HEADERS], use_container_width=True, hide_index=False)
+        # hide_index=True로 설정하여 번호 컬럼을 숨깁니다.
+        st.dataframe(df[SHEET_HEADERS], use_container_width=True, hide_index=True)
+    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
 st.divider()
 
 st.markdown("#### 📝 신규 컨테이너 등록하기")
@@ -169,10 +177,12 @@ with st.form(key="new_container_form"):
             add_row_to_gsheet(new_container)
             st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
             st.rerun()
+
 st.divider()
 
 st.markdown("#### ✏️ 개별 데이터 수정 및 삭제")
-if not st.session_state.container_list: st.warning("수정할 데이터가 없습니다.")
+if not st.session_state.container_list:
+    st.warning("수정할 데이터가 없습니다.")
 else:
     container_numbers_for_edit = [c.get('컨테이너 번호', '') for c in st.session_state.container_list]
     selected_for_edit = st.selectbox("수정 또는 삭제할 컨테이너를 선택하세요:", container_numbers_for_edit, key="edit_selector")
@@ -213,7 +223,7 @@ else:
 st.divider()
 
 st.markdown("#### 📁 하루 마감 및 데이터 관리")
-st.info("데이터는 모든 사용자가 공유하는 중앙 데이터베이스에 실시간으로 저장됩니다.")
+st.info("하루 작업을 마친 후, 아래 버튼을 눌러 **'선적완료'된 데이터만 백업**하고, **'선적중'인 데이터는 내일로 이월**합니다.")
 if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", use_container_width=True, type="primary"):
     if not st.session_state.container_list:
         st.warning("마감할 데이터가 없습니다.")
@@ -252,9 +262,8 @@ if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", u
             st.rerun()
 
 st.write("---")
-# <<<<<<<<<<<<<<< [변경점] 데이터 복구 로직 전체 수정 >>>>>>>>>>>>>>>>>
 with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구"):
-    st.info("실수로 데이터를 초기화했거나 이전 데이터를 추가할 때 사용하세요.")
+    st.info("실수로 데이터를 초기화했을 경우, 이전 백업 시트를 선택하여 현재 데이터로 덮어쓸 수 있습니다.")
     
     if spreadsheet:
         all_sheets = [s.title for s in spreadsheet.worksheets()]
@@ -268,27 +277,22 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
             st.warning("주의: 이 작업은 현재 목록에 **없는 데이터만 추가**합니다.")
             if st.button(f"'{selected_backup_sheet}' 시트의 데이터 추가하기", use_container_width=True):
                 try:
-                    # 1. 백업 시트에서 데이터 불러오기
                     backup_worksheet = spreadsheet.worksheet(selected_backup_sheet)
                     backup_records = backup_worksheet.get_all_records()
                     
                     if not backup_records:
                         st.warning("선택한 백업 시트에 데이터가 없습니다.")
                     else:
-                        # 2. 현재 데이터에 없는 것만 필터링
                         existing_nos = {c.get('컨테이너 번호') for c in st.session_state.container_list}
-                        
                         added_count = 0
                         for row in backup_records:
                             if row.get('컨테이너 번호') not in existing_nos:
-                                # 날짜 형식 변환
                                 work_date_str = row.get('작업일자')
                                 try:
                                     row['작업일자'] = datetime.strptime(work_date_str, '%Y-%m-%d').date()
                                 except (ValueError, TypeError):
                                     row['작업일자'] = date.today()
                                 
-                                # 3. 로컬과 원격에 모두 추가
                                 st.session_state.container_list.append(row)
                                 add_row_to_gsheet(row)
                                 added_count += 1
@@ -296,7 +300,5 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
                         log_change(f"데이터 복구: '{selected_backup_sheet}' 시트에서 {added_count}개 추가")
                         st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 새로운 데이터를 성공적으로 추가했습니다!")
                         st.rerun()
-
                 except Exception as e:
                     st.error(f"복구 중 오류가 발생했습니다: {e}")
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
