@@ -10,48 +10,32 @@ from utils import SHEET_HEADERS, load_data_from_gsheet, add_row_to_gsheet
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="expanded")
 
-# <<<<<<<<<<<<<<< [변경점 1] 사이드바 스타일을 CSS로 직접 제어 >>>>>>>>>>>>>>>>>
+# <<<<<<<<<<<<<<< [여백 수정] 제목 위쪽 여백을 줄이는 CSS 추가 >>>>>>>>>>>>>>>>>
 st.markdown(
     """
     <style>
-    /* 사이드바의 전체 너비를 170px로 설정 */
-    [data-testid="stSidebar"] {
-        width: 150px !important;
+    /* 메인 콘텐츠 영역의 상단 여백을 조절합니다 (기본값은 5rem) */
+    .block-container {
+        padding-top: 2rem;
     }
-    
-    /* 사이드바의 모든 텍스트 요소에 24px 글씨 적용 */
-    [data-testid="stSidebar"] * {
-        font-size: 22px !important;
-        font-weight: bold !important;
-    }
-    
-    /* 사이드바 안의 모든 링크(<a> 태그)에 스타일 적용 */
-    [data-testid="stSidebar"] a {
-        font-size: 22px !important;
-        font-weight: bold !important;
-    }
-    
-    /* 사이드바의 버튼, 라벨, 텍스트 등 모든 요소 */
-    [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] p,
-    [data-testid="stSidebar"] div,
-    [data-testid="stSidebar"] span,
-    [data-testid="stSidebar"] button {
-        font-size: 22px !important;
-        font-weight: bold !important;
-    }
-    
-    /* 모바일 환경에서도 동일하게 적용 */
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+# --- 사이드바 스타일 ---
+st.markdown(
+    """
+    <style>
+    [data-testid="stSidebar"] { width: 150px !important; }
+    [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
+    [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] div,
+    [data-testid="stSidebar"] span, [data-testid="stSidebar"] button { font-size: 22px !important; font-weight: bold !important; }
     @media (max-width: 768px) {
-        [data-testid="stSidebar"] * {
-            font-size: 22px !important;
-            font-weight: bold !important;
-        }
-        
-        [data-testid="stSidebar"] a {
-            font-size: 22px !important;
-            font-weight: bold !important;
-        }
+        [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
+        [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
     }
     </style>
     """,
@@ -65,7 +49,6 @@ if 'container_list' not in st.session_state:
 # --- 화면 UI 구성 ---
 st.markdown("<h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>", unsafe_allow_html=True)
 
-# <<<<<<<<<<<<<<< [변경점 2] 바코드 생성을 expander가 아닌 card 형태로 유지 >>>>>>>>>>>>>>>>>
 st.markdown("#### 🔳 바코드 생성")
 with st.container(border=True):
     shippable_containers = [c.get('컨테이너 번호', '') for c in st.session_state.container_list if c.get('상태') == '선적중']
@@ -86,12 +69,10 @@ with st.container(border=True):
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             st.image(fp)
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.divider()
 
 st.markdown("#### 📋 컨테이너 현황")
-# (이하 모든 코드는 이전과 동일합니다)
 completed_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적완료'])
 pending_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적중'])
 
