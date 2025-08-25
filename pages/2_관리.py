@@ -20,44 +20,14 @@ st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar
 st.markdown(
     """
     <style>
-    /* 사이드바의 전체 너비를 170px로 설정 */
-    [data-testid="stSidebar"] {
-        width: 150px !important;
-    }
-    
-    /* 사이드바의 모든 텍스트 요소에 24px 글씨 적용 */
-    [data-testid="stSidebar"] * {
-        font-size: 22px !important;
-        font-weight: bold !important;
-    }
-    
-    /* 사이드바 안의 모든 링크(<a> 태그)에 스타일 적용 */
-    [data-testid="stSidebar"] a {
-        font-size: 22px !important;
-        font-weight: bold !important;
-    }
-    
-    /* 사이드바의 버튼, 라벨, 텍스트 등 모든 요소 */
-    [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] p,
-    [data-testid="stSidebar"] div,
-    [data-testid="stSidebar"] span,
-    [data-testid="stSidebar"] button {
-        font-size: 22px !important;
-        font-weight: bold !important;
-    }
-    
-    /* 모바일 환경에서도 동일하게 적용 */
+    [data-testid="stSidebar"] { width: 150px !important; }
+    [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
+    [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] div,
+    [data-testid="stSidebar"] span, [data-testid="stSidebar"] button { font-size: 22px !important; font-weight: bold !important; }
     @media (max-width: 768px) {
-        [data-testid="stSidebar"] * {
-            font-size: 22px !important;
-            font-weight: bold !important;
-        }
-        
-        [data-testid="stSidebar"] a {
-            font-size: 22px !important;
-            font-weight: bold !important;
-        }
+        [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
+        [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
     }
     </style>
     """,
@@ -127,43 +97,31 @@ st.divider()
 st.markdown("#### 📁 하루 마감 및 데이터 관리")
 st.info("하루 작업을 마친 후, 아래 버튼을 눌러 **'선적완료'된 데이터만 백업**하고, **'선적중'인 데이터는 내일로 이월**합니다.")
 if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", use_container_width=True, type="primary"):
+    # (기존 코드와 동일)
     completed_data = [item for item in st.session_state.container_list if item.get('상태') == '선적완료']
     pending_data = [item for item in st.session_state.container_list if item.get('상태') == '선적중']
-    total_count = len(st.session_state.container_list)
-    completed_count = len(completed_data)
-    pending_count = len(pending_data)
-    backup_success = False
-    
     if completed_data:
         success, error_msg = backup_data_to_new_sheet(completed_data)
-        if success:
-            st.success(f"'선적완료'된 {completed_count}개의 데이터를 백업 시트에 성공적으로 저장(또는 추가)했습니다!")
-            backup_success = True
-        else:
+        if not success:
             st.error(f"백업 중 오류가 발생했습니다: {error_msg}")
-    else:
-        st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
-        backup_success = True
-        
-    if backup_success:
-        spreadsheet = connect_to_gsheet()
-        if spreadsheet:
-            worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-            worksheet.clear()
-            worksheet.update('A1', [SHEET_HEADERS])
-            if pending_data:
-                df_pending = pd.DataFrame(pending_data)
-                df_pending['작업일자'] = df_pending['작업일자'].apply(lambda x: x.isoformat() if isinstance(x, date) else x)
-                worksheet.update('A2', df_pending[SHEET_HEADERS].values.tolist())
-        
-        log_message = f"하루 마감: 총 {total_count}개 중 {completed_count}개 백업, {pending_count}개 이월."
-        log_change(log_message)
-        
-        st.session_state.container_list = pending_data
-        st.success("중앙 데이터베이스를 정리했습니다. 새로운 하루를 시작하세요!")
-        st.rerun()
+            st.stop()
+    
+    spreadsheet = connect_to_gsheet()
+    if spreadsheet:
+        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        worksheet.clear()
+        worksheet.update('A1', [SHEET_HEADERS])
+        if pending_data:
+            df_pending = pd.DataFrame(pending_data)
+            df_pending['작업일자'] = df_pending['작업일자'].apply(lambda x: x.isoformat() if isinstance(x, date) else x)
+            worksheet.update('A2', df_pending[SHEET_HEADERS].values.tolist())
+    
+    log_change(f"하루 마감: {len(completed_data)}개 백업, {len(pending_data)}개 이월.")
+    st.session_state.container_list = pending_data
+    st.success("데이터 백업 및 정리가 완료되었습니다.")
+    st.rerun()
 
-# --- 백업 시트에서 데이터 복구 (수정된 부분) ---
+# --- 백업 시트에서 데이터 복구 (최종 수정된 부분) ---
 st.write("---")
 with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구"):
     st.info("실수로 데이터를 초기화했거나 이전 데이터를 추가할 때 사용하세요.")
@@ -174,71 +132,65 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
         if not backup_sheets:
             st.warning("복구할 백업 시트가 없습니다.")
         else:
-            selected_backup_sheet = st.selectbox("복구(추가)할 백업 시트를 선택하세요:", backup_sheets)
+            selected_backup_sheet = st.selectbox(
+                "복구(추가)할 백업 시트를 선택하세요:",
+                backup_sheets,
+                key="backup_sheet_selector"  # 1. 상태 저장을 위한 고유 key 추가
+            )
+
+            # 2. 동적 컨텐츠를 위한 placeholder 생성
+            metric_placeholder = st.empty()
 
             if selected_backup_sheet:
-                try:
-                    backup_worksheet = spreadsheet.worksheet(selected_backup_sheet)
-                    backup_records = backup_worksheet.get_all_records()
+                # placeholder 안에서 내용을 그리도록 설정
+                with metric_placeholder.container():
+                    try:
+                        backup_worksheet = spreadsheet.worksheet(selected_backup_sheet)
+                        backup_records = backup_worksheet.get_all_records()
 
-                    if not backup_records:
-                        st.info("선택한 백업 시트에는 데이터가 없습니다.")
-                    else:
-                        df_backup = pd.DataFrame(backup_records)
-                        
-                        if '상태' in df_backup.columns:
-                            status_counts = df_backup['상태'].value_counts()
-                            pending_count = status_counts.get('선적중', 0)
-                            completed_count = status_counts.get('선적완료', 0)
-                            
-                            st.markdown("##### 📋 선택된 백업 시트 현황")
-                            st.markdown(
-                                f"""
-                                <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
-                                <style>
-                                .backup-metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
-                                .backup-metric-value {{ font-size: 2.5rem; font-weight: bold; }}
-                                .backup-metric-label {{ font-size: 1rem; color: #555555; }}
-                                .backup-red-value {{ color: #FF4B4B; }}
-                                .backup-green-value {{ color: #28A745; }}
-                                </style>
-                                <div class="row">
-                                    <div class="col"><div class="backup-metric-card"><div class="backup-metric-value backup-red-value">{pending_count}</div><div class="backup-metric-label">선적중</div></div></div>
-                                    <div class="col"><div class="backup-metric-card"><div class="backup-metric-value backup-green-value">{completed_count}</div><div class="backup-metric-label">선적완료</div></div></div>
-                                </div>
-                                """, unsafe_allow_html=True
-                            )
+                        if not backup_records:
+                            st.info("선택한 백업 시트에는 데이터가 없습니다.")
                         else:
-                            st.warning(f"'{selected_backup_sheet}' 시트에 '상태' 컬럼이 없어 현황을 표시할 수 없습니다.")
-                            total_count = len(df_backup)
-                            st.info(f"이 백업 시트에는 총 {total_count}개의 데이터가 있습니다.")
-
-                except Exception as e:
-                    st.error(f"백업 시트 정보를 불러오는 중 오류가 발생했습니다: {e}")
+                            df_backup = pd.DataFrame(backup_records)
+                            if '상태' in df_backup.columns:
+                                status_counts = df_backup['상태'].value_counts()
+                                pending_count = status_counts.get('선적중', 0)
+                                completed_count = status_counts.get('선적완료', 0)
+                                
+                                st.markdown("##### 📋 선택된 백업 시트 현황")
+                                col1, col2 = st.columns(2)
+                                col1.metric(label="선적중", value=f"{pending_count} 건")
+                                col2.metric(label="선적완료", value=f"{completed_count} 건")
+                            else:
+                                st.warning(f"'상태' 컬럼이 없어 현황을 표시할 수 없습니다.")
+                    except Exception as e:
+                        st.error(f"백업 시트 정보를 불러오는 중 오류: {e}")
 
             st.warning("주의: 이 작업은 현재 목록에 **없는 데이터만 추가**합니다.")
             if st.button(f"'{selected_backup_sheet}' 시트의 데이터 추가하기", use_container_width=True):
                 try:
                     backup_worksheet = spreadsheet.worksheet(selected_backup_sheet)
                     backup_records = backup_worksheet.get_all_records()
-                    if not backup_records:
-                        st.warning("선택한 백업 시트에 데이터가 없습니다.")
-                    else:
+                    if backup_records:
                         existing_nos = {c.get('컨테이너 번호') for c in st.session_state.container_list}
                         added_count = 0
                         for row in backup_records:
                             if row.get('컨테이너 번호') not in existing_nos:
                                 work_date_str = row.get('작업일자')
-                                try:
-                                    row['작업일자'] = datetime.strptime(work_date_str, '%Y-%m-%d').date()
-                                except (ValueError, TypeError):
-                                    row['작업일자'] = date.today()
+                                try: row['작업일자'] = datetime.strptime(work_date_str, '%Y-%m-%d').date()
+                                except (ValueError, TypeError): row['작업일자'] = date.today()
+                                
                                 st.session_state.container_list.append(row)
                                 add_row_to_gsheet(row)
                                 added_count += 1
                         
-                        log_change(f"데이터 복구: '{selected_backup_sheet}' 시트에서 {added_count}개 추가")
-                        st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 새로운 데이터를 성공적으로 추가했습니다!")
-                        st.rerun()
+                        if added_count > 0:
+                            log_change(f"데이터 복구: '{selected_backup_sheet}'에서 {added_count}개 추가")
+                            st.success(f"'{selected_backup_sheet}'에서 {added_count}개의 새 데이터를 추가했습니다!")
+                            st.rerun()
+                        else:
+                            st.info("현재 목록에 없는 새로운 데이터가 없어 추가된 항목이 없습니다.")
+                    else:
+                        st.warning("선택한 백업 시트에 데이터가 없습니다.")
                 except Exception as e:
                     st.error(f"복구 중 오류가 발생했습니다: {e}")
