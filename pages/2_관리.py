@@ -16,7 +16,6 @@ from utils import (
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
 
-# <<<<<<<<<<<<<<< [변경점 1] 사이드바 스타일을 CSS로 직접 제어 >>>>>>>>>>>>>>>>>
 st.markdown(
     """
     <style>
@@ -63,7 +62,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 데이터 초기화 ---
 if 'container_list' not in st.session_state:
@@ -166,6 +164,43 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
             st.warning("복구할 백업 시트가 없습니다.")
         else:
             selected_backup_sheet = st.selectbox("복구(추가)할 백업 시트를 선택하세요:", backup_sheets)
+            
+            # <<<<<<<<<<< [수정된 부분] 선택된 백업 시트의 요약 정보를 표시 >>>>>>>>>
+            if selected_backup_sheet:
+                try:
+                    backup_worksheet_preview = spreadsheet.worksheet(selected_backup_sheet)
+                    backup_records_preview = backup_worksheet_preview.get_all_records()
+
+                    if backup_records_preview:
+                        df_backup = pd.DataFrame(backup_records_preview)
+                        status_counts = df_backup['상태'].value_counts()
+                        backup_completed_count = status_counts.get('선적완료', 0)
+                        backup_pending_count = status_counts.get('선적중', 0)
+                        
+                        st.markdown("##### 📋 선택된 백업 시트 현황")
+                        st.markdown(
+                            f"""
+                            <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+                            <style>
+                            .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
+                            .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
+                            .metric-label {{ font-size: 1rem; color: #555555; }}
+                            .red-value {{ color: #FF4B4B; }}
+                            .green-value {{ color: #28A745; }}
+                            </style>
+                            <div class="row">
+                                <div class="col"><div class="metric-card"><div class="metric-value red-value">{backup_pending_count}</div><div class="metric-label">선적중</div></div></div>
+                                <div class="col"><div class="metric-card"><div class="metric-value green-value">{backup_completed_count}</div><div class="metric-label">선적완료</div></div></div>
+                            </div>
+                            """, unsafe_allow_html=True
+                        )
+                    else:
+                        st.info("선택한 백업 시트에는 데이터가 없습니다.")
+
+                except Exception as e:
+                    st.warning(f"백업 시트 정보를 불러오는 중 오류가 발생했습니다: {e}")
+            # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
             st.warning("주의: 이 작업은 현재 목록에 **없는 데이터만 추가**합니다.")
             if st.button(f"'{selected_backup_sheet}' 시트의 데이터 추가하기", use_container_width=True):
                 try:
