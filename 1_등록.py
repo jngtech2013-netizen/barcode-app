@@ -10,21 +10,21 @@ from utils import SHEET_HEADERS, load_data_from_gsheet, add_row_to_gsheet
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="expanded")
 
-# <<<<<<<<<<<<<<< [여백 수정] 제목 위쪽 여백을 줄이는 CSS 추가 >>>>>>>>>>>>>>>>>
+# <<<<<<<<<<<<<<< [여백 수정] !important를 사용하여 최우선으로 여백 조절 >>>>>>>>>>>>>>>>>
 st.markdown(
     """
     <style>
-    /* 메인 콘텐츠 영역의 상단 여백을 조절합니다 (기본값은 5rem) */
-    .block-container {
-        padding-top: 2rem !important;
+    div[data-testid="block-container"] {
+        padding-top: 1rem !important;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 사이드바 스타일 ---
+# (이전과 동일한 사이드바 스타일 코드)
 st.markdown(
     """
     <style>
@@ -42,11 +42,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- 데이터 초기화 ---
+# --- 이하 코드는 모두 기존과 동일합니다 ---
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
-# --- 화면 UI 구성 ---
 st.markdown("<h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>", unsafe_allow_html=True)
 
 st.markdown("#### 🔳 바코드 생성")
