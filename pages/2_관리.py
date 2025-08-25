@@ -188,12 +188,11 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
                         df_backup = pd.DataFrame(backup_records)
                         
                         # 상태별 건수 계산
-                        if '상태' in df_backup.columns:
+                       if '상태' in df_backup.columns:
                             status_counts = df_backup['상태'].value_counts()
                             pending_count = status_counts.get('선적중', 0)
                             completed_count = status_counts.get('선적완료', 0)
                             
-                            # 카드 형태로 현황 표시 (등록 페이지와 동일한 스타일)
                             st.markdown("##### 📋 선택된 백업 시트 현황")
                             st.markdown(
                                 f"""
@@ -213,7 +212,6 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
                             )
                         else:
                             st.warning(f"'{selected_backup_sheet}' 시트에 '상태' 컬럼이 없어 현황을 표시할 수 없습니다.")
-                            # 상태 컬럼이 없어도 전체 건수는 표시
                             total_count = len(df_backup)
                             st.info(f"이 백업 시트에는 총 {total_count}개의 데이터가 있습니다.")
 
