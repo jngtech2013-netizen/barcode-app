@@ -22,7 +22,7 @@ st.markdown(
     <style>
     /* 메인 콘텐츠 영역의 상단 여백을 조절합니다 (기본값은 5rem) */
     .block-container {
-        padding-top: 2rem;
+        padding-top: 2rem !important;
     }
     </style>
     """,
