@@ -176,6 +176,7 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
         else:
             selected_backup_sheet = st.selectbox("복구(추가)할 백업 시트를 선택하세요:", backup_sheets)
 
+            # 선택된 백업 시트의 현황을 실시간으로 표시
             if selected_backup_sheet:
                 try:
                     backup_worksheet = spreadsheet.worksheet(selected_backup_sheet)
@@ -186,23 +187,43 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
                     else:
                         df_backup = pd.DataFrame(backup_records)
                         
+                        # 상태별 건수 계산
                         if '상태' in df_backup.columns:
                             status_counts = df_backup['상태'].value_counts()
                             pending_count = status_counts.get('선적중', 0)
                             completed_count = status_counts.get('선적완료', 0)
                             
+                            # 카드 형태로 현황 표시 (등록 페이지와 동일한 스타일)
                             st.markdown("##### 📋 선택된 백업 시트 현황")
-                            col1, col2 = st.columns(2)
-                            col1.metric(label="선적중", value=f"{pending_count} 건")
-                            col2.metric(label="선적완료", value=f"{completed_count} 건")
+                            st.markdown(
+                                f"""
+                                <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+                                <style>
+                                .backup-metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
+                                .backup-metric-value {{ font-size: 2.5rem; font-weight: bold; }}
+                                .backup-metric-label {{ font-size: 1rem; color: #555555; }}
+                                .backup-red-value {{ color: #FF4B4B; }}
+                                .backup-green-value {{ color: #28A745; }}
+                                </style>
+                                <div class="row">
+                                    <div class="col"><div class="backup-metric-card"><div class="backup-metric-value backup-red-value">{pending_count}</div><div class="backup-metric-label">선적중</div></div></div>
+                                    <div class="col"><div class="backup-metric-card"><div class="backup-metric-value backup-green-value">{completed_count}</div><div class="backup-metric-label">선적완료</div></div></div>
+                                </div>
+                                """, unsafe_allow_html=True
+                            )
                         else:
                             st.warning(f"'{selected_backup_sheet}' 시트에 '상태' 컬럼이 없어 현황을 표시할 수 없습니다.")
+                            # 상태 컬럼이 없어도 전체 건수는 표시
+                            total_count = len(df_backup)
+                            st.info(f"이 백업 시트에는 총 {total_count}개의 데이터가 있습니다.")
 
                 except Exception as e:
                     st.error(f"백업 시트 정보를 불러오는 중 오류가 발생했습니다: {e}")
 
             st.warning("주의: 이 작업은 현재 목록에 **없는 데이터만 추가**합니다.")
-            if st.button(f"'{selected_backup_sheet}' 시트의 데이터 추가하기", use_container_width=True):
+            
+            # 복구 버튼 (선택된 시트가 있을 때만 표시)
+            if selected_backup_sheet and st.button(f"'{selected_backup_sheet}' 시트의 데이터 추가하기", use_container_width=True):
                 try:
                     backup_worksheet = spreadsheet.worksheet(selected_backup_sheet)
                     backup_records = backup_worksheet.get_all_records()
@@ -223,7 +244,12 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
                                 added_count += 1
                         
                         log_change(f"데이터 복구: '{selected_backup_sheet}' 시트에서 {added_count}개 추가")
-                        st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 새로운 데이터를 성공적으로 추가했습니다!")
+                        if added_count > 0:
+                            st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 새로운 데이터를 성공적으로 추가했습니다!")
+                        else:
+                            st.info("추가할 새로운 데이터가 없습니다. (모든 컨테이너가 이미 존재함)")
                         st.rerun()
                 except Exception as e:
                     st.error(f"복구 중 오류가 발생했습니다: {e}")
+    else:
+        st.error("Google Sheets에 연결할 수 없습니다.")
