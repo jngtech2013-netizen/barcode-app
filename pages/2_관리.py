@@ -16,6 +16,7 @@ from utils import (
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
 
+# --- 사이드바 스타일 ---
 st.markdown(
     """
     <style>
@@ -76,24 +77,30 @@ if not st.session_state.container_list:
 # --- 화면 UI 구성 ---
 st.markdown("<h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>", unsafe_allow_html=True)
 
+# --- 개별 데이터 수정 및 삭제 ---
 st.markdown("#### ✏️ 개별 데이터 수정 및 삭제")
 container_numbers_for_edit = [c.get('컨테이너 번호', '') for c in st.session_state.container_list]
 selected_for_edit = st.selectbox("수정 또는 삭제할 컨테이너를 선택하세요:", container_numbers_for_edit, key="edit_selector")
 selected_data = next((c for c in st.session_state.container_list if c.get('컨테이너 번호') == selected_for_edit), None)
 selected_idx = next((i for i, c in enumerate(st.session_state.container_list) if c.get('컨테이너 번호') == selected_for_edit), -1)
+
 if selected_data:
     with st.form(key=f"edit_form_{selected_for_edit}"):
         st.write(f"**'{selected_for_edit}' 정보 수정**")
         dest_options = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
         current_dest_idx = dest_options.index(selected_data.get('출고처', dest_options[0]))
         new_dest = st.radio("출고처 수정", options=dest_options, index=current_dest_idx, horizontal=True)
+        
         feet_options = ['40', '20']
         current_feet_idx = feet_options.index(str(selected_data.get('피트수', '40')))
         new_feet = st.radio("피트수 수정", options=feet_options, index=current_feet_idx, horizontal=True)
+        
         new_seal = st.text_input("씰 번호 수정", value=selected_data.get('씰 번호', ''))
+        
         status_options = ['선적중', '선적완료']
         current_status_idx = status_options.index(selected_data.get('상태', status_options[0]))
         new_status = st.radio("상태 변경", options=status_options, index=current_status_idx, horizontal=True)
+        
         work_date_value = selected_data.get('작업일자', date.today())
         if not isinstance(work_date_value, date):
             try: work_date_value = datetime.strptime(str(work_date_value), '%Y-%m-%d').date()
@@ -116,6 +123,7 @@ if selected_data:
 
 st.divider()
 
+# --- 하루 마감 및 데이터 관리 ---
 st.markdown("#### 📁 하루 마감 및 데이터 관리")
 st.info("하루 작업을 마친 후, 아래 버튼을 눌러 **'선적완료'된 데이터만 백업**하고, **'선적중'인 데이터는 내일로 이월**합니다.")
 if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", use_container_width=True, type="primary"):
@@ -125,6 +133,7 @@ if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", u
     completed_count = len(completed_data)
     pending_count = len(pending_data)
     backup_success = False
+    
     if completed_data:
         success, error_msg = backup_data_to_new_sheet(completed_data)
         if success:
@@ -135,6 +144,7 @@ if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", u
     else:
         st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
         backup_success = True
+        
     if backup_success:
         spreadsheet = connect_to_gsheet()
         if spreadsheet:
@@ -153,8 +163,8 @@ if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", u
         st.success("중앙 데이터베이스를 정리했습니다. 새로운 하루를 시작하세요!")
         st.rerun()
 
+# --- 백업 시트에서 데이터 복구 (수정된 부분) ---
 st.write("---")
-# '백업 시트에서 데이터 복구' expander의 전체 내용입니다.
 with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구"):
     st.info("실수로 데이터를 초기화했거나 이전 데이터를 추가할 때 사용하세요.")
     spreadsheet = connect_to_gsheet()
@@ -166,49 +176,30 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
         else:
             selected_backup_sheet = st.selectbox("복구(추가)할 백업 시트를 선택하세요:", backup_sheets)
 
-            # =================================================================
-            # =============== ✨ 바로 이 부분이 추가되었습니다! ✨ ===============
-            # =================================================================
-            # 선택된 백업 시트가 있을 경우, 해당 시트의 데이터를 읽어와 요약 정보를 카드 형태로 보여줍니다.
             if selected_backup_sheet:
                 try:
-                    # 선택된 시트의 데이터를 읽어옵니다.
-                    backup_worksheet_preview = spreadsheet.worksheet(selected_backup_sheet)
-                    backup_records_preview = backup_worksheet_preview.get_all_records()
+                    backup_worksheet = spreadsheet.worksheet(selected_backup_sheet)
+                    backup_records = backup_worksheet.get_all_records()
 
-                    if backup_records_preview:
-                        # 데이터프레임으로 변환하여 상태별 개수를 계산합니다.
-                        df_backup = pd.DataFrame(backup_records_preview)
-                        status_counts = df_backup['상태'].value_counts()
-                        backup_completed_count = status_counts.get('선적완료', 0)
-                        backup_pending_count = status_counts.get('선적중', 0)
-                        
-                        # 계산된 개수를 카드 형태로 화면에 보여줍니다.
-                        st.markdown("##### 📋 선택된 백업 시트 현황")
-                        st.markdown(
-                            f"""
-                            <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
-                            <style>
-                            .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
-                            .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
-                            .metric-label {{ font-size: 1rem; color: #555555; }}
-                            .red-value {{ color: #FF4B4B; }}
-                            .green-value {{ color: #28A745; }}
-                            </style>
-                            <div class="row">
-                                <div class="col"><div class="metric-card"><div class="metric-value red-value">{backup_pending_count}</div><div class="metric-label">선적중</div></div></div>
-                                <div class="col"><div class="metric-card"><div class="metric-value green-value">{backup_completed_count}</div><div class="metric-label">선적완료</div></div></div>
-                            </div>
-                            """, unsafe_allow_html=True
-                        )
-                    else:
+                    if not backup_records:
                         st.info("선택한 백업 시트에는 데이터가 없습니다.")
+                    else:
+                        df_backup = pd.DataFrame(backup_records)
+                        
+                        if '상태' in df_backup.columns:
+                            status_counts = df_backup['상태'].value_counts()
+                            pending_count = status_counts.get('선적중', 0)
+                            completed_count = status_counts.get('선적완료', 0)
+                            
+                            st.markdown("##### 📋 선택된 백업 시트 현황")
+                            col1, col2 = st.columns(2)
+                            col1.metric(label="선적중", value=f"{pending_count} 건")
+                            col2.metric(label="선적완료", value=f"{completed_count} 건")
+                        else:
+                            st.warning(f"'{selected_backup_sheet}' 시트에 '상태' 컬럼이 없어 현황을 표시할 수 없습니다.")
 
                 except Exception as e:
-                    st.warning(f"백업 시트 정보를 불러오는 중 오류가 발생했습니다: {e}")
-            # =================================================================
-            # ===================== 여기까지가 추가된 부분입니다 =====================
-            # =================================================================
+                    st.error(f"백업 시트 정보를 불러오는 중 오류가 발생했습니다: {e}")
 
             st.warning("주의: 이 작업은 현재 목록에 **없는 데이터만 추가**합니다.")
             if st.button(f"'{selected_backup_sheet}' 시트의 데이터 추가하기", use_container_width=True):
