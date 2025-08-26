@@ -46,7 +46,7 @@ st.markdown(
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
-st.markdown("<h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center; margin-bottom: 20px;'>🚢 컨테이너 관리 시스템</h3>", unsafe_allow_html=True)
 
 st.markdown("#### 🔳 바코드 생성")
 with st.container(border=True):

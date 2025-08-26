@@ -59,7 +59,7 @@ if not st.session_state.container_list:
         st.switch_page("1_등록.py")
     st.stop()
 
-st.markdown("<h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center; margin-bottom: 20px;'>🚢 컨테이너 관리 시스템</h3>", unsafe_allow_html=True)
 
 st.markdown("#### ✏️ 개별 데이터 수정 및 삭제")
 container_numbers_for_edit = [c.get('컨테이너 번호', '') for c in st.session_state.container_list]
