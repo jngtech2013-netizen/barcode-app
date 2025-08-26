@@ -34,7 +34,7 @@ if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
 st.markdown("""
-    <div style="margin-top: -2rem;">
+    <div style="margin-top: -3rem;">
         <h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>
     </div>
 """, unsafe_allow_html=True)
