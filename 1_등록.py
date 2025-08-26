@@ -11,7 +11,6 @@ from utils import SHEET_HEADERS, load_data_from_gsheet, add_row_to_gsheet
 st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="expanded")
 
 # --- 사이드바 스타일 ---
-# (이전과 동일한 사이드바 스타일 코드)
 st.markdown(
     """
     <style>
@@ -29,16 +28,18 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- 이하 코드는 모두 기존과 동일합니다 ---
+# --- 데이터 초기화 ---
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
+# --- 제목 (여백 조절됨) ---
 st.markdown("""
     <div style="margin-top: -3rem;">
         <h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>
     </div>
 """, unsafe_allow_html=True)
 
+# --- 바코드 생성 ---
 st.markdown("#### 🔳 바코드 생성")
 with st.container(border=True):
     shippable_containers = [c.get('컨테이너 번호', '') for c in st.session_state.container_list if c.get('상태') == '선적중']
@@ -62,6 +63,7 @@ with st.container(border=True):
 
 st.divider()
 
+# --- 컨테이너 현황 ---
 st.markdown("#### 📋 컨테이너 현황")
 completed_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적완료'])
 pending_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적중'])
@@ -95,23 +97,46 @@ else:
 
 st.divider()
 
+# --- 신규 컨테이너 등록 (수정된 부분) ---
 st.markdown("#### 📝 신규 컨테이너 등록")
 with st.form(key="new_container_form"):
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
-    container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567")
-    destination = st.radio("2. 출고처", options=destinations, horizontal=True)
-    feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True)
-    seal_no = st.text_input("4. 씰 번호")
-    work_date = st.date_input("5. 작업일자", value=date.today())
+    
+    # 각 위젯에 고유한 key를 부여하여 session_state와 연동합니다.
+    st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
+    st.radio("2. 출고처", options=destinations, horizontal=True, key="form_destination")
+    st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
+    st.text_input("4. 씰 번호", key="form_seal_no")
+    work_date = st.date_input("5. 작업일자", value=date.today()) # 작업일자는 항상 오늘 날짜로 유지
+    
     submitted = st.form_submit_button("➕ 등록하기", use_container_width=True)
     if submitted:
+        # session_state에 저장된 값들을 가져옵니다.
+        container_no = st.session_state.form_container_no
+        destination = st.session_state.form_destination
+        feet = st.session_state.form_feet
+        seal_no = st.session_state.form_seal_no
+
         pattern = re.compile(r'^[A-Z]{4}\d{7}$')
-        if not container_no or not seal_no: st.error("컨테이너 번호와 씰 번호를 모두 입력해주세요.")
-        elif not pattern.match(container_no): st.error("컨테이너 번호 형식이 올바르지 않습니다.")
-        elif any(c.get('컨테이너 번호') == container_no for c in st.session_state.container_list): st.warning(f"이미 등록된 컨테이너 번호입니다: {container_no}")
+        if not container_no or not seal_no: 
+            st.error("컨테이너 번호와 씰 번호를 모두 입력해주세요.")
+        elif not pattern.match(container_no): 
+            st.error("컨테이너 번호 형식이 올바르지 않습니다.")
+        elif any(c.get('컨테이너 번호') == container_no for c in st.session_state.container_list): 
+            st.warning(f"이미 등록된 컨테이너 번호입니다: {container_no}")
         else:
-            new_container = {'컨테이너 번호': container_no, '출고처': destination, '피트수': feet, '씰 번호': seal_no, '작업일자': work_date, '상태': '선적중'}
+            new_container = {
+                '컨테이너 번호': container_no, '출고처': destination, '피트수': feet, 
+                '씰 번호': seal_no, '작업일자': work_date, '상태': '선적중'
+            }
             st.session_state.container_list.append(new_container)
             add_row_to_gsheet(new_container)
             st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
+
+            # ✨ 등록 성공 후, session_state의 값들을 초기화합니다.
+            st.session_state.form_container_no = ""
+            st.session_state.form_seal_no = ""
+            st.session_state.form_destination = "베트남"
+            st.session_state.form_feet = "40"
+            
             st.rerun()
