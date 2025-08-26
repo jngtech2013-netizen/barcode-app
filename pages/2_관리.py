@@ -143,7 +143,7 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
         else:
             selected_backup_sheet = st.selectbox("복구(추가)할 백업 시트를 선택하세요:", backup_sheets)
             
-            # <<<<<<<<<<<<<<< ✨ 요청하신 기능이 추가된 부분입니다 ✨ >>>>>>>>>>>>>>>>>
+            # <<<<<<<<<<<<<<< ✨ 요청하신 기능이 '1_등록.py'와 동일한 디자인으로 적용되었습니다 ✨ >>>>>>>>>>>>>>>>>
             if selected_backup_sheet:
                 try:
                     backup_worksheet = spreadsheet.worksheet(selected_backup_sheet)
@@ -159,15 +159,28 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
                             completed_count = status_counts.get('선적완료', 0)
                             
                             st.markdown("##### 📋 선택된 백업 시트 현황")
-                            col1, col2 = st.columns(2)
-                            col1.metric(label="선적중", value=f"{pending_count} 건")
-                            col2.metric(label="선적완료", value=f"{completed_count} 건")
+                            st.markdown(
+                                f"""
+                                <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+                                <style>
+                                .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
+                                .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
+                                .metric-label {{ font-size: 1rem; color: #555555; }}
+                                .red-value {{ color: #FF4B4B; }}
+                                .green-value {{ color: #28A745; }}
+                                </style>
+                                <div class="row">
+                                    <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending_count}</div><div class="metric-label">선적중</div></div></div>
+                                    <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed_count}</div><div class="metric-label">선적완료</div></div></div>
+                                </div>
+                                """, unsafe_allow_html=True
+                            )
                         else:
                             st.warning(f"'{selected_backup_sheet}' 시트에 '상태' 컬럼이 없어 현황을 표시할 수 없습니다.")
                 
                 except Exception as e:
                     st.error(f"백업 시트 정보를 불러오는 중 오류가 발생했습니다: {e}")
-            # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+            # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
             st.warning("주의: 이 작업은 현재 목록에 **없는 데이터만 추가**합니다.")
             if st.button(f"'{selected_backup_sheet}' 시트의 데이터 추가하기", use_container_width=True):
