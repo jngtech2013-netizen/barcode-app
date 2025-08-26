@@ -11,27 +11,18 @@ from utils import SHEET_HEADERS, load_data_from_gsheet, add_row_to_gsheet
 st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="expanded")
 
 
-# 방법 1: 더 구체적인 CSS 선택자 사용
+# 방법 2: 음수 마진을 사용한 강제 조정
 st.markdown(
     """
     <style>
-    .main .block-container {
-        padding-top: 0.2rem !important;
-        padding-bottom: 1rem !important;
-    }
-    
-    /* 추가적으로 시도해볼 선택자들 */
-    .stApp > div[data-testid="block-container"] {
-        padding-top: 0.2rem !important;
-    }
-    
-    section[data-testid="stSidebar"] + div[data-testid="block-container"] {
-        padding-top: 0.2rem !important;
+    div[data-testid="block-container"] {
+        margin-top: -2rem !important;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
+
 
 # --- 사이드바 스타일 ---
 # (이전과 동일한 사이드바 스타일 코드)
