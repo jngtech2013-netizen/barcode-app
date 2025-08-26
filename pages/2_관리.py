@@ -16,18 +16,28 @@ from utils import (
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
 
-# <<<<<<<<<<<<<<< [여백 수정] !important를 사용하여 최우선으로 여백 조절 >>>>>>>>>>>>>>>>>
+
+# 방법 1: 더 구체적인 CSS 선택자 사용
 st.markdown(
     """
     <style>
-    div[data-testid="block-container"] {
-        padding-top: 1rem !important;
+    .main .block-container {
+        padding-top: 0.2rem !important;
+        padding-bottom: 1rem !important;
+    }
+    
+    /* 추가적으로 시도해볼 선택자들 */
+    .stApp > div[data-testid="block-container"] {
+        padding-top: 0.2rem !important;
+    }
+    
+    section[data-testid="stSidebar"] + div[data-testid="block-container"] {
+        padding-top: 0.2rem !important;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 사이드바 스타일 ---
 # (이전과 동일한 사이드바 스타일 코드)
@@ -59,13 +69,7 @@ if not st.session_state.container_list:
         st.switch_page("1_등록.py")
     st.stop()
 
-#st.markdown("<h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>", unsafe_allow_html=True)
-# 또는 CSS를 HTML 태그 안에 직접 넣기
-st.markdown("""
-    <div style="margin-top: -2rem;">
-        <h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>
-    </div>
-""", unsafe_allow_html=True)
+st.markdown("<h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>", unsafe_allow_html=True)
 
 st.markdown("#### ✏️ 개별 데이터 수정 및 삭제")
 container_numbers_for_edit = [c.get('컨테이너 번호', '') for c in st.session_state.container_list]
