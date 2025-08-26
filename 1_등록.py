@@ -19,15 +19,6 @@ st.markdown(
         padding-top: 0.2rem !important;
         padding-bottom: 1rem !important;
     }
-    
-    /* 추가적으로 시도해볼 선택자들 */
-    .stApp > div[data-testid="block-container"] {
-        padding-top: 0.2rem !important;
-    }
-    
-    section[data-testid="stSidebar"] + div[data-testid="block-container"] {
-        padding-top: 0.2rem !important;
-    }
     </style>
     """,
     unsafe_allow_html=True,
