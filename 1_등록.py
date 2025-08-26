@@ -11,12 +11,15 @@ from utils import SHEET_HEADERS, load_data_from_gsheet, add_row_to_gsheet
 st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="expanded")
 
 
-# 방법 2: 음수 마진을 사용한 강제 조정
+# 방법 4: CSS 우선순위 높이기 (여러 선택자 조합)
 st.markdown(
     """
     <style>
-    div[data-testid="block-container"] {
-        margin-top: -2rem !important;
+    .stApp .main .block-container,
+    div[data-testid="stAppViewContainer"] > section > div[data-testid="block-container"],
+    .stApp > div[data-testid="block-container"] {
+        padding-top: 0.2rem !important;
+        margin-top: 0rem !important;
     }
     </style>
     """,
