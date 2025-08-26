@@ -17,7 +17,6 @@ from utils import (
 st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
 
 # --- 사이드바 스타일 ---
-# (이전과 동일한 사이드바 스타일 코드)
 st.markdown(
     """
     <style>
@@ -35,8 +34,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
-# --- 이하 코드는 모두 기존과 동일합니다 ---
+# --- 데이터 초기화 ---
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
@@ -46,12 +44,14 @@ if not st.session_state.container_list:
         st.switch_page("1_등록.py")
     st.stop()
 
+# --- 제목 (여백 조절됨) ---
 st.markdown("""
     <div style="margin-top: -3rem;">
         <h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>
     </div>
 """, unsafe_allow_html=True)
 
+# --- 개별 데이터 수정 및 삭제 ---
 st.markdown("#### ✏️ 개별 데이터 수정 및 삭제")
 container_numbers_for_edit = [c.get('컨테이너 번호', '') for c in st.session_state.container_list]
 selected_for_edit = st.selectbox("수정 또는 삭제할 컨테이너를 선택하세요:", container_numbers_for_edit, key="edit_selector")
@@ -92,6 +92,7 @@ if selected_data:
 
 st.divider()
 
+# --- 하루 마감 및 데이터 관리 ---
 st.markdown("#### 📁 하루 마감 및 데이터 관리")
 st.info("하루 작업을 마친 후, 아래 버튼을 눌러 **'선적완료'된 데이터만 백업**하고, **'선적중'인 데이터는 내일로 이월**합니다.")
 if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", use_container_width=True, type="primary"):
@@ -129,6 +130,7 @@ if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", u
         st.success("중앙 데이터베이스를 정리했습니다. 새로운 하루를 시작하세요!")
         st.rerun()
 
+# --- 백업 시트에서 데이터 복구 ---
 st.write("---")
 with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구"):
     st.info("실수로 데이터를 초기화했거나 이전 데이터를 추가할 때 사용하세요.")
@@ -140,6 +142,33 @@ with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구
             st.warning("복구할 백업 시트가 없습니다.")
         else:
             selected_backup_sheet = st.selectbox("복구(추가)할 백업 시트를 선택하세요:", backup_sheets)
+            
+            # <<<<<<<<<<<<<<< ✨ 요청하신 기능이 추가된 부분입니다 ✨ >>>>>>>>>>>>>>>>>
+            if selected_backup_sheet:
+                try:
+                    backup_worksheet = spreadsheet.worksheet(selected_backup_sheet)
+                    backup_records = backup_worksheet.get_all_records()
+
+                    if not backup_records:
+                        st.info("선택한 백업 시트에는 데이터가 없습니다.")
+                    else:
+                        df_backup = pd.DataFrame(backup_records)
+                        if '상태' in df_backup.columns:
+                            status_counts = df_backup['상태'].value_counts()
+                            pending_count = status_counts.get('선적중', 0)
+                            completed_count = status_counts.get('선적완료', 0)
+                            
+                            st.markdown("##### 📋 선택된 백업 시트 현황")
+                            col1, col2 = st.columns(2)
+                            col1.metric(label="선적중", value=f"{pending_count} 건")
+                            col2.metric(label="선적완료", value=f"{completed_count} 건")
+                        else:
+                            st.warning(f"'{selected_backup_sheet}' 시트에 '상태' 컬럼이 없어 현황을 표시할 수 없습니다.")
+                
+                except Exception as e:
+                    st.error(f"백업 시트 정보를 불러오는 중 오류가 발생했습니다: {e}")
+            # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
             st.warning("주의: 이 작업은 현재 목록에 **없는 데이터만 추가**합니다.")
             if st.button(f"'{selected_backup_sheet}' 시트의 데이터 추가하기", use_container_width=True):
                 try:
