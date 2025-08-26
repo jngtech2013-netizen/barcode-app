@@ -8,7 +8,7 @@ import re
 from utils import SHEET_HEADERS, load_data_from_gsheet, add_row_to_gsheet
 
 # --- 앱 초기 설정 ---
-st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="collapsed")
 
 
 # 방법 1: 더 구체적인 CSS 선택자 사용
