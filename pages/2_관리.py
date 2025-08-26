@@ -16,18 +16,28 @@ from utils import (
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
 
-# <<<<<<<<<<<<<<< [여백 수정] !important를 사용하여 최우선으로 여백 조절 >>>>>>>>>>>>>>>>>
+
+# 방법 1: 더 구체적인 CSS 선택자 사용
 st.markdown(
     """
     <style>
-    div[data-testid="block-container"] {
+    .main .block-container {
+        padding-top: 0.2rem !important;
+        padding-bottom: 1rem !important;
+    }
+    
+    /* 추가적으로 시도해볼 선택자들 */
+    .stApp > div[data-testid="block-container"] {
+        padding-top: 0.2rem !important;
+    }
+    
+    section[data-testid="stSidebar"] + div[data-testid="block-container"] {
         padding-top: 0.2rem !important;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 사이드바 스타일 ---
 # (이전과 동일한 사이드바 스타일 코드)
