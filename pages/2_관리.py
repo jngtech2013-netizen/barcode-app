@@ -14,23 +14,9 @@ from utils import (
 )
 
 # --- 앱 초기 설정 ---
-st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="cexpanded")
-
-
-# 방법 1: 더 구체적인 CSS 선택자 사용
-st.markdown(
-    """
-    <style>
-    section[data-testid="stSidebar"] + div[data-testid="block-container"] {
-        padding-top: 0.2rem !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
 
 # --- 사이드바 스타일 ---
-# (이전과 동일한 사이드바 스타일 코드)
 st.markdown(
     """
     <style>
@@ -48,8 +34,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# 사이드바에 제목 추가
+with st.sidebar:
+    st.markdown("### 🚢 컨테이너 관리")
 
-# --- 이하 코드는 모두 기존과 동일합니다 ---
+# --- 데이터 로드 ---
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
@@ -59,34 +48,47 @@ if not st.session_state.container_list:
         st.switch_page("1_등록.py")
     st.stop()
 
-st.markdown("<h3 style='text-align: center; margin-bottom: 20px;'>🚢 컨테이너 관리 시스템</h3>", unsafe_allow_html=True)
-
+# --- 개별 데이터 수정 및 삭제 섹션 ---
 st.markdown("#### ✏️ 개별 데이터 수정 및 삭제")
 container_numbers_for_edit = [c.get('컨테이너 번호', '') for c in st.session_state.container_list]
 selected_for_edit = st.selectbox("수정 또는 삭제할 컨테이너를 선택하세요:", container_numbers_for_edit, key="edit_selector")
 selected_data = next((c for c in st.session_state.container_list if c.get('컨테이너 번호') == selected_for_edit), None)
 selected_idx = next((i for i, c in enumerate(st.session_state.container_list) if c.get('컨테이너 번호') == selected_for_edit), -1)
+
 if selected_data:
     with st.form(key=f"edit_form_{selected_for_edit}"):
         st.write(f"**'{selected_for_edit}' 정보 수정**")
         dest_options = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
         current_dest_idx = dest_options.index(selected_data.get('출고처', dest_options[0]))
         new_dest = st.radio("출고처 수정", options=dest_options, index=current_dest_idx, horizontal=True)
+        
         feet_options = ['40', '20']
         current_feet_idx = feet_options.index(str(selected_data.get('피트수', '40')))
         new_feet = st.radio("피트수 수정", options=feet_options, index=current_feet_idx, horizontal=True)
+        
         new_seal = st.text_input("씰 번호 수정", value=selected_data.get('씰 번호', ''))
+        
         status_options = ['선적중', '선적완료']
         current_status_idx = status_options.index(selected_data.get('상태', status_options[0]))
         new_status = st.radio("상태 변경", options=status_options, index=current_status_idx, horizontal=True)
+        
         work_date_value = selected_data.get('작업일자', date.today())
         if not isinstance(work_date_value, date):
-            try: work_date_value = datetime.strptime(str(work_date_value), '%Y-%m-%d').date()
-            except (ValueError, TypeError): work_date_value = date.today()
+            try: 
+                work_date_value = datetime.strptime(str(work_date_value), '%Y-%m-%d').date()
+            except (ValueError, TypeError): 
+                work_date_value = date.today()
         new_work_date = st.date_input("작업일자 수정", value=work_date_value)
         
         if st.form_submit_button("💾 수정사항 저장", use_container_width=True):
-            updated_data = {'컨테이너 번호': selected_for_edit, '출고처': new_dest, '피트수': new_feet, '씰 번호': new_seal, '상태': new_status, '작업일자': new_work_date}
+            updated_data = {
+                '컨테이너 번호': selected_for_edit, 
+                '출고처': new_dest, 
+                '피트수': new_feet, 
+                '씰 번호': new_seal, 
+                '상태': new_status, 
+                '작업일자': new_work_date
+            }
             st.session_state.container_list[selected_idx] = updated_data
             update_row_in_gsheet(selected_idx, updated_data)
             st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
@@ -101,8 +103,10 @@ if selected_data:
 
 st.divider()
 
+# --- 하루 마감 및 데이터 관리 섹션 ---
 st.markdown("#### 📁 하루 마감 및 데이터 관리")
 st.info("하루 작업을 마친 후, 아래 버튼을 눌러 **'선적완료'된 데이터만 백업**하고, **'선적중'인 데이터는 내일로 이월**합니다.")
+
 if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", use_container_width=True, type="primary"):
     completed_data = [item for item in st.session_state.container_list if item.get('상태') == '선적완료']
     pending_data = [item for item in st.session_state.container_list if item.get('상태') == '선적중']
@@ -110,6 +114,7 @@ if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", u
     completed_count = len(completed_data)
     pending_count = len(pending_data)
     backup_success = False
+    
     if completed_data:
         success, error_msg = backup_data_to_new_sheet(completed_data)
         if success:
@@ -120,6 +125,7 @@ if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", u
     else:
         st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
         backup_success = True
+    
     if backup_success:
         spreadsheet = connect_to_gsheet()
         if spreadsheet:
@@ -138,6 +144,7 @@ if st.button("🚀 오늘 데이터 백업 및 새로 시작 (하루 마감)", u
         st.success("중앙 데이터베이스를 정리했습니다. 새로운 하루를 시작하세요!")
         st.rerun()
 
+# --- 백업 데이터 복구 섹션 ---
 st.write("---")
 with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구"):
     st.info("실수로 데이터를 초기화했거나 이전 데이터를 추가할 때 사용하세요.")
