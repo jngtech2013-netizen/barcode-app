@@ -10,6 +10,20 @@ from utils import SHEET_HEADERS, load_data_from_gsheet, add_row_to_gsheet
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="expanded")
 
+# --- ✨ 1. 초기화 함수와 성공 플래그 로직을 앱 상단에 배치 ---
+# form 입력값을 초기화하는 함수
+def clear_form_inputs():
+    st.session_state["form_container_no"] = ""
+    st.session_state["form_seal_no"] = ""
+    st.session_state["form_destination"] = "베트남"
+    st.session_state["form_feet"] = "40"
+
+# 페이지가 재실행될 때, submission_success 플래그를 확인
+# 이 플래그는 form 제출이 성공했을 때 True로 설정됨
+if st.session_state.get("submission_success", False):
+    clear_form_inputs()  # 입력 필드를 초기화
+    st.session_state.submission_success = False # 플래그를 다시 내림
+
 # --- 사이드바 스타일 ---
 st.markdown(
     """
@@ -97,28 +111,17 @@ else:
 
 st.divider()
 
-# --- 신규 컨테이너 등록 (오류 수정 완료) ---
+# --- 신규 컨테이너 등록 ---
 st.markdown("#### 📝 신규 컨테이너 등록")
-
-# ✨ 1. 콜백 함수를 먼저 정의합니다.
-# 이 함수는 form 내부의 위젯들의 상태를 초기화하는 역할을 합니다.
-def clear_form_inputs():
-    st.session_state["form_container_no"] = ""
-    st.session_state["form_seal_no"] = ""
-    st.session_state["form_destination"] = "베트남"
-    st.session_state["form_feet"] = "40"
-
 with st.form(key="new_container_form"):
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
     
-    # 각 위젯에 고유 key를 부여합니다.
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
     destination = st.radio("2. 출고처", options=destinations, horizontal=True, key="form_destination")
     feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
     seal_no = st.text_input("4. 씰 번호", key="form_seal_no")
     work_date = st.date_input("5. 작업일자", value=date.today())
     
-    # ✨ 2. 제출 버튼에 on_click 콜백을 연결합니다.
     submitted = st.form_submit_button("➕ 등록하기", use_container_width=True)
 
     if submitted:
@@ -138,8 +141,6 @@ with st.form(key="new_container_form"):
             add_row_to_gsheet(new_container)
             st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
             
-            # ✨ 3. on_click 콜백을 사용하도록 '등록하기' 버튼 로직을 수정합니다.
-            # 버튼이 클릭되면 clear_form_inputs 함수가 먼저 실행되어 폼을 초기화하고,
-            # 그 다음에 st.rerun()이 실행되어 화면을 새로고침합니다.
-            clear_form_inputs()
+            # ✨ 2. 성공 시, 플래그를 True로 설정하고 페이지를 새로고침합니다.
+            st.session_state.submission_success = True
             st.rerun()
