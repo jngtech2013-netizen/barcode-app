@@ -97,26 +97,31 @@ else:
 
 st.divider()
 
-# --- 신규 컨테이너 등록 (수정된 부분) ---
+# --- 신규 컨테이너 등록 (오류 수정 완료) ---
 st.markdown("#### 📝 신규 컨테이너 등록")
+
+# ✨ 1. 콜백 함수를 먼저 정의합니다.
+# 이 함수는 form 내부의 위젯들의 상태를 초기화하는 역할을 합니다.
+def clear_form_inputs():
+    st.session_state["form_container_no"] = ""
+    st.session_state["form_seal_no"] = ""
+    st.session_state["form_destination"] = "베트남"
+    st.session_state["form_feet"] = "40"
+
 with st.form(key="new_container_form"):
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
     
-    # 각 위젯에 고유한 key를 부여하여 session_state와 연동합니다.
-    st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
-    st.radio("2. 출고처", options=destinations, horizontal=True, key="form_destination")
-    st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
-    st.text_input("4. 씰 번호", key="form_seal_no")
-    work_date = st.date_input("5. 작업일자", value=date.today()) # 작업일자는 항상 오늘 날짜로 유지
+    # 각 위젯에 고유 key를 부여합니다.
+    container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
+    destination = st.radio("2. 출고처", options=destinations, horizontal=True, key="form_destination")
+    feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
+    seal_no = st.text_input("4. 씰 번호", key="form_seal_no")
+    work_date = st.date_input("5. 작업일자", value=date.today())
     
+    # ✨ 2. 제출 버튼에 on_click 콜백을 연결합니다.
     submitted = st.form_submit_button("➕ 등록하기", use_container_width=True)
-    if submitted:
-        # session_state에 저장된 값들을 가져옵니다.
-        container_no = st.session_state.form_container_no
-        destination = st.session_state.form_destination
-        feet = st.session_state.form_feet
-        seal_no = st.session_state.form_seal_no
 
+    if submitted:
         pattern = re.compile(r'^[A-Z]{4}\d{7}$')
         if not container_no or not seal_no: 
             st.error("컨테이너 번호와 씰 번호를 모두 입력해주세요.")
@@ -132,11 +137,9 @@ with st.form(key="new_container_form"):
             st.session_state.container_list.append(new_container)
             add_row_to_gsheet(new_container)
             st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
-
-            # ✨ 등록 성공 후, session_state의 값들을 초기화합니다.
-            st.session_state.form_container_no = ""
-            st.session_state.form_seal_no = ""
-            st.session_state.form_destination = "베트남"
-            st.session_state.form_feet = "40"
             
+            # ✨ 3. on_click 콜백을 사용하도록 '등록하기' 버튼 로직을 수정합니다.
+            # 버튼이 클릭되면 clear_form_inputs 함수가 먼저 실행되어 폼을 초기화하고,
+            # 그 다음에 st.rerun()이 실행되어 화면을 새로고침합니다.
+            clear_form_inputs()
             st.rerun()
