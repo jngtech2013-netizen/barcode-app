@@ -21,10 +21,10 @@ st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar
 st.markdown(
     """
     <style>
-    .main .block-container {
+    section[data-testid="stSidebar"] + div[data-testid="block-container"] {
         padding-top: 0.2rem !important;
-        padding-bottom: 1rem !important;
     }
+    </style>
     """,
     unsafe_allow_html=True,
 )
