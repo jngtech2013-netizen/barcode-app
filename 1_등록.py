@@ -170,8 +170,14 @@ with st.form(key="new_container_form"):
     feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
     seal_no = st.text_input("4. 씰 번호", key="form_seal_no")
     
-    # ✨ key를 제거하고 value=date.today()만 사용하여 항상 오늘 날짜가 기본값이 되도록 수정
-    work_date = st.date_input("5. 작업일자", value=date.today())
+    # 개선된 작업일자 입력 - 항상 오늘 날짜를 기본값으로 설정
+    today = date.today()
+    st.write(f"📅 오늘 날짜: {today.strftime('%Y년 %m월 %d일')}")
+    work_date = st.date_input(
+        "5. 작업일자", 
+        value=today,
+        help="작업일자를 선택하세요 (기본값: 오늘)"
+    )
     
     submitted = st.form_submit_button("➕ 등록하기", use_container_width=True)
     if submitted:
