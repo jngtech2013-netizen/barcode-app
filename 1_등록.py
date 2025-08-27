@@ -16,6 +16,11 @@ def clear_form_inputs():
     st.session_state["form_seal_no"] = ""
     st.session_state["form_destination"] = "베트남"
     st.session_state["form_feet"] = "40"
+    st.session_state["form_work_date"] = date.today() # ✨ 3. 초기화 시에도 오늘 날짜로 재설정
+
+# ✨ 1. session_state에 form_work_date가 없으면 오늘 날짜로 초기화
+if "form_work_date" not in st.session_state:
+    st.session_state.form_work_date = date.today()
 
 if st.session_state.get("submission_success", False):
     clear_form_inputs()
@@ -131,7 +136,6 @@ else:
                 update_row_in_gsheet(i, edited_row)
                 st.rerun()
 
-# <<<<<<<<<<<<<<< ✨ 버튼이 원래의 전체 너비 스타일로 복원되었습니다 ✨ >>>>>>>>>>>>>>>>>
 if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
     completed_data = [item for item in st.session_state.container_list if item.get('상태') == '선적완료']
     pending_data = [item for item in st.session_state.container_list if item.get('상태') == '선적중']
@@ -140,7 +144,6 @@ if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
         success, error_msg = backup_data_to_new_sheet(completed_data)
         if success:
             st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 백업했습니다!")
-            
             spreadsheet = connect_to_gsheet()
             if spreadsheet:
                 worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
@@ -150,10 +153,8 @@ if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
                     df_pending = pd.DataFrame(pending_data)
                     df_pending['작업일자'] = df_pending['작업일자'].apply(lambda x: x.isoformat() if isinstance(x, date) else x)
                     worksheet.update('A2', df_pending[SHEET_HEADERS].values.tolist())
-            
             log_message = f"데이터 백업: {len(completed_data)}개 백업, {len(pending_data)}개 이월."
             log_change(log_message)
-            
             st.session_state.container_list = pending_data
             st.rerun()
         else:
@@ -171,7 +172,9 @@ with st.form(key="new_container_form"):
     destination = st.radio("2. 출고처", options=destinations, horizontal=True, key="form_destination")
     feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
     seal_no = st.text_input("4. 씰 번호", key="form_seal_no")
-    work_date = st.date_input("5. 작업일자", value=date.today())
+    # ✨ 2. date_input에 key를 부여하고, value 대신 session_state 값을 사용
+    work_date = st.date_input("5. 작업일자", key="form_work_date")
+    
     submitted = st.form_submit_button("➕ 등록하기", use_container_width=True)
     if submitted:
         pattern = re.compile(r'^[A-Z]{4}\d{7}$')
