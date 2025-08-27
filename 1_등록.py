@@ -99,25 +99,29 @@ st.markdown(
 if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
-    # <<<<<<<<<<<<<<< ✨ 여기가 '상태' 텍스트를 직접 바꾸도록 수정되었습니다 ✨ >>>>>>>>>>>>>>>>>
+    # <<<<<<<<<<<<<<< ✨ 여기가 최종 수정되었습니다 ✨ >>>>>>>>>>>>>>>>>
     df = pd.DataFrame(st.session_state.container_list)
+    df['선적완료'] = df['상태'].apply(lambda x: True if x == '선적완료' else False)
+    
     if '작업일자' in df.columns:
         df['작업일자'] = pd.to_datetime(df['작업일자'], errors='coerce').dt.strftime('%Y-%m-%d')
     df.fillna('', inplace=True)
     
-    # st.data_editor를 사용하여 표를 만들고, '상태' 컬럼을 Selectbox로 설정
+    # 1. '선적완료' 컬럼을 맨 앞으로 오도록 순서 변경
+    column_order = ['선적완료', '컨테이너 번호', '출고처', '피트수', '씰 번호', '작업일자']
+    
     edited_df = st.data_editor(
-        df[SHEET_HEADERS], # 원본 컬럼 순서 그대로 사용
+        df,
+        column_order=column_order,
         use_container_width=True,
         hide_index=True,
-        key="data_editor_selectbox",
+        key="data_editor_toggle_final",
         column_config={
-            "상태": st.column_config.SelectboxColumn(
-                "상태", # 컬럼 제목
-                options=["선적중", "선적완료"],
-                required=True,
+            "선적완료": st.column_config.CheckboxColumn(
+                "선적완료",
+                help="체크하면 '선적완료'로 상태가 변경됩니다.",
+                width="small",  # 2. 컬럼 너비를 'small'로 설정
             ),
-            # 나머지 컬럼들은 수정 불가능하게 설정
             "컨테이너 번호": st.column_config.TextColumn(disabled=True),
             "출고처": st.column_config.TextColumn(disabled=True),
             "피트수": st.column_config.TextColumn(disabled=True),
@@ -126,17 +130,16 @@ else:
         }
     )
 
-    # 데이터가 수정되었는지 확인하고 업데이트 로직 실행
     if edited_df is not None:
-        edited_list = edited_df.to_dict('records')
+        edited_df['상태'] = edited_df['선적완료'].apply(lambda x: '선적완료' if x else '선적중')
+        edited_list = edited_df[SHEET_HEADERS].to_dict('records')
         
-        # 원본과 수정본을 비교하여 변경된 행을 찾아 업데이트
         for i, (original_row, edited_row) in enumerate(zip(st.session_state.container_list, edited_list)):
             if original_row != edited_row:
                 st.session_state.container_list[i] = edited_row
                 update_row_in_gsheet(i, edited_row)
                 st.rerun()
-    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.divider()
 
