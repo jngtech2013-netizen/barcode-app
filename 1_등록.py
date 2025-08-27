@@ -76,11 +76,19 @@ st.divider()
 
 # --- 컨테이너 현황 ---
 st.markdown("#### 📋 컨테이너 현황")
-# ... (카드 UI 부분은 동일)
 completed_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적완료'])
 pending_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적중'])
+
 st.markdown(
     f"""
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+    <style>
+    .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
+    .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
+    .metric-label {{ font-size: 1rem; color: #555555; }}
+    .red-value {{ color: #FF4B4B; }}
+    .green-value {{ color: #28A745; }}
+    </style>
     <div class="row">
         <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending_count}</div><div class="metric-label">선적중</div></div></div>
         <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed_count}</div><div class="metric-label">선적완료</div></div></div>
@@ -123,51 +131,49 @@ else:
                 update_row_in_gsheet(i, edited_row)
                 st.rerun()
 
-# <<<<<<<<<<<<<<< ✨ '데이터 백업' 버튼이 여기로 이동 및 수정되었습니다 ✨ >>>>>>>>>>>>>>>>>
-st.markdown("#### 📁 데이터 백업")
-st.info("하루 작업을 마친 후, 아래 버튼을 눌러 **'선적완료'된 데이터만 백업**하고, **'선적중'인 데이터는 내일로 이월**합니다.")
-if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
-    completed_data = [item for item in st.session_state.container_list if item.get('상태') == '선적완료']
-    pending_data = [item for item in st.session_state.container_list if item.get('상태') == '선적중']
-    total_count = len(st.session_state.container_list)
-    completed_count = len(completed_data)
-    pending_count = len(pending_data)
-    backup_success = False
-    if completed_data:
-        success, error_msg = backup_data_to_new_sheet(completed_data)
-        if success:
-            st.success(f"'선적완료'된 {completed_count}개의 데이터를 백업 시트에 성공적으로 저장(또는 추가)했습니다!")
-            backup_success = True
+# <<<<<<<<<<<<<<< ✨ 버튼 정렬 및 크기 조절을 위해 수정된 부분 ✨ >>>>>>>>>>>>>>>>>
+# 1. 화면을 여러 열로 나눕니다. (왼쪽이 넓고, 오른쪽이 좁게)
+col1, col2 = st.columns([4, 1])
+
+# 2. 오른쪽(좁은) 열에 버튼을 배치합니다.
+with col2:
+    # 3. use_container_width 옵션을 제거하여 버튼 크기를 텍스트에 맞게 조절합니다.
+    if st.button("🚀 데이터 백업", type="primary"):
+        completed_data = [item for item in st.session_state.container_list if item.get('상태') == '선적완료']
+        pending_data = [item for item in st.session_state.container_list if item.get('상태') == '선적중']
+        
+        if completed_data:
+            success, error_msg = backup_data_to_new_sheet(completed_data)
+            if success:
+                st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 백업했습니다!")
+                
+                # 백업 성공 시에만 원본 데이터 정리
+                spreadsheet = connect_to_gsheet()
+                if spreadsheet:
+                    worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+                    worksheet.clear()
+                    worksheet.update('A1', [SHEET_HEADERS])
+                    if pending_data:
+                        df_pending = pd.DataFrame(pending_data)
+                        df_pending['작업일자'] = df_pending['작업일자'].apply(lambda x: x.isoformat() if isinstance(x, date) else x)
+                        worksheet.update('A2', df_pending[SHEET_HEADERS].values.tolist())
+                
+                log_message = f"데이터 백업: {len(completed_data)}개 백업, {len(pending_data)}개 이월."
+                log_change(log_message)
+                
+                st.session_state.container_list = pending_data
+                st.rerun()
+            else:
+                st.error(f"백업 중 오류 발생: {error_msg}")
         else:
-            st.error(f"백업 중 오류가 발생했습니다: {error_msg}")
-    else:
-        st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
-        backup_success = True
-    if backup_success:
-        spreadsheet = connect_to_gsheet()
-        if spreadsheet:
-            worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-            worksheet.clear()
-            worksheet.update('A1', [SHEET_HEADERS])
-            if pending_data:
-                df_pending = pd.DataFrame(pending_data)
-                df_pending['작업일자'] = df_pending['작업일자'].apply(lambda x: x.isoformat() if isinstance(x, date) else x)
-                worksheet.update('A2', df_pending[SHEET_HEADERS].values.tolist())
-        
-        log_message = f"하루 마감: 총 {total_count}개 중 {completed_count}개 백업, {pending_count}개 이월."
-        log_change(log_message)
-        
-        st.session_state.container_list = pending_data
-        st.success("데이터 백업 및 정리가 완료되었습니다. '선적중' 데이터만 남았습니다.")
-        st.rerun()
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+            st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.divider()
 
 # --- 신규 컨테이너 등록 ---
 st.markdown("#### 📝 신규 컨테이너 등록")
 with st.form(key="new_container_form"):
-    # ... (신규 등록 폼 코드는 동일)
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
     destination = st.radio("2. 출고처", options=destinations, horizontal=True, key="form_destination")
