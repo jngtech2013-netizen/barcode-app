@@ -5,24 +5,21 @@ from barcode.writer import ImageWriter
 from io import BytesIO
 from datetime import date
 import re
-from utils import SHEET_HEADERS, load_data_from_gsheet, add_row_to_gsheet
+from utils import SHEET_HEADERS, load_data_from_gsheet, add_row_to_gsheet, update_row_in_gsheet
 
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="expanded")
 
-# --- ✨ 1. 초기화 함수와 성공 플래그 로직을 앱 상단에 배치 ---
-# form 입력값을 초기화하는 함수
+# --- 초기화 함수와 성공 플래그 로직 ---
 def clear_form_inputs():
     st.session_state["form_container_no"] = ""
     st.session_state["form_seal_no"] = ""
     st.session_state["form_destination"] = "베트남"
     st.session_state["form_feet"] = "40"
 
-# 페이지가 재실행될 때, submission_success 플래그를 확인
-# 이 플래그는 form 제출이 성공했을 때 True로 설정됨
 if st.session_state.get("submission_success", False):
-    clear_form_inputs()  # 입력 필드를 초기화
-    st.session_state.submission_success = False # 플래그를 다시 내림
+    clear_form_inputs()
+    st.session_state.submission_success = False
 
 # --- 사이드바 스타일 ---
 st.markdown(
@@ -102,12 +99,55 @@ st.markdown(
 if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
+    # <<<<<<<<<<<<<<< ✨ 여기가 토글 버튼 로직으로 수정되었습니다 ✨ >>>>>>>>>>>>>>>>>
     df = pd.DataFrame(st.session_state.container_list)
-    if not df.empty:
-        for col in SHEET_HEADERS:
-            if col not in df.columns: df[col] = pd.NA
-        df['작업일자'] = df['작업일자'].apply(lambda x: pd.to_datetime(x).strftime('%Y-%m-%d') if pd.notna(x) else '')
-        st.dataframe(df[SHEET_HEADERS], use_container_width=True, hide_index=True)
+    # 1. '상태' 컬럼을 boolean 형태의 '선적완료' 컬럼으로 변환 (체크박스용)
+    df['선적완료'] = df['상태'].apply(lambda x: True if x == '선적완료' else False)
+    
+    if '작업일자' in df.columns:
+        df['작업일자'] = pd.to_datetime(df['작업일자'], errors='coerce').dt.strftime('%Y-%m-%d')
+    df.fillna('', inplace=True)
+    
+    # 보여줄 컬럼 순서 지정 (기존 '상태' 컬럼은 숨김)
+    column_order = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '작업일자', '선적완료']
+    
+    # 2. st.data_editor를 사용하여 표를 만들고, '선적완료' 컬럼을 체크박스로 설정
+    edited_df = st.data_editor(
+        df,
+        column_order=column_order, # 정의된 순서대로 컬럼 표시
+        use_container_width=True,
+        hide_index=True,
+        key="data_editor_toggle",
+        column_config={
+            "선적완료": st.column_config.CheckboxColumn(
+                "선적완료",
+                help="체크하면 '선적완료', 해제하면 '선적중'으로 상태가 변경됩니다.",
+            ),
+            # 나머지 컬럼들은 수정 불가능하게 설정
+            "컨테이너 번호": st.column_config.TextColumn(disabled=True),
+            "출고처": st.column_config.TextColumn(disabled=True),
+            "피트수": st.column_config.TextColumn(disabled=True),
+            "씰 번호": st.column_config.TextColumn(disabled=True),
+            "작업일자": st.column_config.TextColumn(disabled=True),
+        }
+    )
+
+    # 3. 데이터가 수정되었는지 확인하고 업데이트 로직 실행
+    if edited_df is not None:
+        # 4. 수정된 boolean 값을 다시 '상태' 문자열로 변환
+        edited_df['상태'] = edited_df['선적완료'].apply(lambda x: '선적완료' if x else '선적중')
+        
+        # 수정된 내용을 list of dicts 형태로 다시 변환
+        edited_list = edited_df[SHEET_HEADERS].to_dict('records')
+        
+        # 원본 데이터와 수정된 데이터를 비교하여 변경된 행을 찾음
+        for i, (original_row, edited_row) in enumerate(zip(st.session_state.container_list, edited_list)):
+            if original_row != edited_row:
+                # 변경된 행의 데이터를 session_state와 Google Sheets에 업데이트
+                st.session_state.container_list[i] = edited_row
+                update_row_in_gsheet(i, edited_row)
+                st.rerun()
+    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.divider()
 
@@ -141,6 +181,5 @@ with st.form(key="new_container_form"):
             add_row_to_gsheet(new_container)
             st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
             
-            # ✨ 2. 성공 시, 플래그를 True로 설정하고 페이지를 새로고침합니다.
             st.session_state.submission_success = True
             st.rerun()
