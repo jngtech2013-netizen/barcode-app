@@ -107,20 +107,20 @@ else:
         df['작업일자'] = pd.to_datetime(df['작업일자'], errors='coerce').dt.strftime('%Y-%m-%d')
     df.fillna('', inplace=True)
     
-    # 1. '선적완료' 컬럼을 맨 앞으로 오도록 순서 변경
-    column_order = ['선적완료', '컨테이너 번호', '출고처', '피트수', '씰 번호', '작업일자']
+    # 1. '선적완료' 컬럼을 맨 뒤로 보내도록 순서 변경
+    column_order = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '작업일자', '선적완료']
     
     edited_df = st.data_editor(
         df,
         column_order=column_order,
         use_container_width=True,
         hide_index=True,
-        key="data_editor_toggle_final",
+        key="data_editor_toggle_reverted",
         column_config={
             "선적완료": st.column_config.CheckboxColumn(
                 "선적완료",
                 help="체크하면 '선적완료'로 상태가 변경됩니다.",
-                width="small",  # 2. 컬럼 너비를 'small'로 설정
+                width="small", # 너비는 그대로 작게 유지
             ),
             "컨테이너 번호": st.column_config.TextColumn(disabled=True),
             "출고처": st.column_config.TextColumn(disabled=True),
