@@ -12,16 +12,13 @@ st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar
 
 # --- 초기화 함수와 성공 플래그 로직 ---
 def clear_form_inputs():
+    # ✨ 작업일자 관련 session_state 관리 로직을 모두 제거했습니다.
     st.session_state["form_container_no"] = ""
     st.session_state["form_seal_no"] = ""
     st.session_state["form_destination"] = "베트남"
     st.session_state["form_feet"] = "40"
-    st.session_state["form_work_date"] = date.today() # ✨ 3. 초기화 시에도 오늘 날짜로 재설정
 
-# ✨ 1. session_state에 form_work_date가 없으면 오늘 날짜로 초기화
-if "form_work_date" not in st.session_state:
-    st.session_state.form_work_date = date.today()
-
+# ✨ 작업일자 관련 session_state 초기화 로직도 제거했습니다.
 if st.session_state.get("submission_success", False):
     clear_form_inputs()
     st.session_state.submission_success = False
@@ -172,8 +169,9 @@ with st.form(key="new_container_form"):
     destination = st.radio("2. 출고처", options=destinations, horizontal=True, key="form_destination")
     feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
     seal_no = st.text_input("4. 씰 번호", key="form_seal_no")
-    # ✨ 2. date_input에 key를 부여하고, value 대신 session_state 값을 사용
-    work_date = st.date_input("5. 작업일자", key="form_work_date")
+    
+    # ✨ key를 제거하고 value=date.today()만 사용하여 항상 오늘 날짜가 기본값이 되도록 수정
+    work_date = st.date_input("5. 작업일자", value=date.today())
     
     submitted = st.form_submit_button("➕ 등록하기", use_container_width=True)
     if submitted:
@@ -187,7 +185,8 @@ with st.form(key="new_container_form"):
         else:
             new_container = {
                 '컨테이너 번호': container_no, '출고처': destination, '피트수': feet, 
-                '씰 번호': seal_no, '작업일자': work_date, '상태': '선적중'
+                '씰 번호': seal_no, '작업일자': work_date, # work_date 변수를 그대로 사용
+                '상태': '선적중'
             }
             st.session_state.container_list.append(new_container)
             add_row_to_gsheet(new_container)
