@@ -90,66 +90,82 @@ if selected_data:
         st.success(f"'{selected_for_edit}' 컨테이너 정보가 삭제되었습니다.")
         st.rerun()
 
-# <<<<<<<<<<<<<<< '하루 마감 및 데이터 관리' 섹션이 여기에서 삭제되었습니다 >>>>>>>>>>>>>>>>>
-
 # --- 백업 시트에서 데이터 복구 ---
-st.write("---")
-with st.expander("⬆️ (필요시 사용) 백업 시트에서 데이터 복구"):
-    # ... (데이터 복구 섹션 코드는 동일)
-    st.info("실수로 데이터를 초기화했거나 이전 데이터를 추가할 때 사용하세요.")
-    spreadsheet = connect_to_gsheet()
-    if spreadsheet:
-        all_sheets = [s.title for s in spreadsheet.worksheets()]
-        backup_sheets = sorted([s for s in all_sheets if s.startswith("백업_")], reverse=True)
-        if not backup_sheets:
-            st.warning("복구할 백업 시트가 없습니다.")
-        else:
-            selected_backup_sheet = st.selectbox("복구(추가)할 백업 시트를 선택하세요:", backup_sheets)
-            if selected_backup_sheet:
-                try:
-                    backup_worksheet = spreadsheet.worksheet(selected_backup_sheet)
-                    backup_records = backup_worksheet.get_all_records()
-                    if not backup_records:
-                        st.info("선택한 백업 시트에는 데이터가 없습니다.")
+st.divider() # st.write("---") 대신 st.divider() 사용
+# <<<<<<<<<<<<<<< ✨ 여기가 요청대로 수정되었습니다 (expander 제거) ✨ >>>>>>>>>>>>>>>>>
+st.markdown("#### ⬆️ 데이터 복구")
+st.info("실수로 데이터를 초기화했거나 이전 데이터를 추가할 때 사용하세요.")
+
+spreadsheet = connect_to_gsheet()
+if spreadsheet:
+    all_sheets = [s.title for s in spreadsheet.worksheets()]
+    backup_sheets = sorted([s for s in all_sheets if s.startswith("백업_")], reverse=True)
+    if not backup_sheets:
+        st.warning("복구할 백업 시트가 없습니다.")
+    else:
+        selected_backup_sheet = st.selectbox("복구(추가)할 백업 시트를 선택하세요:", backup_sheets)
+        
+        if selected_backup_sheet:
+            try:
+                backup_worksheet = spreadsheet.worksheet(selected_backup_sheet)
+                backup_records = backup_worksheet.get_all_records()
+
+                if not backup_records:
+                    st.info("선택한 백업 시트에는 데이터가 없습니다.")
+                else:
+                    df_backup = pd.DataFrame(backup_records)
+                    if '상태' in df_backup.columns:
+                        status_counts = df_backup['상태'].value_counts()
+                        pending_count = status_counts.get('선적중', 0)
+                        completed_count = status_counts.get('선적완료', 0)
+                        
+                        st.markdown("##### 📋 선택된 백업 시트 현황")
+                        st.markdown(
+                            f"""
+                            <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+                            <style>
+                            .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
+                            .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
+                            .metric-label {{ font-size: 1rem; color: #555555; }}
+                            .red-value {{ color: #FF4B4B; }}
+                            .green-value {{ color: #28A745; }}
+                            </style>
+                            <div class="row">
+                                <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending_count}</div><div class="metric-label">선적중</div></div></div>
+                                <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed_count}</div><div class="metric-label">선적완료</div></div></div>
+                            </div>
+                            """, unsafe_allow_html=True
+                        )
                     else:
-                        df_backup = pd.DataFrame(backup_records)
-                        if '상태' in df_backup.columns:
-                            status_counts = df_backup['상태'].value_counts()
-                            pending_count = status_counts.get('선적중', 0)
-                            completed_count = status_counts.get('선적완료', 0)
-                            st.markdown("##### 📋 선택된 백업 시트 현황")
-                            st.markdown(
-                                f"""
-                                <div class="row">
-                                    <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending_count}</div><div class="metric-label">선적중</div></div></div>
-                                    <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed_count}</div><div class="metric-label">선적완료</div></div></div>
-                                </div>
-                                """, unsafe_allow_html=True
-                            )
-                except Exception as e:
-                    st.error(f"백업 시트 정보를 불러오는 중 오류가 발생했습니다: {e}")
-            st.warning("주의: 이 작업은 현재 목록에 **없는 데이터만 추가**합니다.")
-            if st.button(f"'{selected_backup_sheet}' 시트의 데이터 추가하기", use_container_width=True):
-                try:
-                    backup_worksheet = spreadsheet.worksheet(selected_backup_sheet)
-                    backup_records = backup_worksheet.get_all_records()
-                    if not backup_records:
-                        st.warning("선택한 백업 시트에 데이터가 없습니다.")
-                    else:
-                        existing_nos = {c.get('컨테이너 번호') for c in st.session_state.container_list}
-                        added_count = 0
-                        for row in backup_records:
-                            if row.get('컨테이너 번호') not in existing_nos:
-                                work_date_str = row.get('작업일자')
-                                try:
-                                    row['작업일자'] = datetime.strptime(work_date_str, '%Y-%m-%d').date()
-                                except (ValueError, TypeError):
-                                    row['작업일자'] = date.today()
-                                st.session_state.container_list.append(row)
-                                add_row_to_gsheet(row)
-                                added_count += 1
-                        log_change(f"데이터 복구: '{selected_backup_sheet}' 시트에서 {added_count}개 추가")
-                        st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 새로운 데이터를 성공적으로 추가했습니다!")
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"복구 중 오류가 발생했습니다: {e}")
+                        st.warning(f"'{selected_backup_sheet}' 시트에 '상태' 컬럼이 없어 현황을 표시할 수 없습니다.")
+            
+            except Exception as e:
+                st.error(f"백업 시트 정보를 불러오는 중 오류가 발생했습니다: {e}")
+
+        st.warning("주의: 이 작업은 현재 목록에 **없는 데이터만 추가**합니다.")
+        if st.button(f"'{selected_backup_sheet}' 시트의 데이터 추가하기", use_container_width=True):
+            try:
+                backup_worksheet = spreadsheet.worksheet(selected_backup_sheet)
+                backup_records = backup_worksheet.get_all_records()
+                if not backup_records:
+                    st.warning("선택한 백업 시트에 데이터가 없습니다.")
+                else:
+                    existing_nos = {c.get('컨테이너 번호') for c in st.session_state.container_list}
+                    added_count = 0
+                    for row in backup_records:
+                        if row.get('컨테이너 번호') not in existing_nos:
+                            work_date_str = row.get('작업일자')
+                            try:
+                                row['작업일자'] = datetime.strptime(work_date_str, '%Y-%m-%d').date()
+                            except (ValueError, TypeError):
+                                row['작업일자'] = date.today()
+                            st.session_state.container_list.append(row)
+                            add_row_to_gsheet(row)
+                            added_count += 1
+                    
+                    log_change(f"데이터 복구: '{selected_backup_sheet}' 시트에서 {added_count}개 추가")
+                    st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 새로운 데이터를 성공적으로 추가했습니다!")
+                    st.rerun()
+            except Exception as e:
+                st.error(f"복구 중 오류가 발생했습니다: {e}")
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
