@@ -3,12 +3,24 @@ import pandas as pd
 from barcode import Code128
 from barcode.writer import ImageWriter
 from io import BytesIO
-from datetime import date
+from datetime import date, datetime, timedelta
 import re
 from utils import SHEET_HEADERS, MAIN_SHEET_NAME, load_data_from_gsheet, add_row_to_gsheet, update_row_in_gsheet, backup_data_to_new_sheet, connect_to_gsheet, log_change
 
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="expanded")
+
+# --- 한국 시간 함수 ---
+def get_korea_today():
+    """한국 시간 기준 오늘 날짜를 반환"""
+    try:
+        # UTC 기준으로 현재 시간을 가져와서 한국 시간(UTC+9) 적용
+        utc_now = datetime.utcnow()
+        korea_now = utc_now + timedelta(hours=9)
+        return korea_now.date()
+    except:
+        # 에러 발생시 시스템 날짜 사용
+        return date.today()
 
 # --- 초기화 함수와 성공 플래그 로직 ---
 def clear_form_inputs():
@@ -163,6 +175,11 @@ st.divider()
 
 # --- 신규 컨테이너 등록 ---
 st.markdown("#### 📝 신규 컨테이너 등록")
+
+# 한국 시간 기준 오늘 날짜 표시
+korea_today = get_korea_today()
+st.info(f"📅 현재 날짜 (한국시간): {korea_today.strftime('%Y년 %m월 %d일 (%A)')}")
+
 with st.form(key="new_container_form"):
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
@@ -170,18 +187,11 @@ with st.form(key="new_container_form"):
     feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
     seal_no = st.text_input("4. 씰 번호", key="form_seal_no")
     
-    # 한국 시간 기준으로 오늘 날짜 설정 (Python 3.9+ zoneinfo 사용)
-    korea_tz = ZoneInfo('Asia/Seoul')
-    today = datetime.now(korea_tz).date()
-    
-    # st.write(f"📅 오늘 날짜 (한국시간): {today.strftime('%Y년 %m월 %d일')}")
-    work_date = st.date_input(
-        "5. 작업일자", 
-        value=today,
-        help="작업일자를 선택하세요 (기본값: 한국시간 기준 오늘)"
-    )
+    # 한국 시간 기준 오늘 날짜를 기본값으로 설정
+    work_date = st.date_input("5. 작업일자", value=korea_today)
     
     submitted = st.form_submit_button("➕ 등록하기", use_container_width=True)
+    
     if submitted:
         pattern = re.compile(r'^[A-Z]{4}\d{7}$')
         if not container_no or not seal_no: 
@@ -192,8 +202,11 @@ with st.form(key="new_container_form"):
             st.warning(f"이미 등록된 컨테이너 번호입니다: {container_no}")
         else:
             new_container = {
-                '컨테이너 번호': container_no, '출고처': destination, '피트수': feet, 
-                '씰 번호': seal_no, '작업일자': work_date, # work_date 변수를 그대로 사용
+                '컨테이너 번호': container_no, 
+                '출고처': destination, 
+                '피트수': feet, 
+                '씰 번호': seal_no, 
+                '작업일자': work_date,  # 한국 시간 기준 날짜 사용
                 '상태': '선적중'
             }
             st.session_state.container_list.append(new_container)
