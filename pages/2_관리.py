@@ -119,7 +119,6 @@ if spreadsheet:
                         completed_count = status_counts.get('선적완료', 0)
                         
                         st.markdown("##### 📋 선택된 백업 시트 현황")
-                        # <<<<<<<<<<<<<<< ✨ 여기에 CSS 스타일 코드가 다시 추가되었습니다 ✨ >>>>>>>>>>>>>>>>>
                         st.markdown(
                             f"""
                             <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
@@ -136,14 +135,23 @@ if spreadsheet:
                             </div>
                             """, unsafe_allow_html=True
                         )
-                        # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                         
+                        # <<<<<<<<<<<<<<< ✨ 여기에 번호(No.) 컬럼이 추가됩니다 ✨ >>>>>>>>>>>>>>>>>
+                        # 1. 화면 표시용으로만 사용할 'No.' 컬럼을 맨 앞에 추가 (1부터 시작)
+                        df_backup.insert(0, 'No.', range(1, len(df_backup) + 1))
+                        
+                        # 2. 화면에 보여줄 컬럼 목록을 새로 정의
+                        display_headers = ['No.'] + SHEET_HEADERS
+
                         for col in SHEET_HEADERS:
                             if col not in df_backup.columns: df_backup[col] = pd.NA
                         if '작업일자' in df_backup.columns:
                             df_backup['작업일자'] = pd.to_datetime(df_backup['작업일자'], errors='coerce').dt.strftime('%Y-%m-%d')
                         df_backup.fillna('', inplace=True)
-                        st.dataframe(df_backup[SHEET_HEADERS], use_container_width=True, hide_index=True)
+                        
+                        # 3. 새로 정의한 컬럼 목록으로 테이블 표시
+                        st.dataframe(df_backup[display_headers], use_container_width=True, hide_index=True)
+                        # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                         
                     else:
                         st.warning(f"'{selected_backup_sheet}' 시트에 '상태' 컬럼이 없어 현황을 표시할 수 없습니다.")
