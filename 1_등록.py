@@ -5,7 +5,7 @@ from barcode.writer import ImageWriter
 from io import BytesIO
 from datetime import date
 import re
-from utils import SHEET_HEADERS, load_data_from_gsheet, add_row_to_gsheet, update_row_in_gsheet
+from utils import SHEET_HEADERS, MAIN_SHEET_NAME, load_data_from_gsheet, add_row_to_gsheet, update_row_in_gsheet, backup_data_to_new_sheet, connect_to_gsheet, log_change
 
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="expanded")
@@ -76,19 +76,11 @@ st.divider()
 
 # --- 컨테이너 현황 ---
 st.markdown("#### 📋 컨테이너 현황")
+# ... (카드 UI 부분은 동일)
 completed_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적완료'])
 pending_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적중'])
-
 st.markdown(
     f"""
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
-    <style>
-    .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
-    .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
-    .metric-label {{ font-size: 1rem; color: #555555; }}
-    .red-value {{ color: #FF4B4B; }}
-    .green-value {{ color: #28A745; }}
-    </style>
     <div class="row">
         <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending_count}</div><div class="metric-label">선적중</div></div></div>
         <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed_count}</div><div class="metric-label">선적완료</div></div></div>
@@ -99,15 +91,11 @@ st.markdown(
 if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
-    # <<<<<<<<<<<<<<< ✨ 여기가 최종 수정되었습니다 ✨ >>>>>>>>>>>>>>>>>
     df = pd.DataFrame(st.session_state.container_list)
     df['선적완료'] = df['상태'].apply(lambda x: True if x == '선적완료' else False)
-    
     if '작업일자' in df.columns:
         df['작업일자'] = pd.to_datetime(df['작업일자'], errors='coerce').dt.strftime('%Y-%m-%d')
     df.fillna('', inplace=True)
-    
-    # 1. '선적완료' 컬럼을 맨 뒤로 보내도록 순서 변경
     column_order = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '작업일자', '선적완료']
     
     edited_df = st.data_editor(
@@ -117,11 +105,7 @@ else:
         hide_index=True,
         key="data_editor_toggle_reverted",
         column_config={
-            "선적완료": st.column_config.CheckboxColumn(
-                "선적완료",
-                help="체크하면 '선적완료'로 상태가 변경됩니다.",
-                width="small", # 너비는 그대로 작게 유지
-            ),
+            "선적완료": st.column_config.CheckboxColumn("선적완료", help="체크하면 '선적완료'로 상태가 변경됩니다.", width="small"),
             "컨테이너 번호": st.column_config.TextColumn(disabled=True),
             "출고처": st.column_config.TextColumn(disabled=True),
             "피트수": st.column_config.TextColumn(disabled=True),
@@ -133,29 +117,64 @@ else:
     if edited_df is not None:
         edited_df['상태'] = edited_df['선적완료'].apply(lambda x: '선적완료' if x else '선적중')
         edited_list = edited_df[SHEET_HEADERS].to_dict('records')
-        
         for i, (original_row, edited_row) in enumerate(zip(st.session_state.container_list, edited_list)):
             if original_row != edited_row:
                 st.session_state.container_list[i] = edited_row
                 update_row_in_gsheet(i, edited_row)
                 st.rerun()
-    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+# <<<<<<<<<<<<<<< ✨ '데이터 백업' 버튼이 여기로 이동 및 수정되었습니다 ✨ >>>>>>>>>>>>>>>>>
+st.markdown("#### 📁 데이터 백업")
+st.info("하루 작업을 마친 후, 아래 버튼을 눌러 **'선적완료'된 데이터만 백업**하고, **'선적중'인 데이터는 내일로 이월**합니다.")
+if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
+    completed_data = [item for item in st.session_state.container_list if item.get('상태') == '선적완료']
+    pending_data = [item for item in st.session_state.container_list if item.get('상태') == '선적중']
+    total_count = len(st.session_state.container_list)
+    completed_count = len(completed_data)
+    pending_count = len(pending_data)
+    backup_success = False
+    if completed_data:
+        success, error_msg = backup_data_to_new_sheet(completed_data)
+        if success:
+            st.success(f"'선적완료'된 {completed_count}개의 데이터를 백업 시트에 성공적으로 저장(또는 추가)했습니다!")
+            backup_success = True
+        else:
+            st.error(f"백업 중 오류가 발생했습니다: {error_msg}")
+    else:
+        st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
+        backup_success = True
+    if backup_success:
+        spreadsheet = connect_to_gsheet()
+        if spreadsheet:
+            worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+            worksheet.clear()
+            worksheet.update('A1', [SHEET_HEADERS])
+            if pending_data:
+                df_pending = pd.DataFrame(pending_data)
+                df_pending['작업일자'] = df_pending['작업일자'].apply(lambda x: x.isoformat() if isinstance(x, date) else x)
+                worksheet.update('A2', df_pending[SHEET_HEADERS].values.tolist())
+        
+        log_message = f"하루 마감: 총 {total_count}개 중 {completed_count}개 백업, {pending_count}개 이월."
+        log_change(log_message)
+        
+        st.session_state.container_list = pending_data
+        st.success("데이터 백업 및 정리가 완료되었습니다. '선적중' 데이터만 남았습니다.")
+        st.rerun()
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 st.divider()
 
 # --- 신규 컨테이너 등록 ---
 st.markdown("#### 📝 신규 컨테이너 등록")
 with st.form(key="new_container_form"):
+    # ... (신규 등록 폼 코드는 동일)
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
-    
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
     destination = st.radio("2. 출고처", options=destinations, horizontal=True, key="form_destination")
     feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
     seal_no = st.text_input("4. 씰 번호", key="form_seal_no")
     work_date = st.date_input("5. 작업일자", value=date.today())
-    
     submitted = st.form_submit_button("➕ 등록하기", use_container_width=True)
-
     if submitted:
         pattern = re.compile(r'^[A-Z]{4}\d{7}$')
         if not container_no or not seal_no: 
@@ -172,6 +191,5 @@ with st.form(key="new_container_form"):
             st.session_state.container_list.append(new_container)
             add_row_to_gsheet(new_container)
             st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
-            
             st.session_state.submission_success = True
             st.rerun()
