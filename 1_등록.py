@@ -131,41 +131,35 @@ else:
                 update_row_in_gsheet(i, edited_row)
                 st.rerun()
 
-# <<<<<<<<<<<<<<< ✨ 버튼을 오른쪽으로 정렬하도록 수정되었습니다 ✨ >>>>>>>>>>>>>>>>>
-# 1. 화면을 왼쪽(빈 공간)과 오른쪽(버튼 공간)으로 나눕니다. 비율을 크게 주어 확실히 오른쪽으로 보냅니다.
-left_space, button_column = st.columns([5, 1])
-
-# 2. 오른쪽 칸 (button_column) 에 버튼을 배치합니다.
-with button_column:
-    if st.button("🚀 데이터 백업", type="primary"):
-        completed_data = [item for item in st.session_state.container_list if item.get('상태') == '선적완료']
-        pending_data = [item for item in st.session_state.container_list if item.get('상태') == '선적중']
-        
-        if completed_data:
-            success, error_msg = backup_data_to_new_sheet(completed_data)
-            if success:
-                st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 백업했습니다!")
-                
-                spreadsheet = connect_to_gsheet()
-                if spreadsheet:
-                    worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-                    worksheet.clear()
-                    worksheet.update('A1', [SHEET_HEADERS])
-                    if pending_data:
-                        df_pending = pd.DataFrame(pending_data)
-                        df_pending['작업일자'] = df_pending['작업일자'].apply(lambda x: x.isoformat() if isinstance(x, date) else x)
-                        worksheet.update('A2', df_pending[SHEET_HEADERS].values.tolist())
-                
-                log_message = f"데이터 백업: {len(completed_data)}개 백업, {len(pending_data)}개 이월."
-                log_change(log_message)
-                
-                st.session_state.container_list = pending_data
-                st.rerun()
-            else:
-                st.error(f"백업 중 오류 발생: {error_msg}")
+# <<<<<<<<<<<<<<< ✨ 버튼이 원래의 전체 너비 스타일로 복원되었습니다 ✨ >>>>>>>>>>>>>>>>>
+if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
+    completed_data = [item for item in st.session_state.container_list if item.get('상태') == '선적완료']
+    pending_data = [item for item in st.session_state.container_list if item.get('상태') == '선적중']
+    
+    if completed_data:
+        success, error_msg = backup_data_to_new_sheet(completed_data)
+        if success:
+            st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 백업했습니다!")
+            
+            spreadsheet = connect_to_gsheet()
+            if spreadsheet:
+                worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+                worksheet.clear()
+                worksheet.update('A1', [SHEET_HEADERS])
+                if pending_data:
+                    df_pending = pd.DataFrame(pending_data)
+                    df_pending['작업일자'] = df_pending['작업일자'].apply(lambda x: x.isoformat() if isinstance(x, date) else x)
+                    worksheet.update('A2', df_pending[SHEET_HEADERS].values.tolist())
+            
+            log_message = f"데이터 백업: {len(completed_data)}개 백업, {len(pending_data)}개 이월."
+            log_change(log_message)
+            
+            st.session_state.container_list = pending_data
+            st.rerun()
         else:
-            st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+            st.error(f"백업 중 오류 발생: {error_msg}")
+    else:
+        st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
 
 st.divider()
 
