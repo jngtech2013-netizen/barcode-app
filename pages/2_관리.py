@@ -16,10 +16,11 @@ from utils import (
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
 
-# --- 사이드바 스타일 ---
+# --- 사이드바 및 컬럼 너비 조절용 CSS ---
 st.markdown(
     """
     <style>
+    /* 사이드바 스타일 */
     [data-testid="stSidebar"] { width: 150px !important; }
     [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
     [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
@@ -28,6 +29,17 @@ st.markdown(
     @media (max-width: 768px) {
         [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
         [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
+    }
+    
+    /* <<<<<<<<<<<<<<< ✨ 컬럼 너비 조절을 위한 CSS 추가 ✨ >>>>>>>>>>>>>>>>> */
+    /* data_editor 테이블의 헤더(th)와 셀(td)에 적용 */
+    [data-testid="stDataEditor"] th:nth-child(1),
+    [data-testid="stDataEditor"] td:nth-child(1) {
+        max-width: 80px !important; /* 1번째 '선택' 컬럼의 최대 너비 */
+    }
+    [data-testid="stDataEditor"] th:nth-child(2),
+    [data-testid="stDataEditor"] td:nth-child(2) {
+        max-width: 80px !important; /* 2번째 'No.' 컬럼의 최대 너비 */
     }
     </style>
     """,
@@ -117,21 +129,12 @@ if spreadsheet:
                         df_backup['씰 번호'] = df_backup['씰 번호'].astype(str)
                     
                     st.markdown("##### 📋 선택된 백업 시트 현황")
-                    # <<<<<<<<<<<<<<< ✨ 2. 카드 UI 코드가 다시 복원되었습니다 ✨ >>>>>>>>>>>>>>>>>
                     if '상태' in df_backup.columns:
                         status_counts = df_backup['상태'].value_counts()
                         pending_count = status_counts.get('선적중', 0)
                         completed_count = status_counts.get('선적완료', 0)
                         st.markdown(
                             f"""
-                            <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
-                            <style>
-                            .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
-                            .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
-                            .metric-label {{ font-size: 1rem; color: #555555; }}
-                            .red-value {{ color: #FF4B4B; }}
-                            .green-value {{ color: #28A745; }}
-                            </style>
                             <div class="row">
                                 <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending_count}</div><div class="metric-label">선적중</div></div></div>
                                 <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed_count}</div><div class="metric-label">선적완료</div></div></div>
@@ -149,7 +152,6 @@ if spreadsheet:
                         st.markdown("##### 1. 개별 컨테이너 선택 복구")
                         st.write("아래 테이블에서 복구할 컨테이너를 선택하세요.")
 
-                        # <<<<<<<<<<<<<<< ✨ 1. 컬럼 순서가 '선택' -> 'No.'로 변경되었습니다 ✨ >>>>>>>>>>>>>>>>>
                         recoverable_df.insert(0, '선택', False)
                         recoverable_df.insert(1, 'No.', range(1, len(recoverable_df) + 1))
                         
@@ -159,6 +161,7 @@ if spreadsheet:
                             hide_index=True,
                             key=f"recovery_editor_{selected_backup_sheet}",
                             column_config={
+                                # `width="small"`은 그대로 두되, 위의 CSS가 우선 적용됩니다.
                                 "선택": st.column_config.CheckboxColumn(required=True, width="small"),
                                 "No.": st.column_config.NumberColumn(disabled=True, width="small"),
                                 "컨테이너 번호": st.column_config.TextColumn(disabled=True),
@@ -174,6 +177,7 @@ if spreadsheet:
 
                         if not selected_rows.empty:
                             if st.button(f"선택된 {len(selected_rows)}개 컨테이너 복구하기", use_container_width=True, type="primary"):
+                                # ... (복구 로직은 이전과 동일)
                                 added_count = 0
                                 for index, row in selected_rows.iterrows():
                                     row_to_add = row.to_dict()
@@ -191,6 +195,7 @@ if spreadsheet:
                         st.warning("주의: 이 작업은 위 테이블에 보이는 모든 컨테이너를 한 번에 추가합니다.")
                         
                         if st.button(f"'{selected_backup_sheet}' 시트의 모든 데이터 추가하기", use_container_width=True):
+                            # ... (전체 복구 로직은 이전과 동일)
                             added_count = 0
                             for index, row in recoverable_df.iterrows():
                                 row_to_add = row.to_dict()
@@ -199,7 +204,6 @@ if spreadsheet:
                                 st.session_state.container_list.append(row_to_add)
                                 add_row_to_gsheet(row_to_add)
                                 added_count += 1
-                            
                             log_change(f"데이터 복구: '{selected_backup_sheet}'에서 {added_count}개 전체 복구")
                             st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 새로운 데이터를 성공적으로 추가했습니다!")
                             st.rerun()
