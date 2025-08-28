@@ -22,11 +22,7 @@ st.markdown(
     <style>
     /* 사이드바 스타일 */
     [data-testid="stSidebar"] { width: 150px !important; }
-    /* ... (중략) */
-
-    /* 컬럼 너비를 강제로 조절하는 CSS */
-    div[data-testid="stDataFrameResizable"]:nth-child(1) { width: 80px !important; min-width: 80px !important; max-width: 80px !important; }
-    div[data-testid="stDataFrameResizable"]:nth-child(2) { width: 80px !important; min-width: 80px !important; max-width: 80px !important; }
+    /* (중략...) */
     </style>
     """,
     unsafe_allow_html=True,
@@ -115,20 +111,28 @@ if spreadsheet:
                         df_backup['씰 번호'] = df_backup['씰 번호'].astype(str)
                     
                     st.markdown("##### 📋 선택된 백업 시트 현황")
+                    # <<<<<<<<<<<<<<< ✨ 카드 UI 코드가 다시 복원되었습니다 ✨ >>>>>>>>>>>>>>>>>
                     if '상태' in df_backup.columns:
                         status_counts = df_backup['상태'].value_counts()
-                        # ... (카드 UI 코드)
                         pending_count = status_counts.get('선적중', 0)
                         completed_count = status_counts.get('선적완료', 0)
                         st.markdown(
                             f"""
+                            <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+                            <style>
+                            .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
+                            .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
+                            .metric-label {{ font-size: 1rem; color: #555555; }}
+                            .red-value {{ color: #FF4B4B; }}
+                            .green-value {{ color: #28A745; }}
+                            </style>
                             <div class="row">
                                 <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending_count}</div><div class="metric-label">선적중</div></div></div>
                                 <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed_count}</div><div class="metric-label">선적완료</div></div></div>
                             </div>
                             """, unsafe_allow_html=True
                         )
-
+                    
                     existing_nos = {c.get('컨테이너 번호') for c in st.session_state.container_list}
                     recoverable_df = df_backup[~df_backup['컨테이너 번호'].isin(existing_nos)].copy()
 
@@ -142,18 +146,18 @@ if spreadsheet:
                         recoverable_df.insert(0, '선택', False)
                         recoverable_df.insert(1, 'No.', range(1, len(recoverable_df) + 1))
                         
-                        # <<<<<<<<<<<<<<< ✨ 컬럼 순서를 명시적으로 지정하는 코드를 추가했습니다 ✨ >>>>>>>>>>>>>>>>>
+                        # <<<<<<<<<<<<<<< ✨ 컬럼 순서를 명시적으로 지정하여 오류를 해결했습니다 ✨ >>>>>>>>>>>>>>>>>
                         display_order = ['선택', 'No.'] + [h for h in SHEET_HEADERS if h in recoverable_df.columns]
                         
                         edited_df = st.data_editor(
                             recoverable_df,
+                            column_order=display_order, # 컬럼 순서 명시
                             use_container_width=True,
                             hide_index=True,
                             key=f"recovery_editor_{selected_backup_sheet}",
-                            column_order=display_order, # 컬럼 순서 명시
                             column_config={
-                                "선택": st.column_config.CheckboxColumn(required=True),
-                                "No.": st.column_config.NumberColumn(disabled=True),
+                                "선택": st.column_config.CheckboxColumn(width="small"),
+                                "No.": st.column_config.NumberColumn(disabled=True, width="small"),
                                 "컨테이너 번호": st.column_config.TextColumn(disabled=True),
                                 "출고처": st.column_config.TextColumn(disabled=True),
                                 "피트수": st.column_config.TextColumn(disabled=True),
@@ -167,7 +171,6 @@ if spreadsheet:
 
                         if not selected_rows.empty:
                             if st.button(f"선택된 {len(selected_rows)}개 컨테이너 복구하기", use_container_width=True, type="primary"):
-                                # ... (복구 로직은 이전과 동일)
                                 added_count = 0
                                 for index, row in selected_rows.iterrows():
                                     row_to_add = row.to_dict()
@@ -185,7 +188,6 @@ if spreadsheet:
                         st.warning("주의: 이 작업은 위 테이블에 보이는 모든 컨테이너를 한 번에 추가합니다.")
                         
                         if st.button(f"'{selected_backup_sheet}' 시트의 모든 데이터 추가하기", use_container_width=True):
-                            # ... (전체 복구 로직은 이전과 동일)
                             added_count = 0
                             for index, row in recoverable_df.iterrows():
                                 row_to_add = row.to_dict()
