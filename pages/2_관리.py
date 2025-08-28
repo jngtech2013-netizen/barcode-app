@@ -31,15 +31,42 @@ st.markdown(
         [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
     }
     
-    /* <<<<<<<<<<<<<<< ✨ 컬럼 너비 조절을 위한 CSS 추가 ✨ >>>>>>>>>>>>>>>>> */
-    /* data_editor 테이블의 헤더(th)와 셀(td)에 적용 */
+    /* data_editor 테이블 전체 스타일 개선 */
+    [data-testid="stDataEditor"] table {
+        table-layout: fixed !important;
+        width: 100% !important;
+    }
+    
+    /* 첫 번째와 두 번째 컬럼(선택, No.)을 더 작게 */
     [data-testid="stDataEditor"] th:nth-child(1),
     [data-testid="stDataEditor"] td:nth-child(1) {
-        max-width: 80px !important; /* 1번째 '선택' 컬럼의 최대 너비 */
+        width: 60px !important;
+        min-width: 60px !important;
+        max-width: 60px !important;
+        text-align: center !important;
     }
+    
     [data-testid="stDataEditor"] th:nth-child(2),
     [data-testid="stDataEditor"] td:nth-child(2) {
-        max-width: 80px !important; /* 2번째 'No.' 컬럼의 최대 너비 */
+        width: 60px !important;
+        min-width: 60px !important;
+        max-width: 60px !important;
+        text-align: center !important;
+    }
+    
+    /* 체크박스 중앙 정렬 */
+    [data-testid="stDataEditor"] td:nth-child(1) input[type="checkbox"] {
+        margin: 0 auto !important;
+        display: block !important;
+    }
+    
+    /* 테이블 셀 패딩 조정 */
+    [data-testid="stDataEditor"] th,
+    [data-testid="stDataEditor"] td {
+        padding: 8px 4px !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
     }
     </style>
     """,
@@ -161,15 +188,39 @@ if spreadsheet:
                             hide_index=True,
                             key=f"recovery_editor_{selected_backup_sheet}",
                             column_config={
-                                # `width="small"`은 그대로 두되, 위의 CSS가 우선 적용됩니다.
-                                "선택": st.column_config.CheckboxColumn(required=True, width="small"),
-                                "No.": st.column_config.NumberColumn(disabled=True, width="small"),
-                                "컨테이너 번호": st.column_config.TextColumn(disabled=True),
-                                "출고처": st.column_config.TextColumn(disabled=True),
-                                "피트수": st.column_config.TextColumn(disabled=True),
-                                "씰 번호": st.column_config.TextColumn(disabled=True),
-                                "상태": st.column_config.TextColumn(disabled=True),
-                                "작업일자": st.column_config.TextColumn(disabled=True),
+                                # 너비를 픽셀 단위로 직접 지정
+                                "선택": st.column_config.CheckboxColumn(
+                                    required=True, 
+                                    width=60  # 픽셀 단위로 지정
+                                ),
+                                "No.": st.column_config.NumberColumn(
+                                    disabled=True, 
+                                    width=60  # 픽셀 단위로 지정
+                                ),
+                                "컨테이너 번호": st.column_config.TextColumn(
+                                    disabled=True,
+                                    width=150  # 컨테이너 번호에 적절한 너비
+                                ),
+                                "출고처": st.column_config.TextColumn(
+                                    disabled=True,
+                                    width=100
+                                ),
+                                "피트수": st.column_config.TextColumn(
+                                    disabled=True,
+                                    width=70
+                                ),
+                                "씰 번호": st.column_config.TextColumn(
+                                    disabled=True,
+                                    width=120
+                                ),
+                                "상태": st.column_config.TextColumn(
+                                    disabled=True,
+                                    width=90
+                                ),
+                                "작업일자": st.column_config.TextColumn(
+                                    disabled=True,
+                                    width=120
+                                ),
                             }
                         )
                         
