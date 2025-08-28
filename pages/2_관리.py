@@ -31,42 +31,18 @@ st.markdown(
         [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
     }
     
-    /* data_editor 테이블 전체 스타일 개선 */
-    [data-testid="stDataEditor"] table {
-        table-layout: fixed !important;
-        width: 100% !important;
-    }
-    
-    /* 첫 번째와 두 번째 컬럼(선택, No.)을 더 작게 */
-    [data-testid="stDataEditor"] th:nth-child(1),
-    [data-testid="stDataEditor"] td:nth-child(1) {
+    /* <<<<<<<<<<<<<<< ✨ 컬럼 너비를 강제로 조절하는 CSS ✨ >>>>>>>>>>>>>>>>> */
+    /* data_editor의 첫 번째 컬럼('선택')에 대한 헤더(th)와 셀(td) 스타일 */
+    [data-testid="stDataEditor"] [data-col-id="1"] {
         width: 60px !important;
         min-width: 60px !important;
         max-width: 60px !important;
-        text-align: center !important;
     }
-    
-    [data-testid="stDataEditor"] th:nth-child(2),
-    [data-testid="stDataEditor"] td:nth-child(2) {
+    /* data_editor의 두 번째 컬럼('No.')에 대한 헤더(th)와 셀(td) 스타일 */
+    [data-testid="stDataEditor"] [data-col-id="2"] {
         width: 60px !important;
         min-width: 60px !important;
         max-width: 60px !important;
-        text-align: center !important;
-    }
-    
-    /* 체크박스 중앙 정렬 */
-    [data-testid="stDataEditor"] td:nth-child(1) input[type="checkbox"] {
-        margin: 0 auto !important;
-        display: block !important;
-    }
-    
-    /* 테이블 셀 패딩 조정 */
-    [data-testid="stDataEditor"] th,
-    [data-testid="stDataEditor"] td {
-        padding: 8px 4px !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
-        white-space: nowrap !important;
     }
     </style>
     """,
@@ -188,39 +164,14 @@ if spreadsheet:
                             hide_index=True,
                             key=f"recovery_editor_{selected_backup_sheet}",
                             column_config={
-                                # 너비를 픽셀 단위로 직접 지정
-                                "선택": st.column_config.CheckboxColumn(
-                                    required=True, 
-                                    width=60  # 픽셀 단위로 지정
-                                ),
-                                "No.": st.column_config.NumberColumn(
-                                    disabled=True, 
-                                    width=60  # 픽셀 단위로 지정
-                                ),
-                                "컨테이너 번호": st.column_config.TextColumn(
-                                    disabled=True,
-                                    width=150  # 컨테이너 번호에 적절한 너비
-                                ),
-                                "출고처": st.column_config.TextColumn(
-                                    disabled=True,
-                                    width=100
-                                ),
-                                "피트수": st.column_config.TextColumn(
-                                    disabled=True,
-                                    width=70
-                                ),
-                                "씰 번호": st.column_config.TextColumn(
-                                    disabled=True,
-                                    width=120
-                                ),
-                                "상태": st.column_config.TextColumn(
-                                    disabled=True,
-                                    width=90
-                                ),
-                                "작업일자": st.column_config.TextColumn(
-                                    disabled=True,
-                                    width=120
-                                ),
+                                "선택": st.column_config.CheckboxColumn(required=True),
+                                "No.": st.column_config.NumberColumn(disabled=True),
+                                "컨테이너 번호": st.column_config.TextColumn(disabled=True),
+                                "출고처": st.column_config.TextColumn(disabled=True),
+                                "피트수": st.column_config.TextColumn(disabled=True),
+                                "씰 번호": st.column_config.TextColumn(disabled=True),
+                                "상태": st.column_config.TextColumn(disabled=True),
+                                "작업일자": st.column_config.TextColumn(disabled=True),
                             }
                         )
                         
