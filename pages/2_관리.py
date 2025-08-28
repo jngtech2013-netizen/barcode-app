@@ -117,28 +117,43 @@ if spreadsheet:
                         df_backup['씰 번호'] = df_backup['씰 번호'].astype(str)
                     
                     st.markdown("##### 📋 선택된 백업 시트 현황")
-                    # ... (카드 UI 코드)
-
+                    if '상태' in df_backup.columns:
+                        status_counts = df_backup['상태'].value_counts()
+                        # ... (카드 UI 코드)
+                    
                     existing_nos = {c.get('컨테이너 번호') for c in st.session_state.container_list}
                     recoverable_df = df_backup[~df_backup['컨테이너 번호'].isin(existing_nos)].copy()
 
                     if recoverable_df.empty:
                         st.success("백업 시트의 모든 데이터가 이미 현재 목록에 존재합니다.")
                     else:
-                        # <<<<<<<<<<<<<<< ✨ 1. 개별 컨테이너 선택 복구 섹션 ✨ >>>>>>>>>>>>>>>>>
                         st.markdown("---")
                         st.markdown("##### 1. 개별 컨테이너 선택 복구")
                         st.write("아래 테이블에서 복구할 컨테이너를 선택하세요.")
 
-                        recoverable_df.insert(0, '선택', False)
+                        # <<<<<<<<<<<<<<< ✨ 여기에 'No.' 컬럼이 다시 추가되었습니다 ✨ >>>>>>>>>>>>>>>>>
+                        # 1. 'No.' 컬럼과 '선택' 컬럼을 순서대로 추가
+                        recoverable_df.insert(0, 'No.', range(1, len(recoverable_df) + 1))
+                        recoverable_df.insert(1, '선택', False)
                         
                         edited_df = st.data_editor(
                             recoverable_df,
                             use_container_width=True,
                             hide_index=True,
                             key=f"recovery_editor_{selected_backup_sheet}",
-                            column_config={ "선택": st.column_config.CheckboxColumn(required=True, width="small"), "컨테이너 번호": st.column_config.TextColumn(disabled=True), "출고처": st.column_config.TextColumn(disabled=True), "피트수": st.column_config.TextColumn(disabled=True), "씰 번호": st.column_config.TextColumn(disabled=True), "상태": st.column_config.TextColumn(disabled=True), "작업일자": st.column_config.TextColumn(disabled=True) }
+                            # 2. column_config에 'No.' 컬럼을 추가하고 수정 불가능하게 설정
+                            column_config={
+                                "No.": st.column_config.NumberColumn(disabled=True, width="small"),
+                                "선택": st.column_config.CheckboxColumn(required=True, width="small"),
+                                "컨테이너 번호": st.column_config.TextColumn(disabled=True),
+                                "출고처": st.column_config.TextColumn(disabled=True),
+                                "피트수": st.column_config.TextColumn(disabled=True),
+                                "씰 번호": st.column_config.TextColumn(disabled=True),
+                                "상태": st.column_config.TextColumn(disabled=True),
+                                "작업일자": st.column_config.TextColumn(disabled=True),
+                            }
                         )
+                        # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                         
                         selected_rows = edited_df[edited_df['선택']]
 
@@ -156,7 +171,6 @@ if spreadsheet:
                                 st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 컨테이너를 성공적으로 복구했습니다!")
                                 st.rerun()
 
-                        # <<<<<<<<<<<<<<< ✨ 2. 시트 전체 복구 섹션 ✨ >>>>>>>>>>>>>>>>>
                         st.divider()
                         st.markdown("##### 2. 시트 전체 복구 (현재 목록에 없는 데이터만)")
                         st.warning("주의: 이 작업은 위 테이블에 보이는 모든 컨테이너를 한 번에 추가합니다.")
