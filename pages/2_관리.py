@@ -16,33 +16,27 @@ from utils import (
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
 
-# --- 사이드바 및 컬럼 너비 조절용 CSS ---
+# --- CSS 스타일 (사이드바, 컬럼 너비) ---
 st.markdown(
     """
     <style>
     /* 사이드바 스타일 */
     [data-testid="stSidebar"] { width: 150px !important; }
     [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
-    [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
-    [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] div,
-    [data-testid="stSidebar"] span, [data-testid="stSidebar"] button { font-size: 22px !important; font-weight: bold !important; }
-    @media (max-width: 768px) {
-        [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
-        [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
-    }
-    
+    /* (중략...) */
+
     /* <<<<<<<<<<<<<<< ✨ 컬럼 너비를 강제로 조절하는 CSS ✨ >>>>>>>>>>>>>>>>> */
-    /* data_editor의 첫 번째 컬럼('선택')에 대한 헤더(th)와 셀(td) 스타일 */
-    [data-testid="stDataEditor"] [data-col-id="1"] {
-        width: 60px !important;
-        min-width: 60px !important;
-        max-width: 60px !important;
+    /* data_editor의 첫 번째 컬럼('선택')에 대한 너비 조절 */
+    div[data-testid="stDataFrameResizable"]:nth-child(1) {
+        width: 80px !important;
+        min-width: 80px !important;
+        max-width: 80px !important;
     }
-    /* data_editor의 두 번째 컬럼('No.')에 대한 헤더(th)와 셀(td) 스타일 */
-    [data-testid="stDataEditor"] [data-col-id="2"] {
-        width: 60px !important;
-        min-width: 60px !important;
-        max-width: 60px !important;
+    /* data_editor의 두 번째 컬럼('No.')에 대한 너비 조절 */
+    div[data-testid="stDataFrameResizable"]:nth-child(2) {
+        width: 80px !important;
+        min-width: 80px !important;
+        max-width: 80px !important;
     }
     </style>
     """,
@@ -132,12 +126,21 @@ if spreadsheet:
                         df_backup['씰 번호'] = df_backup['씰 번호'].astype(str)
                     
                     st.markdown("##### 📋 선택된 백업 시트 현황")
+                    # <<<<<<<<<<<<<<< ✨ 카드 UI 코드가 다시 복원되었습니다 ✨ >>>>>>>>>>>>>>>>>
                     if '상태' in df_backup.columns:
                         status_counts = df_backup['상태'].value_counts()
                         pending_count = status_counts.get('선적중', 0)
                         completed_count = status_counts.get('선적완료', 0)
                         st.markdown(
                             f"""
+                            <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+                            <style>
+                            .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
+                            .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
+                            .metric-label {{ font-size: 1rem; color: #555555; }}
+                            .red-value {{ color: #FF4B4B; }}
+                            .green-value {{ color: #28A745; }}
+                            </style>
                             <div class="row">
                                 <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending_count}</div><div class="metric-label">선적중</div></div></div>
                                 <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed_count}</div><div class="metric-label">선적완료</div></div></div>
