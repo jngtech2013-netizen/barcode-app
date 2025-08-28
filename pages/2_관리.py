@@ -48,7 +48,6 @@ st.markdown("""
 # --- 데이터 수정 및 삭제 ---
 st.markdown("#### ✏️ 데이터 수정 및 삭제")
 
-# <<<<<<<<<<<<<<< ✨ 2. 데이터가 있을 때만 수정/삭제 섹션을 보여주도록 변경 ✨ >>>>>>>>>>>>>>>>>
 if st.session_state.container_list:
     container_numbers_for_edit = [c.get('컨테이너 번호', '') for c in st.session_state.container_list]
     selected_for_edit = st.selectbox("수정 또는 삭제할 컨테이너를 선택하세요:", container_numbers_for_edit, key="edit_selector")
@@ -75,7 +74,7 @@ if st.session_state.container_list:
             new_work_date = st.date_input("작업일자 수정", value=work_date_value)
             
             if st.form_submit_button("💾 수정사항 저장", use_container_width=True):
-                updated_data = {'컨테이너 번호': selected_for_edit, '출고처': new_dest, '피트수': new_feet, '씰 번호': new_seal, '상태': new_status, '작업일자': new_work_date}
+                updated_data = {'컨테이너 번호': selected_for_edit, '출고처': new_dest, '피트수': new_feet, '씰 번호': str(new_seal), '상태': new_status, '작업일자': new_work_date}
                 st.session_state.container_list[selected_idx] = updated_data
                 update_row_in_gsheet(selected_idx, updated_data)
                 st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
@@ -88,9 +87,7 @@ if st.session_state.container_list:
             st.success(f"'{selected_for_edit}' 컨테이너 정보가 삭제되었습니다.")
             st.rerun()
 else:
-    # 데이터가 없을 때 보여줄 메시지
     st.info("현재 데이터가 없습니다. 아래 '데이터 복구' 기능을 사용하거나 등록 페이지에서 데이터를 추가해주세요.")
-# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 # --- 백업 시트에서 데이터 복구 ---
 st.divider()
@@ -116,41 +113,58 @@ if spreadsheet:
                 else:
                     df_backup = pd.DataFrame(backup_records)
                     
-                    # <<<<<<<<<<<<<<< ✨ 1. '씰 번호'를 항상 텍스트로 처리 ✨ >>>>>>>>>>>>>>>>>
                     if '씰 번호' in df_backup.columns:
                         df_backup['씰 번호'] = df_backup['씰 번호'].astype(str)
-
-                    # (기존 카드 UI 및 테이블 표시 로직은 동일)
+                    
+                    # <<<<<<<<<<<<<<< ✨ 3. 카드 UI가 다시 복원되었습니다 ✨ >>>>>>>>>>>>>>>>>
                     st.markdown("##### 📋 선택된 백업 시트 현황")
-                    # ... (카드 UI 코드 생략)
+                    if '상태' in df_backup.columns:
+                        status_counts = df_backup['상태'].value_counts()
+                        pending_count = status_counts.get('선적중', 0)
+                        completed_count = status_counts.get('선적완료', 0)
+                        st.markdown(
+                            f"""
+                            <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+                            <style>
+                            .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
+                            .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
+                            .metric-label {{ font-size: 1rem; color: #555555; }}
+                            .red-value {{ color: #FF4B4B; }}
+                            .green-value {{ color: #28A745; }}
+                            </style>
+                            <div class="row">
+                                <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending_count}</div><div class="metric-label">선적중</div></div></div>
+                                <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed_count}</div><div class="metric-label">선적완료</div></div></div>
+                            </div>
+                            """, unsafe_allow_html=True
+                        )
+                    
                     st.dataframe(df_backup, use_container_width=True, hide_index=True)
                     
-                    # <<<<<<<<<<<<<<< ✨ 3. 컨테이너 단위로 선택하여 복구하는 기능 ✨ >>>>>>>>>>>>>>>>>
                     st.divider()
-                    st.markdown("#####  selective 컨테이너 선택 및 복구")
+                    # <<<<<<<<<<<<<<< ✨ 1. 제목이 수정되었습니다 ✨ >>>>>>>>>>>>>>>>>
+                    st.markdown("#####  컨테이너 선택 및 복구")
 
-                    # 현재 목록에 없는 컨테이너만 복구 대상으로 필터링
                     existing_nos = {c.get('컨테이너 번호') for c in st.session_state.container_list}
                     recoverable_containers = df_backup[~df_backup['컨테이너 번호'].isin(existing_nos)]
 
                     if recoverable_containers.empty:
                         st.success("백업 시트의 모든 데이터가 이미 현재 목록에 존재합니다.")
                     else:
-                        options = recoverable_containers['컨테이너 번호'].tolist()
-                        selected_for_recovery = st.multiselect(
-                            "복구할 컨테이너를 모두 선택하세요:",
-                            options=options,
-                            help="여러 컨테이너를 선택할 수 있습니다."
-                        )
-
+                        # <<<<<<<<<<<<<<< ✨ 2. 키보드가 올라오지 않도록 체크박스 방식으로 변경 ✨ >>>>>>>>>>>>>>>>>
+                        selected_for_recovery = []
+                        st.write("복구할 컨테이너를 모두 선택하세요:")
+                        for index, row in recoverable_containers.iterrows():
+                            container_no = row['컨테이너 번호']
+                            if st.checkbox(container_no, key=f"rec_{container_no}"):
+                                selected_for_recovery.append(container_no)
+                        
                         if selected_for_recovery:
                             if st.button(f"선택된 {len(selected_for_recovery)}개 컨테이너 복구하기", use_container_width=True, type="primary"):
                                 added_count = 0
                                 for container_no in selected_for_recovery:
-                                    # 복구할 컨테이너의 전체 데이터를 df_backup에서 찾음
                                     row_to_add = recoverable_containers[recoverable_containers['컨테이너 번호'] == container_no].iloc[0].to_dict()
                                     
-                                    # 날짜 형식 변환
                                     work_date_str = row_to_add.get('작업일자')
                                     try:
                                         row_to_add['작업일자'] = datetime.strptime(work_date_str, '%Y-%m-%d').date()
@@ -164,6 +178,5 @@ if spreadsheet:
                                 log_change(f"데이터 복구: '{selected_backup_sheet}'에서 {added_count}개 선택 복구")
                                 st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 컨테이너를 성공적으로 복구했습니다!")
                                 st.rerun()
-                    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
             except Exception as e:
                 st.error(f"백업 시트 정보를 불러오는 중 오류가 발생했습니다: {e}")
