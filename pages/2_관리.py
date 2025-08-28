@@ -117,9 +117,27 @@ if spreadsheet:
                         df_backup['씰 번호'] = df_backup['씰 번호'].astype(str)
                     
                     st.markdown("##### 📋 선택된 백업 시트 현황")
+                    # <<<<<<<<<<<<<<< ✨ 2. 카드 UI 코드가 다시 복원되었습니다 ✨ >>>>>>>>>>>>>>>>>
                     if '상태' in df_backup.columns:
                         status_counts = df_backup['상태'].value_counts()
-                        # ... (카드 UI 코드)
+                        pending_count = status_counts.get('선적중', 0)
+                        completed_count = status_counts.get('선적완료', 0)
+                        st.markdown(
+                            f"""
+                            <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+                            <style>
+                            .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
+                            .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
+                            .metric-label {{ font-size: 1rem; color: #555555; }}
+                            .red-value {{ color: #FF4B4B; }}
+                            .green-value {{ color: #28A745; }}
+                            </style>
+                            <div class="row">
+                                <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending_count}</div><div class="metric-label">선적중</div></div></div>
+                                <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed_count}</div><div class="metric-label">선적완료</div></div></div>
+                            </div>
+                            """, unsafe_allow_html=True
+                        )
                     
                     existing_nos = {c.get('컨테이너 번호') for c in st.session_state.container_list}
                     recoverable_df = df_backup[~df_backup['컨테이너 번호'].isin(existing_nos)].copy()
@@ -131,20 +149,18 @@ if spreadsheet:
                         st.markdown("##### 1. 개별 컨테이너 선택 복구")
                         st.write("아래 테이블에서 복구할 컨테이너를 선택하세요.")
 
-                        # <<<<<<<<<<<<<<< ✨ 여기에 'No.' 컬럼이 다시 추가되었습니다 ✨ >>>>>>>>>>>>>>>>>
-                        # 1. 'No.' 컬럼과 '선택' 컬럼을 순서대로 추가
-                        recoverable_df.insert(0, 'No.', range(1, len(recoverable_df) + 1))
-                        recoverable_df.insert(1, '선택', False)
+                        # <<<<<<<<<<<<<<< ✨ 1. 컬럼 순서가 '선택' -> 'No.'로 변경되었습니다 ✨ >>>>>>>>>>>>>>>>>
+                        recoverable_df.insert(0, '선택', False)
+                        recoverable_df.insert(1, 'No.', range(1, len(recoverable_df) + 1))
                         
                         edited_df = st.data_editor(
                             recoverable_df,
                             use_container_width=True,
                             hide_index=True,
                             key=f"recovery_editor_{selected_backup_sheet}",
-                            # 2. column_config에 'No.' 컬럼을 추가하고 수정 불가능하게 설정
                             column_config={
-                                "No.": st.column_config.NumberColumn(disabled=True, width="small"),
                                 "선택": st.column_config.CheckboxColumn(required=True, width="small"),
+                                "No.": st.column_config.NumberColumn(disabled=True, width="small"),
                                 "컨테이너 번호": st.column_config.TextColumn(disabled=True),
                                 "출고처": st.column_config.TextColumn(disabled=True),
                                 "피트수": st.column_config.TextColumn(disabled=True),
@@ -153,7 +169,6 @@ if spreadsheet:
                                 "작업일자": st.column_config.TextColumn(disabled=True),
                             }
                         )
-                        # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                         
                         selected_rows = edited_df[edited_df['선택']]
 
