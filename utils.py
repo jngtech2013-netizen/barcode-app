@@ -1,5 +1,3 @@
-# utils.py
-
 import streamlit as st
 from datetime import date, datetime, timezone, timedelta
 import pandas as pd
@@ -57,13 +55,24 @@ def load_data_from_gsheet():
         st.error(f"데이터 로딩 중 오류 발생: {e}")
         return []
 
+# <<<<<<<<<<<<<<< ✨ 여기가 수정되었습니다 (성공/실패 반환) ✨ >>>>>>>>>>>>>>>>>
 def add_row_to_gsheet(data):
-    if spreadsheet is None: return
-    worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-    if isinstance(data.get('작업일자'), date): data['작업일자'] = data['작업일자'].isoformat()
-    row_to_insert = [data.get(header, "") for header in SHEET_HEADERS]
-    worksheet.append_row(row_to_insert)
-    log_change(f"신규 등록: {data.get('컨테이너 번호')}")
+    if spreadsheet is None:
+        return False, "Google Sheets에 연결되지 않았습니다."
+    try:
+        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        if isinstance(data.get('작업일자'), date):
+            data['작업일자'] = data['작업일자'].isoformat()
+        
+        row_to_insert = [data.get(header, "") for header in SHEET_HEADERS]
+        
+        worksheet.append_row(row_to_insert)
+        log_change(f"신규 등록: {data.get('컨테이너 번호')}")
+        return True, "성공"
+    except Exception as e:
+        st.error(f"Google Sheets 저장 중 오류 발생: {e}")
+        return False, str(e)
+# <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 def update_row_in_gsheet(index, data):
     if spreadsheet is None: return

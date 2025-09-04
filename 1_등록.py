@@ -12,25 +12,20 @@ st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar
 
 # --- 한국 시간 함수 ---
 def get_korea_today():
-    """한국 시간 기준 오늘 날짜를 반환"""
     try:
-        # UTC 기준으로 현재 시간을 가져와서 한국 시간(UTC+9) 적용
         utc_now = datetime.utcnow()
         korea_now = utc_now + timedelta(hours=9)
         return korea_now.date()
     except:
-        # 에러 발생시 시스템 날짜 사용
         return date.today()
 
 # --- 초기화 함수와 성공 플래그 로직 ---
 def clear_form_inputs():
-    # ✨ 작업일자 관련 session_state 관리 로직을 모두 제거했습니다.
     st.session_state["form_container_no"] = ""
     st.session_state["form_seal_no"] = ""
     st.session_state["form_destination"] = "베트남"
     st.session_state["form_feet"] = "40"
 
-# ✨ 작업일자 관련 session_state 초기화 로직도 제거했습니다.
 if st.session_state.get("submission_success", False):
     clear_form_inputs()
     st.session_state.submission_success = False
@@ -176,9 +171,7 @@ st.divider()
 # --- 신규 컨테이너 등록 ---
 st.markdown("#### 📝 신규 컨테이너 등록")
 
-# 한국 시간 기준 오늘 날짜 표시
 korea_today = get_korea_today()
-# st.info(f"📅 현재 날짜 (한국시간): {korea_today.strftime('%Y년 %m월 %d일 (%A)')}")
 
 with st.form(key="new_container_form"):
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
@@ -186,12 +179,11 @@ with st.form(key="new_container_form"):
     destination = st.radio("2. 출고처", options=destinations, horizontal=True, key="form_destination")
     feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
     seal_no = st.text_input("4. 씰 번호", key="form_seal_no")
-    
-    # 한국 시간 기준 오늘 날짜를 기본값으로 설정
     work_date = st.date_input("5. 작업일자", value=korea_today)
     
     submitted = st.form_submit_button("➕ 등록하기", use_container_width=True)
     
+    # <<<<<<<<<<<<<<< ✨ 여기가 수정되었습니다 (안정성 강화) ✨ >>>>>>>>>>>>>>>>>
     if submitted:
         pattern = re.compile(r'^[A-Z]{4}\d{7}$')
         if not container_no or not seal_no: 
@@ -202,15 +194,18 @@ with st.form(key="new_container_form"):
             st.warning(f"이미 등록된 컨테이너 번호입니다: {container_no}")
         else:
             new_container = {
-                '컨테이너 번호': container_no, 
-                '출고처': destination, 
-                '피트수': feet, 
-                '씰 번호': seal_no, 
-                '작업일자': work_date,  # 한국 시간 기준 날짜 사용
-                '상태': '선적중'
+                '컨테이너 번호': container_no, '출고처': destination, '피트수': feet, 
+                '씰 번호': seal_no, '작업일자': work_date, '상태': '선적중'
             }
-            st.session_state.container_list.append(new_container)
-            add_row_to_gsheet(new_container)
-            st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
-            st.session_state.submission_success = True
-            st.rerun()
+            
+            with st.spinner('데이터를 저장하는 중...'):
+                success, message = add_row_to_gsheet(new_container)
+            
+            if success:
+                st.session_state.container_list.append(new_container)
+                st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
+                st.session_state.submission_success = True
+                st.rerun()
+            else:
+                st.error(f"등록 실패: {message}. 잠시 후 다시 시도해주세요.")
+    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
