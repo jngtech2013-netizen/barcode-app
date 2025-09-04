@@ -128,6 +128,13 @@ if spreadsheet:
                     
                     if '씰 번호' in df_backup.columns:
                         df_backup['씰 번호'] = df_backup['씰 번호'].astype(str)
+
+                    # <<<<<<<<<<<<<<< ✨ 여기에 컬럼을 추가하는 로직이 적용되었습니다 ✨ >>>>>>>>>>>>>>>>>
+                    # 옛날 백업 시트에 없는 경우를 대비하여 빈 컬럼을 추가해줌
+                    if '등록일시' not in df_backup.columns:
+                        df_backup['등록일시'] = pd.NA
+                    if '완료일시' not in df_backup.columns:
+                        df_backup['완료일시'] = pd.NA
                     
                     st.markdown("##### 📋 선택된 백업 시트 현황")
                     if '상태' in df_backup.columns:
@@ -166,7 +173,6 @@ if spreadsheet:
                         
                         display_order = ['선택', 'No.'] + [h for h in SHEET_HEADERS if h in recoverable_df.columns]
                         
-                        # <<<<<<<<<<<<<<< ✨ 여기에 '등록일시'와 '완료일시' 컬럼 설정이 추가되었습니다 ✨ >>>>>>>>>>>>>>>>>
                         edited_df = st.data_editor(
                             recoverable_df,
                             column_order=display_order,
@@ -193,8 +199,8 @@ if spreadsheet:
                                 added_count = 0
                                 for index, row in selected_rows.iterrows():
                                     row_to_add = row.to_dict()
-                                    try: row_to_add['등록일시'] = datetime.strptime(row_to_add.get('등록일시'), '%Y-%m-%d %H:%M:%S')
-                                    except (ValueError, TypeError): row_to_add['등록일시'] = datetime.now()
+                                    try: row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시')).to_pydatetime()
+                                    except: row_to_add['등록일시'] = None
                                     st.session_state.container_list.append(row_to_add)
                                     add_row_to_gsheet(row_to_add)
                                     added_count += 1
@@ -210,8 +216,8 @@ if spreadsheet:
                             added_count = 0
                             for index, row in recoverable_df.iterrows():
                                 row_to_add = row.to_dict()
-                                try: row_to_add['등록일시'] = datetime.strptime(row_to_add.get('등록일시'), '%Y-%m-%d %H:%M:%S')
-                                except (ValueError, TypeError): row_to_add['등록일시'] = datetime.now()
+                                try: row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시')).to_pydatetime()
+                                except: row_to_add['등록일시'] = None
                                 st.session_state.container_list.append(row_to_add)
                                 add_row_to_gsheet(row_to_add)
                                 added_count += 1
