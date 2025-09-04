@@ -3,21 +3,25 @@ import pandas as pd
 from barcode import Code128
 from barcode.writer import ImageWriter
 from io import BytesIO
-from datetime import date, datetime, timedelta
-import re
-from utils import SHEET_HEADERS, MAIN_SHEET_NAME, load_data_from_gsheet, add_row_to_gsheet, update_row_in_gsheet, backup_data_to_new_sheet, connect_to_gsheet, log_change
+from datetime import date, datetime, timedelta, timezone
+import re # ✨ 누락되었던 re 모듈을 추가했습니다.
+from utils import (
+    SHEET_HEADERS, 
+    MAIN_SHEET_NAME, 
+    load_data_from_gsheet, 
+    add_row_to_gsheet, 
+    update_row_in_gsheet, 
+    backup_data_to_new_sheet, 
+    connect_to_gsheet, 
+    log_change
+)
 
 # --- 앱 초기 설정 ---
 st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="expanded")
 
 # --- 한국 시간 함수 ---
-def get_korea_today():
-    try:
-        utc_now = datetime.utcnow()
-        korea_now = utc_now + timedelta(hours=9)
-        return korea_now.date()
-    except:
-        return date.today()
+def get_korea_now():
+    return datetime.now(timezone(timedelta(hours=9)))
 
 # --- 초기화 함수와 성공 플래그 로직 ---
 def clear_form_inputs():
@@ -110,32 +114,43 @@ if not st.session_state.container_list:
 else:
     df = pd.DataFrame(st.session_state.container_list)
     df['선적완료'] = df['상태'].apply(lambda x: True if x == '선적완료' else False)
-    if '작업일자' in df.columns:
-        df['작업일자'] = pd.to_datetime(df['작업일자'], errors='coerce').dt.strftime('%Y-%m-%d')
+    if '등록일시' in df.columns:
+        df['등록일시'] = pd.to_datetime(df['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
+    if '완료일시' in df.columns:
+        df['완료일시'] = pd.to_datetime(df['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
     df.fillna('', inplace=True)
-    column_order = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '작업일자', '선적완료']
+    
+    column_order = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '등록일시', '완료일시', '선적완료']
     
     edited_df = st.data_editor(
         df,
         column_order=column_order,
         use_container_width=True,
         hide_index=True,
-        key="data_editor_toggle_reverted",
+        key="data_editor_final",
         column_config={
-            "선적완료": st.column_config.CheckboxColumn("선적완료", help="체크하면 '선적완료'로 상태가 변경됩니다.", width="small"),
+            "선적완료": st.column_config.CheckboxColumn("선적완료", width="small"),
             "컨테이너 번호": st.column_config.TextColumn(disabled=True),
             "출고처": st.column_config.TextColumn(disabled=True),
             "피트수": st.column_config.TextColumn(disabled=True),
             "씰 번호": st.column_config.TextColumn(disabled=True),
-            "작업일자": st.column_config.TextColumn(disabled=True),
+            "등록일시": st.column_config.TextColumn(disabled=True),
+            "완료일시": st.column_config.TextColumn(disabled=True),
         }
     )
 
     if edited_df is not None:
-        edited_df['상태'] = edited_df['선적완료'].apply(lambda x: '선적완료' if x else '선적중')
-        edited_list = edited_df[SHEET_HEADERS].to_dict('records')
+        edited_list = edited_df.to_dict('records')
         for i, (original_row, edited_row) in enumerate(zip(st.session_state.container_list, edited_list)):
-            if original_row != edited_row:
+            if original_row.get('선적완료') != edited_row.get('선적완료'):
+                new_status_bool = edited_row.get('선적완료', False)
+                edited_row['상태'] = "선적완료" if new_status_bool else "선적중"
+                
+                if new_status_bool:
+                    edited_row['완료일시'] = get_korea_now()
+                else:
+                    edited_row['완료일시'] = None
+                
                 st.session_state.container_list[i] = edited_row
                 update_row_in_gsheet(i, edited_row)
                 st.rerun()
@@ -155,7 +170,8 @@ if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
                 worksheet.update('A1', [SHEET_HEADERS])
                 if pending_data:
                     df_pending = pd.DataFrame(pending_data)
-                    df_pending['작업일자'] = df_pending['작업일자'].apply(lambda x: x.isoformat() if isinstance(x, date) else x)
+                    df_pending['등록일시'] = pd.to_datetime(df_pending['등록일시']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                    df_pending['완료일시'] = pd.to_datetime(df_pending['완료일시']).dt.strftime('%Y-%m-%d %H:%M:%S')
                     worksheet.update('A2', df_pending[SHEET_HEADERS].values.tolist())
             log_message = f"데이터 백업: {len(completed_data)}개 백업, {len(pending_data)}개 이월."
             log_change(log_message)
@@ -170,20 +186,14 @@ st.divider()
 
 # --- 신규 컨테이너 등록 ---
 st.markdown("#### 📝 신규 컨테이너 등록")
-
-korea_today = get_korea_today()
-
 with st.form(key="new_container_form"):
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
-    container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
+    container_no = st.text_input("1. 컨테이너 번호", key="form_container_no")
     destination = st.radio("2. 출고처", options=destinations, horizontal=True, key="form_destination")
     feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
     seal_no = st.text_input("4. 씰 번호", key="form_seal_no")
-    work_date = st.date_input("5. 작업일자", value=korea_today)
     
     submitted = st.form_submit_button("➕ 등록하기", use_container_width=True)
-    
-    # <<<<<<<<<<<<<<< ✨ 여기가 수정되었습니다 (안정성 강화) ✨ >>>>>>>>>>>>>>>>>
     if submitted:
         pattern = re.compile(r'^[A-Z]{4}\d{7}$')
         if not container_no or not seal_no: 
@@ -195,7 +205,9 @@ with st.form(key="new_container_form"):
         else:
             new_container = {
                 '컨테이너 번호': container_no, '출고처': destination, '피트수': feet, 
-                '씰 번호': seal_no, '작업일자': work_date, '상태': '선적중'
+                '씰 번호': seal_no, '상태': '선적중',
+                '등록일시': get_korea_now(),
+                '완료일시': ''
             }
             
             with st.spinner('데이터를 저장하는 중...'):
@@ -208,4 +220,3 @@ with st.form(key="new_container_form"):
                 st.rerun()
             else:
                 st.error(f"등록 실패: {message}. 잠시 후 다시 시도해주세요.")
-    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
