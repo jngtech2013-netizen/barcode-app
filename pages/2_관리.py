@@ -9,7 +9,7 @@ from utils import (
     update_row_in_gsheet, 
     delete_row_from_gsheet, 
     backup_data_to_new_sheet,
-    log_change, # ✨ 누락되었던 log_change를 다시 추가했습니다.
+    log_change,
     connect_to_gsheet
 )
 
@@ -29,18 +29,6 @@ st.markdown(
     @media (max-width: 768px) {
         [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
         [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
-    }
-    
-    /* 컬럼 너비 조절용 CSS */
-    .stDataFrame [data-colindex="0"] {
-        width: 60px !important;
-        min-width: 60px !important;
-        max-width: 60px !important;
-    }
-    .stDataFrame [data-colindex="1"] {
-        width: 60px !important;
-        min-width: 60px !important;
-        max-width: 60px !important;
     }
     </style>
     """,
@@ -178,6 +166,7 @@ if spreadsheet:
                         
                         display_order = ['선택', 'No.'] + [h for h in SHEET_HEADERS if h in recoverable_df.columns]
                         
+                        # <<<<<<<<<<<<<<< ✨ 여기에 '등록일시'와 '완료일시' 컬럼 설정이 추가되었습니다 ✨ >>>>>>>>>>>>>>>>>
                         edited_df = st.data_editor(
                             recoverable_df,
                             column_order=display_order,
