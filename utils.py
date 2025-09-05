@@ -45,6 +45,11 @@ def load_data_from_gsheet():
 
         df = pd.DataFrame(all_records)
         df.replace('', pd.NA, inplace=True)
+        
+        # [수정] '씰 번호' 컬럼을 항상 문자열(string) 타입으로 강제 변환
+        if '씰 번호' in df.columns:
+            df['씰 번호'] = df['씰 번호'].astype(str)
+            
         if '등록일시' in df.columns:
             df['등록일시'] = pd.to_datetime(df['등록일시'], errors='coerce')
         if '완료일시' in df.columns:
@@ -68,7 +73,8 @@ def add_row_to_gsheet(data):
             data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
 
         row_to_insert = [data_copy.get(header, "") for header in SHEET_HEADERS]
-        worksheet.append_row(row_to_insert)
+        # [수정] value_input_option을 추가하여 구글 시트의 자동 타입 변환 방지
+        worksheet.append_row(row_to_insert, value_input_option='USER_ENTERED')
         log_change(f"신규 등록: {data_copy.get('컨테이너 번호')}")
         return True, "성공"
     except Exception as e:
@@ -86,8 +92,8 @@ def update_row_in_gsheet(index, data):
             data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
 
         row_to_update = [data_copy.get(header, "") for header in SHEET_HEADERS]
-        # 구글 시트는 1-based index이고 헤더가 있으므로 +2
-        worksheet.update(f'A{index+2}:G{index+2}', [row_to_update])
+        # [수정] value_input_option을 추가하여 구글 시트의 자동 타입 변환 방지
+        worksheet.update(f'A{index+2}:G{index+2}', [row_to_update], value_input_option='USER_ENTERED')
         log_change(f"데이터 수정: {data_copy.get('컨테이너 번호')}")
     except Exception as e:
         st.error(f"Google Sheets 업데이트 중 오류가 발생했습니다: {e}")
@@ -125,10 +131,10 @@ def backup_data_to_new_sheet(container_data):
             else:
                 df_final = df_new
             backup_sheet.clear()
-            backup_sheet.update([SHEET_HEADERS] + df_final.values.tolist())
+            backup_sheet.update([SHEET_HEADERS] + df_final.values.tolist(), value_input_option='USER_ENTERED')
         except gspread.exceptions.WorksheetNotFound:
             new_sheet = spreadsheet.add_worksheet(title=backup_sheet_name, rows=100, cols=30)
-            new_sheet.update([SHEET_HEADERS] + df_new.values.tolist())
+            new_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
         return True, None
     except Exception as e:
         return False, str(e)
