@@ -142,7 +142,11 @@ else:
     if edited_df is not None:
         edited_list = edited_df.to_dict('records')
         for i, (original_row, edited_row) in enumerate(zip(st.session_state.container_list, edited_list)):
-            if original_row.get('선적완료') != edited_row.get('선적완료'):
+            # [수정된 로직] 원본의 '상태'와 체크박스의 '상태'를 비교하여 변경된 행만 정확히 찾음
+            original_status = original_row.get('상태', '선적중')
+            new_status_from_checkbox = "선적완료" if edited_row.get('선적완료') else "선적중"
+
+            if original_status != new_status_from_checkbox:
                 new_status_bool = edited_row.get('선적완료', False)
                 edited_row['상태'] = "선적완료" if new_status_bool else "선적중"
                 
@@ -151,36 +155,61 @@ else:
                 else:
                     edited_row['완료일시'] = None
                 
+                # [수정] 원본의 등록일시를 그대로 유지하여 데이터 손실 방지
+                edited_row['등록일시'] = original_row.get('등록일시')
+
                 st.session_state.container_list[i] = edited_row
                 update_row_in_gsheet(i, edited_row)
                 st.rerun()
 
+# <<<<<<<<<<<<<<< ✨ 데이터 백업 로직이 안전하게 수정되었습니다 ✨ >>>>>>>>>>>>>>>>>
 if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
     completed_data = [item for item in st.session_state.container_list if item.get('상태') == '선적완료']
     pending_data = [item for item in st.session_state.container_list if item.get('상태') == '선적중']
     
-    if completed_data:
-        success, error_msg = backup_data_to_new_sheet(completed_data)
+    if not completed_data:
+        st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
+    else:
+        with st.spinner('데이터를 백업하는 중...'):
+            success, error_msg = backup_data_to_new_sheet(completed_data)
+        
         if success:
             st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 백업했습니다!")
-            spreadsheet = connect_to_gsheet()
-            if spreadsheet:
-                worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-                worksheet.clear()
-                worksheet.update('A1', [SHEET_HEADERS])
-                if pending_data:
-                    df_pending = pd.DataFrame(pending_data)
-                    df_pending['등록일시'] = pd.to_datetime(df_pending['등록일시']).dt.strftime('%Y-%m-%d %H:%M:%S')
-                    df_pending['완료일시'] = pd.to_datetime(df_pending['완료일시']).dt.strftime('%Y-%m-%d %H:%M:%S')
-                    worksheet.update('A2', df_pending[SHEET_HEADERS].values.tolist())
-            log_message = f"데이터 백업: {len(completed_data)}개 백업, {len(pending_data)}개 이월."
-            log_change(log_message)
-            st.session_state.container_list = pending_data
-            st.rerun()
+            
+            with st.spinner('메인 시트를 정리하는 중...'):
+                try:
+                    spreadsheet = connect_to_gsheet()
+                    if spreadsheet:
+                        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+                        
+                        # 삭제할 컨테이너 번호 목록
+                        completed_nos = {item['컨테이너 번호'] for item in completed_data}
+                        
+                        # 시트의 모든 데이터를 한번에 읽어옴
+                        all_data = worksheet.get_all_records()
+                        
+                        # 삭제할 행 번호를 찾음 (역순으로 찾아야 삭제 시 인덱스가 꼬이지 않음)
+                        rows_to_delete = []
+                        for i in range(len(all_data) - 1, -1, -1):
+                            if all_data[i].get('컨테이너 번호') in completed_nos:
+                                rows_to_delete.append(i + 2) # +2 for 1-based index and header
+                        
+                        # 찾은 행들을 삭제 (gspread는 한 번에 여러 행 삭제를 지원하지 않으므로 반복)
+                        for row_num in rows_to_delete:
+                            worksheet.delete_rows(row_num)
+
+                        log_message = f"데이터 백업: {len(completed_data)}개 백업, {len(pending_data)}개 이월."
+                        log_change(log_message)
+                        
+                        st.session_state.container_list = pending_data
+                        st.success("메인 시트 정리가 완료되었습니다.")
+                        st.rerun()
+
+                except Exception as e:
+                    st.error(f"메인 시트 정리 중 오류가 발생했습니다: {e}")
+                    st.warning("데이터 백업은 완료되었으나, 메인 시트 정리에 실패했습니다. 수동으로 '선적완료' 데이터를 삭제해주세요.")
         else:
             st.error(f"백업 중 오류 발생: {error_msg}")
-    else:
-        st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
 
 st.divider()
 
@@ -188,10 +217,7 @@ st.divider()
 st.markdown("#### 📝 신규 컨테이너 등록")
 with st.form(key="new_container_form"):
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
-    
-    # <<<<<<<<<<<<<<< ✨ placeholder가 다시 복원되었습니다 ✨ >>>>>>>>>>>>>>>>>
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
-    
     destination = st.radio("2. 출고처", options=destinations, horizontal=True, key="form_destination")
     feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
     seal_no = st.text_input("4. 씰 번호", key="form_seal_no")

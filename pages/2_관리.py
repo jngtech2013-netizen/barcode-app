@@ -114,7 +114,12 @@ if spreadsheet:
     if not backup_sheets:
         st.warning("복구할 백업 시트가 없습니다.")
     else:
-        selected_backup_sheet = st.selectbox("복구할 백업 시트를 선택하세요:", backup_sheets)
+        # [수정] 여기에 key를 추가하여 모바일 키보드 문제를 해결합니다.
+        selected_backup_sheet = st.selectbox(
+            "복구할 백업 시트를 선택하세요:", 
+            backup_sheets, 
+            key="backup_sheet_selector"
+        )
         
         if selected_backup_sheet:
             try:
