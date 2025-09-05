@@ -6,7 +6,6 @@ from google.oauth2.service_account import Credentials
 
 # --- 상수 정의 (공용) ---
 MAIN_SHEET_NAME = "현재 데이터"
-# <<<<<<<<<<<<<<< ✨ 여기가 '등록일시', '완료일시'로 수정되었습니다 ✨ >>>>>>>>>>>>>>>>>
 SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '상태', '등록일시', '완료일시']
 LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
@@ -43,7 +42,7 @@ def load_data_from_gsheet():
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
         all_records = worksheet.get_all_records()
         if not all_records: return []
-        
+
         df = pd.DataFrame(all_records)
         df.replace('', pd.NA, inplace=True)
         if '등록일시' in df.columns:
@@ -62,13 +61,13 @@ def add_row_to_gsheet(data):
     if spreadsheet is None: return False, "Google Sheets에 연결되지 않았습니다."
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-        # [수정] 원본 데이터가 아닌 복사본을 사용하여 side effect 방지
+        # [수정] 원본 데이터 수정을 방지하기 위해 복사본 사용
         data_copy = data.copy()
-        if isinstance(data_copy.get('등록일시'), datetime):
-            data_copy['등록일시'] = data_copy['등록일시'].strftime('%Y-%m-%d %H:%M:%S')
-        if isinstance(data_copy.get('완료일시'), datetime):
-            data_copy['완료일시'] = data_copy['완료일시'].strftime('%Y-%m-%d %H:%M:%S')
-        
+        if isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
+            data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')
+        if isinstance(data_copy.get('완료일시'), (datetime, pd.Timestamp)):
+            data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
+
         row_to_insert = [data_copy.get(header, "") for header in SHEET_HEADERS]
         worksheet.append_row(row_to_insert)
         log_change(f"신규 등록: {data_copy.get('컨테이너 번호')}")
@@ -81,19 +80,18 @@ def update_row_in_gsheet(index, data):
     if spreadsheet is None: return
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-        # [수정] 원본 데이터가 아닌 복사본을 사용하여 side effect 방지
+        # [수정] 원본 데이터 수정을 방지하기 위해 복사본 사용
         data_copy = data.copy()
-        if isinstance(data_copy.get('등록일시'), datetime):
-            data_copy['등록일시'] = data_copy['등록일시'].strftime('%Y-%m-%d %H:%M:%S')
-        if isinstance(data_copy.get('완료일시'), datetime):
-            data_copy['완료일시'] = data_copy['완료일시'].strftime('%Y-%m-%d %H:%M:%S')
-        
+        if isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
+            data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')
+        if isinstance(data_copy.get('완료일시'), (datetime, pd.Timestamp)):
+            data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
+
         row_to_update = [data_copy.get(header, "") for header in SHEET_HEADERS]
         worksheet.update(f'A{index+2}:G{index+2}', [row_to_update])
         log_change(f"데이터 수정: {data_copy.get('컨테이너 번호')}")
     except Exception as e:
         st.error(f"Google Sheets 업데이트 중 오류가 발생했습니다: {e}")
-
 
 def delete_row_from_gsheet(index, container_no):
     if spreadsheet is None: return
@@ -107,9 +105,8 @@ def backup_data_to_new_sheet(container_data):
         today_str = date.today().isoformat()
         backup_sheet_name = f"백업_{today_str}"
         df_new = pd.DataFrame(container_data)
-        
+
         if '등록일시' in df_new.columns:
-            # [수정] NaT (Not a Time) 값 오류를 방지하기 위해 errors='coerce' 추가
             df_new['등록일시'] = pd.to_datetime(df_new['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
         if '완료일시' in df_new.columns:
             df_new['완료일시'] = pd.to_datetime(df_new['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
