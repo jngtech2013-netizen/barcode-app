@@ -6,13 +6,13 @@ from io import BytesIO
 from datetime import date, datetime, timedelta, timezone
 import re
 from utils import (
-    SHEET_HEADERS, 
-    MAIN_SHEET_NAME, 
-    load_data_from_gsheet, 
-    add_row_to_gsheet, 
-    update_row_in_gsheet, 
-    backup_data_to_new_sheet, 
-    connect_to_gsheet, 
+    SHEET_HEADERS,
+    MAIN_SHEET_NAME,
+    load_data_from_gsheet,
+    add_row_to_gsheet,
+    update_row_in_gsheet,
+    backup_data_to_new_sheet,
+    connect_to_gsheet,
     log_change
 )
 
@@ -68,19 +68,19 @@ st.markdown("#### 🔳 바코드 생성")
 with st.container(border=True):
     shippable_containers = [c.get('컨테이너 번호', '') for c in st.session_state.container_list if c.get('상태') == '선적중']
     shippable_containers = [c for c in shippable_containers if c]
-    
+
     if not shippable_containers:
         st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
     else:
         selected_for_barcode = st.selectbox("컨테이너를 선택하면 바코드가 자동 생성됩니다:", shippable_containers, label_visibility="collapsed")
         container_info = next((c for c in st.session_state.container_list if c.get('컨테이너 번호') == selected_for_barcode), {})
-        
+
         st.info(f"**출고처:** {container_info.get('출고처', 'N/A')} / **피트수:** {container_info.get('피트수', 'N/A')}")
-        
+
         barcode_data = selected_for_barcode
         fp = BytesIO()
         Code128(barcode_data, writer=ImageWriter()).write(fp)
-        
+
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             st.image(fp)
@@ -119,9 +119,9 @@ else:
     if '완료일시' in df.columns:
         df['완료일시'] = pd.to_datetime(df['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
     df.fillna('', inplace=True)
-    
+
     column_order = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '등록일시', '완료일시', '선적완료']
-    
+
     edited_df = st.data_editor(
         df,
         column_order=column_order,
@@ -142,65 +142,54 @@ else:
     if edited_df is not None:
         edited_list = edited_df.to_dict('records')
         for i, (original_row, edited_row) in enumerate(zip(st.session_state.container_list, edited_list)):
-            # [수정된 로직] 원본의 '상태'와 체크박스의 '상태'를 비교하여 변경된 행만 정확히 찾음
             original_status = original_row.get('상태', '선적중')
             new_status_from_checkbox = "선적완료" if edited_row.get('선적완료') else "선적중"
 
             if original_status != new_status_from_checkbox:
                 new_status_bool = edited_row.get('선적완료', False)
                 edited_row['상태'] = "선적완료" if new_status_bool else "선적중"
-                
+
                 if new_status_bool:
                     edited_row['완료일시'] = get_korea_now()
                 else:
                     edited_row['완료일시'] = None
-                
-                # [수정] 원본의 등록일시를 그대로 유지하여 데이터 손실 방지
+
                 edited_row['등록일시'] = original_row.get('등록일시')
 
                 st.session_state.container_list[i] = edited_row
                 update_row_in_gsheet(i, edited_row)
                 st.rerun()
 
-# <<<<<<<<<<<<<<< ✨ 데이터 백업 로직이 안전하게 수정되었습니다 ✨ >>>>>>>>>>>>>>>>>
 if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
     completed_data = [item for item in st.session_state.container_list if item.get('상태') == '선적완료']
     pending_data = [item for item in st.session_state.container_list if item.get('상태') == '선적중']
-    
+
     if not completed_data:
         st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
     else:
         with st.spinner('데이터를 백업하는 중...'):
             success, error_msg = backup_data_to_new_sheet(completed_data)
-        
+
         if success:
             st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 백업했습니다!")
-            
+
             with st.spinner('메인 시트를 정리하는 중...'):
                 try:
                     spreadsheet = connect_to_gsheet()
                     if spreadsheet:
                         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-                        
-                        # 삭제할 컨테이너 번호 목록
                         completed_nos = {item['컨테이너 번호'] for item in completed_data}
-                        
-                        # 시트의 모든 데이터를 한번에 읽어옴
                         all_data = worksheet.get_all_records()
-                        
-                        # 삭제할 행 번호를 찾음 (역순으로 찾아야 삭제 시 인덱스가 꼬이지 않음)
                         rows_to_delete = []
                         for i in range(len(all_data) - 1, -1, -1):
                             if all_data[i].get('컨테이너 번호') in completed_nos:
-                                rows_to_delete.append(i + 2) # +2 for 1-based index and header
-                        
-                        # 찾은 행들을 삭제 (gspread는 한 번에 여러 행 삭제를 지원하지 않으므로 반복)
+                                rows_to_delete.append(i + 2)
                         for row_num in rows_to_delete:
                             worksheet.delete_rows(row_num)
 
                         log_message = f"데이터 백업: {len(completed_data)}개 백업, {len(pending_data)}개 이월."
                         log_change(log_message)
-                        
+
                         st.session_state.container_list = pending_data
                         st.success("메인 시트 정리가 완료되었습니다.")
                         st.rerun()
@@ -221,27 +210,29 @@ with st.form(key="new_container_form"):
     destination = st.radio("2. 출고처", options=destinations, horizontal=True, key="form_destination")
     feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
     seal_no = st.text_input("4. 씰 번호", key="form_seal_no")
-    
+
     submitted = st.form_submit_button("➕ 등록하기", use_container_width=True)
     if submitted:
         pattern = re.compile(r'^[A-Z]{4}\d{7}$')
-        if not container_no or not seal_no: 
+        if not container_no or not seal_no:
             st.error("컨테이너 번호와 씰 번호를 모두 입력해주세요.")
-        elif not pattern.match(container_no): 
+        elif not pattern.match(container_no):
             st.error("컨테이너 번호 형식이 올바르지 않습니다.")
-        elif any(c.get('컨테이너 번호') == container_no for c in st.session_state.container_list): 
+        elif any(c.get('컨테이너 번호') == container_no for c in st.session_state.container_list):
             st.warning(f"이미 등록된 컨테이너 번호입니다: {container_no}")
         else:
+            # [수정된 부분]
+            # get_korea_now()를 pd.to_datetime()으로 감싸 데이터 타입을 통일합니다.
             new_container = {
-                '컨테이너 번호': container_no, '출고처': destination, '피트수': feet, 
+                '컨테이너 번호': container_no, '출고처': destination, '피트수': feet,
                 '씰 번호': seal_no, '상태': '선적중',
-                '등록일시': get_korea_now(),
+                '등록일시': pd.to_datetime(get_korea_now()),
                 '완료일시': ''
             }
-            
+
             with st.spinner('데이터를 저장하는 중...'):
                 success, message = add_row_to_gsheet(new_container)
-            
+
             if success:
                 st.session_state.container_list.append(new_container)
                 st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
