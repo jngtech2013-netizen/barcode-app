@@ -221,12 +221,16 @@ with st.form(key="new_container_form"):
         elif any(c.get('컨테이너 번호') == container_no for c in st.session_state.container_list):
             st.warning(f"이미 등록된 컨테이너 번호입니다: {container_no}")
         else:
-            # [수정된 부분]
-            # get_korea_now()를 pd.to_datetime()으로 감싸 데이터 타입을 통일합니다.
+            # [최종 수정된 부분]
+            # 시간대 정보가 있는 datetime 객체에서 시간대 정보를 제거(.replace(tzinfo=None))하여
+            # session_state에 저장된 모든 시간 데이터 타입을 'timezone-naive'로 통일합니다.
+            korea_now = get_korea_now()
+            naive_datetime = korea_now.replace(tzinfo=None)
+
             new_container = {
                 '컨테이너 번호': container_no, '출고처': destination, '피트수': feet,
                 '씰 번호': seal_no, '상태': '선적중',
-                '등록일시': pd.to_datetime(get_korea_now()),
+                '등록일시': pd.to_datetime(naive_datetime),
                 '완료일시': ''
             }
 
