@@ -170,8 +170,16 @@ if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
                 worksheet.update('A1', [SHEET_HEADERS])
                 if pending_data:
                     df_pending = pd.DataFrame(pending_data)
-                    df_pending['등록일시'] = pd.to_datetime(df_pending['등록일시']).dt.strftime('%Y-%m-%d %H:%M:%S')
-                    df_pending['완료일시'] = pd.to_datetime(df_pending['완료일시']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                    # <<<<<<<<<<<<<<< ✨ 여기가 수정되었습니다 (안전한 시간 변환) ✨ >>>>>>>>>>>>>>>>>
+                    if '등록일시' in df_pending.columns:
+                        df_pending['등록일시'] = pd.to_datetime(df_pending['등록일시'], errors='coerce').apply(
+                            lambda x: x.strftime('%Y-%m-%d %H:%M:%S') if pd.notna(x) else ''
+                        )
+                    if '완료일시' in df_pending.columns:
+                        df_pending['완료일시'] = pd.to_datetime(df_pending['완료일시'], errors='coerce').apply(
+                            lambda x: x.strftime('%Y-%m-%d %H:%M:%S') if pd.notna(x) else ''
+                        )
+                    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
                     worksheet.update('A2', df_pending[SHEET_HEADERS].values.tolist())
             log_message = f"데이터 백업: {len(completed_data)}개 백업, {len(pending_data)}개 이월."
             log_change(log_message)
@@ -188,10 +196,7 @@ st.divider()
 st.markdown("#### 📝 신규 컨테이너 등록")
 with st.form(key="new_container_form"):
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
-    
-    # <<<<<<<<<<<<<<< ✨ placeholder가 다시 복원되었습니다 ✨ >>>>>>>>>>>>>>>>>
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
-    
     destination = st.radio("2. 출고처", options=destinations, horizontal=True, key="form_destination")
     feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
     seal_no = st.text_input("4. 씰 번호", key="form_seal_no")
