@@ -6,6 +6,7 @@ from google.oauth2.service_account import Credentials
 
 # --- 상수 정의 (공용) ---
 MAIN_SHEET_NAME = "현재 데이터"
+# <<<<<<<<<<<<<<< ✨ 여기가 '등록일시', '완료일시'로 수정되었습니다 ✨ >>>>>>>>>>>>>>>>>
 SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '상태', '등록일시', '완료일시']
 LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
