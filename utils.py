@@ -86,6 +86,7 @@ def update_row_in_gsheet(index, data):
             data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
 
         row_to_update = [data_copy.get(header, "") for header in SHEET_HEADERS]
+        # 구글 시트는 1-based index이고 헤더가 있으므로 +2
         worksheet.update(f'A{index+2}:G{index+2}', [row_to_update])
         log_change(f"데이터 수정: {data_copy.get('컨테이너 번호')}")
     except Exception as e:

@@ -88,7 +88,15 @@ with st.container(border=True):
 st.divider()
 
 # --- 컨테이너 현황 ---
-st.markdown("#### 📋 컨테이너 현황")
+col_header, col_button = st.columns([0.8, 0.2])
+with col_header:
+    st.markdown("#### 📋 컨테이너 현황")
+with col_button:
+    if st.button("🔄 데이터 새로고침", use_container_width=True):
+        if 'container_list' in st.session_state:
+            del st.session_state['container_list']
+        st.rerun()
+
 completed_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적완료'])
 pending_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적중'])
 
