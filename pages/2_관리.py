@@ -124,21 +124,26 @@ if spreadsheet:
         if selected_backup_sheet:
             try:
                 backup_worksheet = spreadsheet.worksheet(selected_backup_sheet)
-                backup_records = backup_worksheet.get_all_records()
+                # [수정] get_all_records() 대신 get_all_values()를 사용하여 모든 값을 문자열로 가져옴
+                all_values = backup_worksheet.get_all_values()
 
-                if not backup_records:
+                if len(all_values) < 2:
                     st.info("선택한 백업 시트에는 데이터가 없습니다.")
                 else:
-                    df_backup = pd.DataFrame(backup_records)
-
+                    headers = all_values[0]
+                    data = all_values[1:]
+                    df_backup = pd.DataFrame(data, columns=headers)
+                    
+                    # [수정] 씰 번호는 이미 문자열이지만, 안전을 위해 타입 지정 유지
                     if '씰 번호' in df_backup.columns:
                         df_backup['씰 번호'] = df_backup['씰 번호'].astype(str)
 
+                    # 옛날 백업 시트에 없는 경우를 대비하여 빈 컬럼을 추가해줌
                     if '등록일시' not in df_backup.columns:
                         df_backup['등록일시'] = pd.NA
                     if '완료일시' not in df_backup.columns:
                         df_backup['완료일시'] = pd.NA
-
+                    
                     st.markdown("##### 📋 선택된 백업 시트 현황")
                     if '상태' in df_backup.columns:
                         status_counts = df_backup['상태'].value_counts()
@@ -160,7 +165,7 @@ if spreadsheet:
                             </div>
                             """, unsafe_allow_html=True
                         )
-
+                    
                     existing_nos = {c.get('컨테이너 번호') for c in st.session_state.container_list}
                     recoverable_df = df_backup[~df_backup['컨테이너 번호'].isin(existing_nos)].copy()
 
@@ -173,9 +178,9 @@ if spreadsheet:
 
                         recoverable_df.insert(0, '선택', False)
                         recoverable_df.insert(1, 'No.', range(1, len(recoverable_df) + 1))
-
+                        
                         display_order = ['선택', 'No.'] + [h for h in SHEET_HEADERS if h in recoverable_df.columns]
-
+                        
                         edited_df = st.data_editor(
                             recoverable_df,
                             column_order=display_order,
@@ -194,7 +199,7 @@ if spreadsheet:
                                 "완료일시": st.column_config.TextColumn(disabled=True),
                             }
                         )
-
+                        
                         selected_rows = edited_df[edited_df['선택']]
 
                         if not selected_rows.empty:
@@ -217,7 +222,7 @@ if spreadsheet:
                         st.divider()
                         st.markdown("##### 2. 시트 전체 복구 (현재 목록에 없는 데이터만)")
                         st.warning("주의: 이 작업은 위 테이블에 보이는 모든 컨테이너를 한 번에 추가합니다.")
-
+                        
                         if st.button(f"'{selected_backup_sheet}' 시트의 모든 데이터 추가하기", use_container_width=True):
                             added_count = 0
                             for index, row in recoverable_df.iterrows():
