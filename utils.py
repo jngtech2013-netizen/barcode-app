@@ -61,7 +61,6 @@ def add_row_to_gsheet(data):
     if spreadsheet is None: return False, "Google Sheets에 연결되지 않았습니다."
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-        # [수정] 원본 데이터 수정을 방지하기 위해 복사본 사용
         data_copy = data.copy()
         if isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
             data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')
@@ -80,7 +79,6 @@ def update_row_in_gsheet(index, data):
     if spreadsheet is None: return
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-        # [수정] 원본 데이터 수정을 방지하기 위해 복사본 사용
         data_copy = data.copy()
         if isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
             data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')

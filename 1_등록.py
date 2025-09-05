@@ -33,9 +33,6 @@ def clear_form_inputs():
 if st.session_state.get("submission_success", False):
     clear_form_inputs()
     st.session_state.submission_success = False
-    # 성공 메시지를 한 번만 표시한 후 지우고 싶다면 아래 줄의 주석을 해제하세요.
-    # st.session_state["form_success_message"] = ""
-
 
 # --- 사이드바 스타일 ---
 st.markdown(
@@ -218,7 +215,6 @@ with st.form(key="new_container_form"):
 
     submitted = st.form_submit_button("➕ 등록하기", use_container_width=True)
     if submitted:
-        # [수정] 버튼을 누를 때마다 이전 메시지를 초기화
         st.session_state["form_success_message"] = ""
         st.session_state["form_error_message"] = ""
 
@@ -236,7 +232,7 @@ with st.form(key="new_container_form"):
             new_container = {
                 '컨테이너 번호': container_no, '출고처': destination, '피트수': feet,
                 '씰 번호': seal_no, '상태': '선적중',
-                '등록일시': pd.to_datetime(naive_datetime),
+                '등록일시': naive_datetime,
                 '완료일시': ''
             }
 
@@ -245,15 +241,12 @@ with st.form(key="new_container_form"):
 
             if success:
                 st.session_state.container_list.append(new_container)
-                # [수정] 성공 메시지를 session_state에 저장
                 st.session_state["form_success_message"] = f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다."
                 st.session_state.submission_success = True
                 st.rerun()
             else:
-                # [수정] 실패 메시지를 session_state에 저장
                 st.session_state["form_error_message"] = f"등록 실패: {message}. 잠시 후 다시 시도해주세요."
 
-# [수정] 폼 아래에 등록 결과 메시지를 항상 표시하는 부분
 if st.session_state.get("form_success_message"):
     st.success(st.session_state.get("form_success_message"))
 if st.session_state.get("form_error_message"):
