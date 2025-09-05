@@ -155,40 +155,54 @@ else:
                 update_row_in_gsheet(i, edited_row)
                 st.rerun()
 
+# <<<<<<<<<<<<<<< ✨ 데이터 백업 로직이 안전하게 수정되었습니다 ✨ >>>>>>>>>>>>>>>>>
 if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
     completed_data = [item for item in st.session_state.container_list if item.get('상태') == '선적완료']
     pending_data = [item for item in st.session_state.container_list if item.get('상태') == '선적중']
     
-    if completed_data:
-        success, error_msg = backup_data_to_new_sheet(completed_data)
+    if not completed_data:
+        st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
+    else:
+        with st.spinner('데이터를 백업하는 중...'):
+            success, error_msg = backup_data_to_new_sheet(completed_data)
+        
         if success:
             st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 백업했습니다!")
-            spreadsheet = connect_to_gsheet()
-            if spreadsheet:
-                worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-                worksheet.clear()
-                worksheet.update('A1', [SHEET_HEADERS])
-                if pending_data:
-                    df_pending = pd.DataFrame(pending_data)
-                    # <<<<<<<<<<<<<<< ✨ 여기가 수정되었습니다 (안전한 시간 변환) ✨ >>>>>>>>>>>>>>>>>
-                    if '등록일시' in df_pending.columns:
-                        df_pending['등록일시'] = pd.to_datetime(df_pending['등록일시'], errors='coerce').apply(
-                            lambda x: x.strftime('%Y-%m-%d %H:%M:%S') if pd.notna(x) else ''
-                        )
-                    if '완료일시' in df_pending.columns:
-                        df_pending['완료일시'] = pd.to_datetime(df_pending['완료일시'], errors='coerce').apply(
-                            lambda x: x.strftime('%Y-%m-%d %H:%M:%S') if pd.notna(x) else ''
-                        )
-                    # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                    worksheet.update('A2', df_pending[SHEET_HEADERS].values.tolist())
-            log_message = f"데이터 백업: {len(completed_data)}개 백업, {len(pending_data)}개 이월."
-            log_change(log_message)
-            st.session_state.container_list = pending_data
-            st.rerun()
+            
+            with st.spinner('메인 시트를 정리하는 중...'):
+                try:
+                    spreadsheet = connect_to_gsheet()
+                    if spreadsheet:
+                        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+                        
+                        # 삭제할 컨테이너 번호 목록
+                        completed_nos = {item['컨테이너 번호'] for item in completed_data}
+                        
+                        # 시트의 모든 데이터를 한번에 읽어옴
+                        all_data = worksheet.get_all_records()
+                        
+                        # 삭제할 행 번호를 찾음 (역순으로 찾아야 삭제 시 인덱스가 꼬이지 않음)
+                        rows_to_delete = []
+                        for i in range(len(all_data) - 1, -1, -1):
+                            if all_data[i].get('컨테이너 번호') in completed_nos:
+                                rows_to_delete.append(i + 2) # +2 for 1-based index and header
+                        
+                        # 찾은 행들을 삭제 (gspread는 한 번에 여러 행 삭제를 지원하지 않으므로 반복)
+                        for row_num in rows_to_delete:
+                            worksheet.delete_rows(row_num)
+
+                        log_message = f"데이터 백업: {len(completed_data)}개 백업, {len(pending_data)}개 이월."
+                        log_change(log_message)
+                        
+                        st.session_state.container_list = pending_data
+                        st.success("메인 시트 정리가 완료되었습니다.")
+                        st.rerun()
+
+                except Exception as e:
+                    st.error(f"메인 시트 정리 중 오류가 발생했습니다: {e}")
+                    st.warning("데이터 백업은 완료되었으나, 메인 시트 정리에 실패했습니다. 수동으로 '선적완료' 데이터를 삭제해주세요.")
         else:
             st.error(f"백업 중 오류 발생: {error_msg}")
-    else:
-        st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
 
 st.divider()
 
