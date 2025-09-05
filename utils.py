@@ -40,13 +40,20 @@ def load_data_from_gsheet():
     if spreadsheet is None: return []
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-        all_records = worksheet.get_all_records()
-        if not all_records: return []
-
-        df = pd.DataFrame(all_records)
+        # [수정] get_all_records() 대신 get_all_values()를 사용하여 모든 값을 문자열로 가져옴
+        all_values = worksheet.get_all_values()
+        
+        # 헤더만 있고 데이터가 없는 경우 빈 리스트 반환
+        if len(all_values) < 2:
+            return []
+        
+        headers = all_values[0]
+        data = all_values[1:]
+        
+        df = pd.DataFrame(data, columns=headers)
         df.replace('', pd.NA, inplace=True)
         
-        # [수정] '씰 번호' 컬럼을 항상 문자열(string) 타입으로 강제 변환
+        # '씰 번호'는 이미 문자열이므로 별도 처리가 필요 없지만, 안전을 위해 유지
         if '씰 번호' in df.columns:
             df['씰 번호'] = df['씰 번호'].astype(str)
             
@@ -54,7 +61,9 @@ def load_data_from_gsheet():
             df['등록일시'] = pd.to_datetime(df['등록일시'], errors='coerce')
         if '완료일시' in df.columns:
             df['완료일시'] = pd.to_datetime(df['완료일시'], errors='coerce')
+        
         return df.to_dict('records')
+        
     except gspread.exceptions.WorksheetNotFound:
         st.error(f"'{MAIN_SHEET_NAME}' 시트를 찾을 수 없습니다.")
         return []
@@ -73,7 +82,6 @@ def add_row_to_gsheet(data):
             data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
 
         row_to_insert = [data_copy.get(header, "") for header in SHEET_HEADERS]
-        # [수정] value_input_option을 추가하여 구글 시트의 자동 타입 변환 방지
         worksheet.append_row(row_to_insert, value_input_option='USER_ENTERED')
         log_change(f"신규 등록: {data_copy.get('컨테이너 번호')}")
         return True, "성공"
@@ -92,7 +100,6 @@ def update_row_in_gsheet(index, data):
             data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
 
         row_to_update = [data_copy.get(header, "") for header in SHEET_HEADERS]
-        # [수정] value_input_option을 추가하여 구글 시트의 자동 타입 변환 방지
         worksheet.update(f'A{index+2}:G{index+2}', [row_to_update], value_input_option='USER_ENTERED')
         log_change(f"데이터 수정: {data_copy.get('컨테이너 번호')}")
     except Exception as e:
@@ -123,7 +130,7 @@ def backup_data_to_new_sheet(container_data):
 
         try:
             backup_sheet = spreadsheet.worksheet(backup_sheet_name)
-            all_records = backup_sheet.get_all_records()
+            all_records = backup_sheet.get_all_records(value_render_option='AS_IS') # 백업 시트도 원본 그대로 읽기
             if all_records:
                 df_existing = pd.DataFrame(all_records)
                 df_combined = pd.concat([df_existing, df_new])
