@@ -33,6 +33,9 @@ def clear_form_inputs():
 if st.session_state.get("submission_success", False):
     clear_form_inputs()
     st.session_state.submission_success = False
+    # 성공 메시지를 한 번만 표시한 후 지우고 싶다면 아래 줄의 주석을 해제하세요.
+    # st.session_state["form_success_message"] = ""
+
 
 # --- 사이드바 스타일 ---
 st.markdown(
@@ -150,7 +153,9 @@ else:
                 edited_row['상태'] = "선적완료" if new_status_bool else "선적중"
 
                 if new_status_bool:
-                    edited_row['완료일시'] = get_korea_now()
+                    aware_completion_time = get_korea_now()
+                    naive_completion_time = aware_completion_time.replace(tzinfo=None)
+                    edited_row['완료일시'] = naive_completion_time
                 else:
                     edited_row['완료일시'] = None
 
@@ -213,17 +218,18 @@ with st.form(key="new_container_form"):
 
     submitted = st.form_submit_button("➕ 등록하기", use_container_width=True)
     if submitted:
+        # [수정] 버튼을 누를 때마다 이전 메시지를 초기화
+        st.session_state["form_success_message"] = ""
+        st.session_state["form_error_message"] = ""
+
         pattern = re.compile(r'^[A-Z]{4}\d{7}$')
         if not container_no or not seal_no:
-            st.error("컨테이너 번호와 씰 번호를 모두 입력해주세요.")
+            st.session_state["form_error_message"] = "컨테이너 번호와 씰 번호를 모두 입력해주세요."
         elif not pattern.match(container_no):
-            st.error("컨테이너 번호 형식이 올바르지 않습니다.")
+            st.session_state["form_error_message"] = "컨테이너 번호 형식이 올바르지 않습니다."
         elif any(c.get('컨테이너 번호') == container_no for c in st.session_state.container_list):
-            st.warning(f"이미 등록된 컨테이너 번호입니다: {container_no}")
+            st.session_state["form_error_message"] = f"이미 등록된 컨테이너 번호입니다: {container_no}"
         else:
-            # [최종 수정된 부분]
-            # 시간대 정보가 있는 datetime 객체에서 시간대 정보를 제거(.replace(tzinfo=None))하여
-            # session_state에 저장된 모든 시간 데이터 타입을 'timezone-naive'로 통일합니다.
             korea_now = get_korea_now()
             naive_datetime = korea_now.replace(tzinfo=None)
 
@@ -239,8 +245,16 @@ with st.form(key="new_container_form"):
 
             if success:
                 st.session_state.container_list.append(new_container)
-                st.success(f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다.")
+                # [수정] 성공 메시지를 session_state에 저장
+                st.session_state["form_success_message"] = f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다."
                 st.session_state.submission_success = True
                 st.rerun()
             else:
-                st.error(f"등록 실패: {message}. 잠시 후 다시 시도해주세요.")
+                # [수정] 실패 메시지를 session_state에 저장
+                st.session_state["form_error_message"] = f"등록 실패: {message}. 잠시 후 다시 시도해주세요."
+
+# [수정] 폼 아래에 등록 결과 메시지를 항상 표시하는 부분
+if st.session_state.get("form_success_message"):
+    st.success(st.session_state.get("form_success_message"))
+if st.session_state.get("form_error_message"):
+    st.error(st.session_state.get("form_error_message"))
