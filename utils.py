@@ -40,10 +40,8 @@ def load_data_from_gsheet():
     if spreadsheet is None: return []
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-        # [수정] get_all_records() 대신 get_all_values()를 사용하여 모든 값을 문자열로 가져옴
         all_values = worksheet.get_all_values()
         
-        # 헤더만 있고 데이터가 없는 경우 빈 리스트 반환
         if len(all_values) < 2:
             return []
         
@@ -53,7 +51,6 @@ def load_data_from_gsheet():
         df = pd.DataFrame(data, columns=headers)
         df.replace('', pd.NA, inplace=True)
         
-        # '씰 번호'는 이미 문자열이므로 별도 처리가 필요 없지만, 안전을 위해 유지
         if '씰 번호' in df.columns:
             df['씰 번호'] = df['씰 번호'].astype(str)
             
@@ -118,6 +115,8 @@ def backup_data_to_new_sheet(container_data):
         backup_sheet_name = f"백업_{today_str}"
         df_new = pd.DataFrame(container_data)
 
+        if '씰 번호' in df_new.columns:
+            df_new['씰 번호'] = df_new['씰 번호'].astype(str)
         if '등록일시' in df_new.columns:
             df_new['등록일시'] = pd.to_datetime(df_new['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
         if '완료일시' in df_new.columns:
@@ -130,13 +129,21 @@ def backup_data_to_new_sheet(container_data):
 
         try:
             backup_sheet = spreadsheet.worksheet(backup_sheet_name)
-            all_records = backup_sheet.get_all_records(value_render_option='AS_IS') # 백업 시트도 원본 그대로 읽기
-            if all_records:
-                df_existing = pd.DataFrame(all_records)
+            all_values = backup_sheet.get_all_values()
+            
+            if len(all_values) > 1:
+                headers = all_values[0]
+                existing_data = all_values[1:]
+                df_existing = pd.DataFrame(existing_data, columns=headers)
+                
+                if '씰 번호' in df_existing.columns:
+                    df_existing['씰 번호'] = df_existing['씰 번호'].astype(str)
+                    
                 df_combined = pd.concat([df_existing, df_new])
                 df_final = df_combined.drop_duplicates(subset=['컨테이너 번호'], keep='last')
             else:
                 df_final = df_new
+                
             backup_sheet.clear()
             backup_sheet.update([SHEET_HEADERS] + df_final.values.tolist(), value_input_option='USER_ENTERED')
         except gspread.exceptions.WorksheetNotFound:
