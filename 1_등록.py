@@ -14,7 +14,7 @@ from utils import (
     backup_data_to_new_sheet,
     connect_to_gsheet,
     log_change,
-    delete_row_from_gsheet # 삭제 함수 import 추가
+    delete_row_from_gsheet
 )
 
 # --- 앱 초기 설정 ---
@@ -184,18 +184,16 @@ if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
             success, error_msg = backup_data_to_new_sheet(completed_data)
         
         if success:
-            st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 백업했습니다!")
+            st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 월별/임시 백업했습니다!")
             
             with st.spinner('메인 시트를 정리하는 중...'):
                 try:
-                    # [수정] 삭제 로직을 session_state 인덱스 기반으로 변경하여 안전성 확보
                     indices_to_delete = sorted([i for i, item in completed_items_with_indices], reverse=True)
                     
                     for index in indices_to_delete:
                         container_no_to_delete = st.session_state.container_list[index].get('컨테이너 번호')
                         delete_row_from_gsheet(index, container_no_to_delete)
                     
-                    # session_state에서도 해당 인덱스 삭제
                     for index in indices_to_delete:
                         st.session_state.container_list.pop(index)
 

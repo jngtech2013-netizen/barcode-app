@@ -9,6 +9,8 @@ MAIN_SHEET_NAME = "현재 데이터"
 SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '상태', '등록일시', '완료일시']
 LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
+TEMP_BACKUP_PREFIX = "임시백업_"
+MONTHLY_BACKUP_PREFIX = "백업_"
 
 # --- Google Sheets 연동 (공용) ---
 @st.cache_resource
@@ -41,26 +43,18 @@ def load_data_from_gsheet():
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
         all_values = worksheet.get_all_values()
-        
-        if len(all_values) < 2:
-            return []
+        if len(all_values) < 2: return []
         
         headers = all_values[0]
         data = all_values[1:]
-        
         df = pd.DataFrame(data, columns=headers)
         df.replace('', pd.NA, inplace=True)
         
-        if '씰 번호' in df.columns:
-            df['씰 번호'] = df['씰 번호'].astype(str)
-            
-        if '등록일시' in df.columns:
-            df['등록일시'] = pd.to_datetime(df['등록일시'], errors='coerce')
-        if '완료일시' in df.columns:
-            df['완료일시'] = pd.to_datetime(df['완료일시'], errors='coerce')
+        if '씰 번호' in df.columns: df['씰 번호'] = df['씰 번호'].astype(str)
+        if '등록일시' in df.columns: df['등록일시'] = pd.to_datetime(df['등록일시'], errors='coerce')
+        if '완료일시' in df.columns: df['완료일시'] = pd.to_datetime(df['완료일시'], errors='coerce')
         
         return df.to_dict('records')
-        
     except gspread.exceptions.WorksheetNotFound:
         st.error(f"'{MAIN_SHEET_NAME}' 시트를 찾을 수 없습니다.")
         return []
@@ -86,6 +80,7 @@ def add_row_to_gsheet(data):
         st.error(f"Google Sheets 저장 중 오류 발생: {e}")
         return False, str(e)
 
+
 def update_row_in_gsheet(index, data):
     if spreadsheet is None: return
     try:
@@ -102,6 +97,7 @@ def update_row_in_gsheet(index, data):
     except Exception as e:
         st.error(f"Google Sheets 업데이트 중 오류가 발생했습니다: {e}")
 
+
 def delete_row_from_gsheet(index, container_no):
     if spreadsheet is None: return
     try:
@@ -115,46 +111,50 @@ def delete_row_from_gsheet(index, container_no):
 def backup_data_to_new_sheet(container_data):
     if spreadsheet is None: return False, "스프레드시트 연결 안됨"
     try:
-        today_str = date.today().isoformat()
-        backup_sheet_name = f"백업_{today_str}"
         df_new = pd.DataFrame(container_data)
         
-        # [수정] Timestamp -> JSON 변환 오류를 해결하기 위한 새로운 날짜 처리 로직
-        if '등록일시' in df_new.columns:
-            df_new['등록일시'] = pd.to_datetime(df_new['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
-        if '완료일시' in df_new.columns:
-            df_new['완료일시'] = pd.to_datetime(df_new['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
-
-        if '씰 번호' in df_new.columns:
-            df_new['씰 번호'] = df_new['씰 번호'].astype(str)
-            
+        # 데이터 전처리
+        if '등록일시' in df_new.columns: df_new['등록일시'] = pd.to_datetime(df_new['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
+        if '완료일시' in df_new.columns: df_new['완료일시'] = pd.to_datetime(df_new['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
+        if '씰 번호' in df_new.columns: df_new['씰 번호'] = df_new['씰 번호'].astype(str)
         for header in SHEET_HEADERS:
-            if header not in df_new.columns:
-                df_new[header] = ""
+            if header not in df_new.columns: df_new[header] = ""
         df_new = df_new[SHEET_HEADERS]
 
+        # --- 1. 월별 통합 백업 (Monthly Archive) ---
+        month_str = date.today().strftime('%Y-%m')
+        monthly_backup_name = f"{MONTHLY_BACKUP_PREFIX}{month_str}"
         try:
-            backup_sheet = spreadsheet.worksheet(backup_sheet_name)
-            all_values = backup_sheet.get_all_values()
-            
-            if len(all_values) > 1:
-                headers = all_values[0]
-                existing_data = all_values[1:]
-                df_existing = pd.DataFrame(existing_data, columns=headers)
-                
-                if '씰 번호' in df_existing.columns:
-                    df_existing['씰 번호'] = df_existing['씰 번호'].astype(str)
-                    
-                df_combined = pd.concat([df_existing, df_new])
-                df_final = df_combined.drop_duplicates(subset=['컨테이너 번호'], keep='last')
-            else:
-                df_final = df_new
-                
-            backup_sheet.clear()
-            backup_sheet.update([SHEET_HEADERS] + df_final.values.tolist(), value_input_option='USER_ENTERED')
+            backup_sheet = spreadsheet.worksheet(monthly_backup_name)
+            backup_sheet.append_rows(df_new.values.tolist(), value_input_option='USER_ENTERED')
         except gspread.exceptions.WorksheetNotFound:
-            new_sheet = spreadsheet.add_worksheet(title=backup_sheet_name, rows=100, cols=30)
+            new_sheet = spreadsheet.add_worksheet(title=monthly_backup_name, rows=len(df_new) + 1, cols=len(SHEET_HEADERS))
             new_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
+
+        # --- 2. 실시간 임시 백업 (Temporary Snapshot) ---
+        now_str = datetime.now(KST).strftime('%Y-%m-%d_%H%M%S')
+        temp_backup_name = f"{TEMP_BACKUP_PREFIX}{now_str}"
+        temp_sheet = spreadsheet.add_worksheet(title=temp_backup_name, rows=len(df_new) + 1, cols=len(SHEET_HEADERS))
+        temp_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
+            
         return True, None
     except Exception as e:
         return False, str(e)
+
+def delete_temporary_backups():
+    if spreadsheet is None: return 0, "스프레드시트 연결 안됨"
+    try:
+        all_worksheets = spreadsheet.worksheets()
+        sheets_to_delete = [
+            sheet for sheet in all_worksheets if sheet.title.startswith(TEMP_BACKUP_PREFIX)
+        ]
+        
+        if not sheets_to_delete:
+            return 0, "삭제할 임시 백업 시트가 없습니다."
+
+        for sheet in sheets_to_delete:
+            spreadsheet.del_worksheet(sheet)
+        
+        return len(sheets_to_delete), "성공"
+    except Exception as e:
+        return 0, str(e)
