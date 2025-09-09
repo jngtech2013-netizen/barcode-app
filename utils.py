@@ -3,6 +3,7 @@ from datetime import date, datetime, timezone, timedelta
 import pandas as pd
 import gspread
 from gspread.utils import column_letter_to_index
+from google.oauth2.service_account import Credentials # [복원] 누락되었던 필수 import 구문
 
 # --- 상수 정의 (공용) ---
 MAIN_SHEET_NAME = "현재 데이터"
