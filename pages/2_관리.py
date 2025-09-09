@@ -12,7 +12,8 @@ from utils import (
     log_change,
     connect_to_gsheet,
     delete_temporary_backups,
-    TEMP_BACKUP_PREFIX
+    TEMP_BACKUP_PREFIX,
+    MONTHLY_BACKUP_PREFIX
 )
 
 # --- 앱 초기 설정 ---
@@ -116,7 +117,8 @@ st.info("실수로 데이터를 초기화했거나 이전 데이터를 추가할
 spreadsheet = connect_to_gsheet()
 if spreadsheet:
     all_sheets = [s.title for s in spreadsheet.worksheets()]
-    backup_sheets = sorted([s for s in all_sheets if not s.startswith("임시백업_")], reverse=True) #임시백업 제외
+    backup_sheets = sorted([s for s in all_sheets if s.startswith(MONTHLY_BACKUP_PREFIX)], reverse=True)
+    
     if not backup_sheets:
         st.warning("복구할 백업 시트가 없습니다.")
     else:
@@ -143,43 +145,25 @@ if spreadsheet:
 
                     if '등록일시' not in df_backup.columns: df_backup['등록일시'] = pd.NA
                     if '완료일시' not in df_backup.columns: df_backup['완료일시'] = pd.NA
-                    
-                    st.markdown("##### 📋 선택된 백업 시트 현황")
-                    # ... (이하 데이터 복구 UI 코드는 이전과 동일)
-                    
+                                        
                     existing_nos = {c.get('컨테이너 번호') for c in st.session_state.container_list}
                     recoverable_df = df_backup[~df_backup['컨테이너 번호'].isin(existing_nos)].copy()
 
                     if recoverable_df.empty:
                         st.success("백업 시트의 모든 데이터가 이미 현재 목록에 존재합니다.")
                     else:
-                        # ... (이하 데이터 복구 UI 코드는 이전과 동일)
                         st.markdown("---")
-                        st.markdown("##### 1. 개별 컨테이너 선택 복구")
+                        st.markdown("##### 개별 컨테이너 선택 복구")
                         st.write("아래 테이블에서 복구할 컨테이너를 선택하세요.")
 
                         recoverable_df.insert(0, '선택', False)
-                        recoverable_df.insert(1, 'No.', range(1, len(recoverable_df) + 1))
-                        
-                        display_order = ['선택', 'No.'] + [h for h in SHEET_HEADERS if h in recoverable_df.columns]
                         
                         edited_df = st.data_editor(
                             recoverable_df,
-                            column_order=display_order,
                             use_container_width=True,
                             hide_index=True,
                             key=f"recovery_editor_{selected_backup_sheet}",
-                            column_config={
-                                "선택": st.column_config.CheckboxColumn(),
-                                "No.": st.column_config.NumberColumn(disabled=True),
-                                "컨테이너 번호": st.column_config.TextColumn(disabled=True),
-                                "출고처": st.column_config.TextColumn(disabled=True),
-                                "피트수": st.column_config.TextColumn(disabled=True),
-                                "씰 번호": st.column_config.TextColumn(disabled=True),
-                                "상태": st.column_config.TextColumn(disabled=True),
-                                "등록일시": st.column_config.TextColumn(disabled=True),
-                                "완료일시": st.column_config.TextColumn(disabled=True),
-                            }
+                            column_config={ "선택": st.column_config.CheckboxColumn() }
                         )
                         
                         selected_rows = edited_df[edited_df['선택']]
@@ -201,26 +185,6 @@ if spreadsheet:
                                 st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 컨테이너를 성공적으로 복구했습니다!")
                                 st.rerun()
 
-                        st.divider()
-                        st.markdown("##### 2. 시트 전체 복구 (현재 목록에 없는 데이터만)")
-                        st.warning("주의: 이 작업은 위 테이블에 보이는 모든 컨테이너를 한 번에 추가합니다.")
-                        
-                        if st.button(f"'{selected_backup_sheet}' 시트의 모든 데이터 추가하기", use_container_width=True):
-                            added_count = 0
-                            for index, row in recoverable_df.iterrows():
-                                row_to_add = row.to_dict()
-                                try:
-                                    row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시'))
-                                    row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'))
-                                except:
-                                    pass
-                                st.session_state.container_list.append(row_to_add)
-                                add_row_to_gsheet(row_to_add)
-                                added_count += 1
-                            log_change(f"데이터 복구: '{selected_backup_sheet}'에서 {added_count}개 전체 복구")
-                            st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 새로운 데이터를 성공적으로 추가했습니다!")
-                            st.rerun()
-
             except Exception as e:
                 st.error(f"백업 시트 정보를 불러오는 중 오류가 발생했습니다: {e}")
 
@@ -229,7 +193,7 @@ st.markdown("#### 🗑️ 임시 백업 전체 삭제")
 st.warning(
     """
     **주의: 이 작업은 복구할 수 없습니다!**\n
-    아래 버튼을 누르면 '월별 백업'(`백업_YYYY-MM`) 시트는 **안전하게 유지**되지만,\n
+    아래 버튼을 누르면 '일별 백업'(`백업_YYYY-MM-DD`)와 '월별 백업'(`백업_YYYY-MM`) 시트는 안전하게 유지되지만,\n
     모든 개별 실시간 백업 시트(`임시백업_...`)는 **영구적으로 삭제**됩니다.
     """
 )
