@@ -119,7 +119,6 @@ def backup_data_to_new_sheet(container_data):
         backup_sheet_name = f"백업_{today_str}"
         df_new = pd.DataFrame(container_data)
 
-<<<<<<< HEAD
         # [수정] NaT 값으로 인한 APIError를 방지하기 위해 날짜 변환 로직 강화
         for col in ['등록일시', '완료일시']:
             if col in df_new.columns:
@@ -128,14 +127,6 @@ def backup_data_to_new_sheet(container_data):
                 df_new.loc[valid_dates, col] = pd.to_datetime(df_new.loc[valid_dates, col]).dt.strftime('%Y-%m-%d %H:%M:%S')
                 # NaT 값들은 빈 문자열로 대체
                 df_new[col] = df_new[col].fillna('')
-=======
-        if '씰 번호' in df_new.columns:
-            df_new['씰 번호'] = df_new['씰 번호'].astype(str)
-        if '등록일시' in df_new.columns:
-            df_new['등록일시'] = pd.to_datetime(df_new['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
-        if '완료일시' in df_new.columns:
-            df_new['완료일시'] = pd.to_datetime(df_new['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S')
->>>>>>> f3e89eb47a968ee6571286dc6374ca3b67ae37b8
 
         if '씰 번호' in df_new.columns:
             df_new['씰 번호'] = df_new['씰 번호'].astype(str)
