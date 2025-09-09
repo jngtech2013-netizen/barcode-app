@@ -205,7 +205,7 @@ if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
 
                 except Exception as e:
                     st.error(f"메인 시트 정리 중 오류가 발생했습니다: {e}")
-                    st.warning("데이터 백업은 완료되었으나, 메인 시트 정리에 실패했습니다. 수동으로 '선적완료' 데이터를 삭제해주세요.")
+                    st.warning("데이터 백업은 완료되었으나, 메인 시트 정리에 실패했습니다. 관리 페이지의 '강제 동기화' 기능을 사용해주세요.")
         else:
             st.error(f"백업 중 오류 발생: {error_msg}")
 

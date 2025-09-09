@@ -2,7 +2,7 @@ import streamlit as st
 from datetime import date, datetime, timezone, timedelta
 import pandas as pd
 import gspread
-from google.oauth2.service_account import Credentials
+from gspread.utils import column_letter_to_index
 
 # --- 상수 정의 (공용) ---
 MAIN_SHEET_NAME = "현재 데이터"
@@ -27,6 +27,18 @@ def connect_to_gsheet():
 
 spreadsheet = connect_to_gsheet()
 
+# --- 서식 강제 함수 ---
+def ensure_text_format(worksheet, column_name):
+    """지정된 워크시트의 특정 열이 '일반 텍스트' 서식인지 확인하고 강제합니다."""
+    try:
+        headers = worksheet.row_values(1)
+        if column_name in headers:
+            col_index = headers.index(column_name) + 1
+            col_letter = gspread.utils.rowcol_to_a1(1, col_index)[0]
+            worksheet.format(f"{col_letter}:{col_letter}", {"numberFormat": {"type": "TEXT"}})
+    except Exception as e:
+        st.warning(f"'{worksheet.title}' 시트의 '{column_name}' 열 서식을 강제하는 중 오류 발생: {e}")
+
 # --- 로그 기록 함수 (공용) ---
 def log_change(action):
     if spreadsheet is None: return
@@ -42,6 +54,8 @@ def load_data_from_gsheet():
     if spreadsheet is None: return []
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        ensure_text_format(worksheet, '씰 번호')
+        
         all_values = worksheet.get_all_values()
         if len(all_values) < 2: return []
         
@@ -66,6 +80,7 @@ def add_row_to_gsheet(data):
     if spreadsheet is None: return False, "Google Sheets에 연결되지 않았습니다."
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        ensure_text_format(worksheet, '씰 번호')
         data_copy = data.copy()
         if isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
             data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')
@@ -85,6 +100,7 @@ def update_row_in_gsheet(index, data):
     if spreadsheet is None: return
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        ensure_text_format(worksheet, '씰 번호')
         data_copy = data.copy()
         if isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
             data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')
@@ -113,7 +129,6 @@ def backup_data_to_new_sheet(container_data):
     try:
         df_new = pd.DataFrame(container_data)
         
-        # 데이터 전처리
         if '등록일시' in df_new.columns: df_new['등록일시'] = pd.to_datetime(df_new['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
         if '완료일시' in df_new.columns: df_new['완료일시'] = pd.to_datetime(df_new['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
         if '씰 번호' in df_new.columns: df_new['씰 번호'] = df_new['씰 번호'].astype(str)
@@ -126,23 +141,25 @@ def backup_data_to_new_sheet(container_data):
         monthly_backup_name = f"{MONTHLY_BACKUP_PREFIX}{month_str}"
         try:
             backup_sheet = spreadsheet.worksheet(monthly_backup_name)
+            ensure_text_format(backup_sheet, '씰 번호')
             existing_values = backup_sheet.get_all_values()
             if len(existing_values) > 1:
                 existing_df = pd.DataFrame(existing_values[1:], columns=existing_values[0])
                 new_unique_df = df_new[~df_new['컨테이너 번호'].isin(existing_df['컨테이너 번호'])]
             else:
                 new_unique_df = df_new
-
             if not new_unique_df.empty:
                 backup_sheet.append_rows(new_unique_df.values.tolist(), value_input_option='USER_ENTERED')
         except gspread.exceptions.WorksheetNotFound:
             new_sheet = spreadsheet.add_worksheet(title=monthly_backup_name, rows=len(df_new) + 1, cols=len(SHEET_HEADERS))
+            ensure_text_format(new_sheet, '씰 번호')
             new_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
 
-        # --- 2. 실시간 임시 백업 (기존과 동일) ---
+        # --- 2. 실시간 임시 백업 ---
         now_str = datetime.now(KST).strftime('%Y-%m-%d_%H%M%S')
         temp_backup_name = f"{TEMP_BACKUP_PREFIX}{now_str}"
         temp_sheet = spreadsheet.add_worksheet(title=temp_backup_name, rows=len(df_new) + 1, cols=len(SHEET_HEADERS))
+        ensure_text_format(temp_sheet, '씰 번호')
         temp_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
             
         return True, None

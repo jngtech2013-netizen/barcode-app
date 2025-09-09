@@ -144,7 +144,6 @@ if spreadsheet:
                     if '등록일시' not in df_backup.columns: df_backup['등록일시'] = pd.NA
                     if '완료일시' not in df_backup.columns: df_backup['완료일시'] = pd.NA
 
-                    # [복원 1] 통계 카드 UI 코드
                     st.markdown("##### 📋 선택된 백업 시트 현황")
                     if '상태' in df_backup.columns:
                         status_counts = df_backup['상태'].value_counts()
@@ -177,7 +176,6 @@ if spreadsheet:
                         st.markdown("##### 개별 컨테이너 선택 복구")
                         st.write("아래 테이블에서 복구할 컨테이너를 선택하세요.")
 
-                        # [복원 2] No. 컬럼 추가 및 컬럼 순서 설정
                         recoverable_df.insert(0, '선택', False)
                         recoverable_df.insert(1, 'No.', range(1, len(recoverable_df) + 1))
                         
@@ -278,7 +276,7 @@ st.markdown("#### 🗑️ 임시 백업 전체 삭제")
 st.warning(
     """
     **주의: 이 작업은 복구할 수 없습니다!**\n
-    아래 버튼을 누르면 '일별 백업'(`임시백업_...`)과 '월별 백업'(`백업_YYYY-MM`) 시트는 안전하게 유지되지만,\n
+    아래 버튼을 누르면 '월별 백업'(`백업_YYYY-MM`) 시트는 안전하게 유지되지만,\n
     모든 개별 실시간 백업 시트(`임시백업_...`)는 **영구적으로 삭제**됩니다.
     """
 )
