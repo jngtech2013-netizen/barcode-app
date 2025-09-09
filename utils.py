@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone, timedelta
 import pandas as pd
 import gspread
 from gspread.utils import column_letter_to_index
-from google.oauth2.service_account import Credentials # [복원] 누락되었던 필수 import 구문
+from google.oauth2.service_account import Credentials
 
 # --- 상수 정의 (공용) ---
 MAIN_SHEET_NAME = "현재 데이터"
@@ -142,6 +142,7 @@ def backup_data_to_new_sheet(container_data):
         monthly_backup_name = f"{MONTHLY_BACKUP_PREFIX}{month_str}"
         try:
             backup_sheet = spreadsheet.worksheet(monthly_backup_name)
+            # [수정] 이미 존재하는 시트도 매번 서식을 강제하여 안전성 확보
             ensure_text_format(backup_sheet, '씰 번호')
             existing_values = backup_sheet.get_all_values()
             if len(existing_values) > 1:
