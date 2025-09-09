@@ -13,7 +13,8 @@ from utils import (
     update_row_in_gsheet,
     backup_data_to_new_sheet,
     connect_to_gsheet,
-    log_change
+    log_change,
+    delete_row_from_gsheet # 삭제 함수 import 추가
 )
 
 # --- 앱 초기 설정 ---
@@ -171,38 +172,38 @@ else:
                 st.rerun()
 
 if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
-    completed_data = [item for item in st.session_state.container_list if item.get('상태') == '선적완료']
-    pending_data = [item for item in st.session_state.container_list if item.get('상태') == '선적중']
-
-    if not completed_data:
+    completed_items_with_indices = [
+        (i, item) for i, item in enumerate(st.session_state.container_list) if item.get('상태') == '선적완료'
+    ]
+    
+    if not completed_items_with_indices:
         st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
     else:
+        completed_data = [item for i, item in completed_items_with_indices]
         with st.spinner('데이터를 백업하는 중...'):
             success, error_msg = backup_data_to_new_sheet(completed_data)
-
+        
         if success:
             st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 백업했습니다!")
-
+            
             with st.spinner('메인 시트를 정리하는 중...'):
                 try:
-                    spreadsheet = connect_to_gsheet()
-                    if spreadsheet:
-                        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-                        completed_nos = {item['컨테이너 번호'] for item in completed_data}
-                        all_data = worksheet.get_all_records()
-                        rows_to_delete = []
-                        for i in range(len(all_data) - 1, -1, -1):
-                            if all_data[i].get('컨테이너 번호') in completed_nos:
-                                rows_to_delete.append(i + 2)
-                        for row_num in rows_to_delete:
-                            worksheet.delete_rows(row_num)
+                    # [수정] 삭제 로직을 session_state 인덱스 기반으로 변경하여 안전성 확보
+                    indices_to_delete = sorted([i for i, item in completed_items_with_indices], reverse=True)
+                    
+                    for index in indices_to_delete:
+                        container_no_to_delete = st.session_state.container_list[index].get('컨테이너 번호')
+                        delete_row_from_gsheet(index, container_no_to_delete)
+                    
+                    # session_state에서도 해당 인덱스 삭제
+                    for index in indices_to_delete:
+                        st.session_state.container_list.pop(index)
 
-                        log_message = f"데이터 백업: {len(completed_data)}개 백업, {len(pending_data)}개 이월."
-                        log_change(log_message)
-
-                        st.session_state.container_list = pending_data
-                        st.success("메인 시트 정리가 완료되었습니다.")
-                        st.rerun()
+                    log_message = f"데이터 백업: {len(completed_data)}개 백업 완료 후 메인 시트에서 삭제."
+                    log_change(log_message)
+                    
+                    st.success("메인 시트 정리가 완료되었습니다.")
+                    st.rerun()
 
                 except Exception as e:
                     st.error(f"메인 시트 정리 중 오류가 발생했습니다: {e}")

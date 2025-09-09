@@ -73,17 +73,21 @@ if st.session_state.container_list:
             new_feet = st.radio("피트수 수정", options=feet_options, index=current_feet_idx, horizontal=True)
             new_seal = st.text_input("씰 번호 수정", value=selected_data.get('씰 번호', ''))
             status_options = ['선적중', '선적완료']
-            current_status_idx = status_options.index(selected_data.get('상태', '선적중'))
+            current_status = selected_data.get('상태', '선적중')
+            current_status_idx = status_options.index(current_status)
             new_status = st.radio("상태 변경", options=status_options, index=current_status_idx, horizontal=True)
 
             if st.form_submit_button("💾 수정사항 저장", use_container_width=True):
-                updated_data = {
-                    '컨테이너 번호': selected_for_edit, '출고처': new_dest, '피트수': new_feet,
-                    '씰 번호': str(new_seal), '상태': new_status,
-                    '등록일시': registration_time,
-                    '완료일시': completion_time
-                }
-                if new_status == '선적완료' and not completion_time:
+                updated_data = selected_data.copy()
+                updated_data.update({
+                    '출고처': new_dest, 
+                    '피트수': new_feet,
+                    '씰 번호': str(new_seal), 
+                    '상태': new_status,
+                })
+
+                # [수정] 상태 변경 시 시간 갱신 로직을 더 명확하게 수정
+                if new_status == '선적완료' and current_status == '선적중':
                     aware_time = datetime.now(timezone(timedelta(hours=9)))
                     updated_data['완료일시'] = aware_time.replace(tzinfo=None)
                 elif new_status == '선적중':
@@ -124,7 +128,6 @@ if spreadsheet:
         if selected_backup_sheet:
             try:
                 backup_worksheet = spreadsheet.worksheet(selected_backup_sheet)
-                # [수정] get_all_records() 대신 get_all_values()를 사용하여 모든 값을 문자열로 가져옴
                 all_values = backup_worksheet.get_all_values()
 
                 if len(all_values) < 2:
@@ -134,11 +137,9 @@ if spreadsheet:
                     data = all_values[1:]
                     df_backup = pd.DataFrame(data, columns=headers)
                     
-                    # [수정] 씰 번호는 이미 문자열이지만, 안전을 위해 타입 지정 유지
                     if '씰 번호' in df_backup.columns:
                         df_backup['씰 번호'] = df_backup['씰 번호'].astype(str)
 
-                    # 옛날 백업 시트에 없는 경우를 대비하여 빈 컬럼을 추가해줌
                     if '등록일시' not in df_backup.columns:
                         df_backup['등록일시'] = pd.NA
                     if '완료일시' not in df_backup.columns:
