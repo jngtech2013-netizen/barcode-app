@@ -218,6 +218,27 @@ if spreadsheet:
                                 log_change(f"데이터 복구: '{selected_backup_sheet}'에서 {added_count}개 선택 복구")
                                 st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 컨테이너를 성공적으로 복구했습니다!")
                                 st.rerun()
+                        
+                        # [복원] '시트 전체 복구' 기능
+                        st.divider()
+                        st.markdown("##### 시트 전체 복구 (현재 목록에 없는 데이터만)")
+                        st.warning("주의: 이 작업은 위 테이블에 보이는 모든 컨테이너를 한 번에 추가합니다.")
+                        
+                        if st.button(f"'{selected_backup_sheet}' 시트의 모든 데이터 추가하기", use_container_width=True):
+                            added_count = 0
+                            for index, row in recoverable_df.iterrows():
+                                row_to_add = row.to_dict()
+                                try:
+                                    row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시'))
+                                    row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'))
+                                except:
+                                    pass
+                                st.session_state.container_list.append(row_to_add)
+                                add_row_to_gsheet(row_to_add)
+                                added_count += 1
+                            log_change(f"데이터 복구: '{selected_backup_sheet}'에서 {added_count}개 전체 복구")
+                            st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 새로운 데이터를 성공적으로 추가했습니다!")
+                            st.rerun()
 
             except Exception as e:
                 st.error(f"백업 시트 정보를 불러오는 중 오류가 발생했습니다: {e}")
@@ -276,7 +297,7 @@ st.markdown("#### 🗑️ 임시 백업 전체 삭제")
 st.warning(
     """
     **주의: 이 작업은 복구할 수 없습니다!**\n
-    아래 버튼을 누르면 '월별 백업'(`백업_YYYY-MM`) 시트는 안전하게 유지되지만,\n
+    아래 버튼을 누르면 '일별 백업'(`임시백업_...`)과 '월별 백업'(`백업_YYYY-MM`) 시트는 안전하게 유지되지만,\n
     모든 개별 실시간 백업 시트(`임시백업_...`)는 **영구적으로 삭제**됩니다.
     """
 )
