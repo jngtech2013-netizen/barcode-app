@@ -140,11 +140,32 @@ if spreadsheet:
                     data = all_values[1:]
                     df_backup = pd.DataFrame(data, columns=headers)
                     
-                    if '씰 번호' in df_backup.columns:
-                        df_backup['씰 번호'] = df_backup['씰 번호'].astype(str)
-
+                    if '씰 번호' in df_backup.columns: df_backup['씰 번호'] = df_backup['씰 번호'].astype(str)
                     if '등록일시' not in df_backup.columns: df_backup['등록일시'] = pd.NA
                     if '완료일시' not in df_backup.columns: df_backup['완료일시'] = pd.NA
+
+                    # [복원 1] 통계 카드 UI 코드
+                    st.markdown("##### 📋 선택된 백업 시트 현황")
+                    if '상태' in df_backup.columns:
+                        status_counts = df_backup['상태'].value_counts()
+                        pending_count = status_counts.get('선적중', 0)
+                        completed_count = status_counts.get('선적완료', 0)
+                        st.markdown(
+                            f"""
+                            <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+                            <style>
+                            .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
+                            .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
+                            .metric-label {{ font-size: 1rem; color: #555555; }}
+                            .red-value {{ color: #FF4B4B; }}
+                            .green-value {{ color: #28A745; }}
+                            </style>
+                            <div class="row">
+                                <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending_count}</div><div class="metric-label">선적중</div></div></div>
+                                <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed_count}</div><div class="metric-label">선적완료</div></div></div>
+                            </div>
+                            """, unsafe_allow_html=True
+                        )
                                         
                     existing_nos = {c.get('컨테이너 번호') for c in st.session_state.container_list}
                     recoverable_df = df_backup[~df_backup['컨테이너 번호'].isin(existing_nos)].copy()
@@ -156,14 +177,29 @@ if spreadsheet:
                         st.markdown("##### 개별 컨테이너 선택 복구")
                         st.write("아래 테이블에서 복구할 컨테이너를 선택하세요.")
 
+                        # [복원 2] No. 컬럼 추가 및 컬럼 순서 설정
                         recoverable_df.insert(0, '선택', False)
+                        recoverable_df.insert(1, 'No.', range(1, len(recoverable_df) + 1))
+                        
+                        display_order = ['선택', 'No.'] + [h for h in SHEET_HEADERS if h in recoverable_df.columns and h != 'No.']
                         
                         edited_df = st.data_editor(
                             recoverable_df,
+                            column_order=display_order,
                             use_container_width=True,
                             hide_index=True,
                             key=f"recovery_editor_{selected_backup_sheet}",
-                            column_config={ "선택": st.column_config.CheckboxColumn() }
+                            column_config={
+                                "선택": st.column_config.CheckboxColumn(),
+                                "No.": st.column_config.NumberColumn(disabled=True),
+                                "컨테이너 번호": st.column_config.TextColumn(disabled=True),
+                                "출고처": st.column_config.TextColumn(disabled=True),
+                                "피트수": st.column_config.TextColumn(disabled=True),
+                                "씰 번호": st.column_config.TextColumn(disabled=True),
+                                "상태": st.column_config.TextColumn(disabled=True),
+                                "등록일시": st.column_config.TextColumn(disabled=True),
+                                "완료일시": st.column_config.TextColumn(disabled=True),
+                            }
                         )
                         
                         selected_rows = edited_df[edited_df['선택']]
@@ -215,7 +251,6 @@ if st.button("강제 동기화 실행", use_container_width=True):
                 rows_to_delete_indices = []
                 if len(main_values) > 1:
                     headers = main_values[0]
-                    # '컨테이너 번호'와 '상태' 컬럼의 인덱스를 동적으로 찾음
                     container_no_idx = headers.index('컨테이너 번호')
                     status_idx = headers.index('상태')
                     
