@@ -16,14 +16,11 @@ from utils import (
     MONTHLY_BACKUP_PREFIX
 )
 
-# --- 앱 초기 설정 ---
 st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
 
-# --- CSS 스타일 ---
 st.markdown(
     """
     <style>
-    /* 사이드바 스타일 */
     [data-testid="stSidebar"] { width: 150px !important; }
     [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
     [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
@@ -38,18 +35,15 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- 데이터 초기화 ---
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
-# --- 제목 (여백 조절됨) ---
 st.markdown("""
     <div style="margin-top: -3rem;">
         <h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>
     </div>
 """, unsafe_allow_html=True)
 
-# --- 데이터 수정 및 삭제 ---
 st.markdown("#### ✏️ 데이터 수정 및 삭제")
 
 if st.session_state.container_list:
@@ -89,12 +83,12 @@ if st.session_state.container_list:
                     '상태': new_status,
                 })
 
-                # [수정] session_state 저장을 위해 pandas.Timestamp 타입으로 통일
-                if new_status == '선적완료' and current_status == '선적중':
-                    aware_time = datetime.now(timezone(timedelta(hours=9)))
-                    naive_time = aware_time.replace(tzinfo=None)
-                    updated_data['완료일시'] = pd.to_datetime(naive_time)
-                elif new_status == '선적중':
+                if new_status == '선적완료':
+                    if current_status == '선적중':
+                        aware_time = datetime.now(timezone(timedelta(hours=9)))
+                        naive_time = aware_time.replace(tzinfo=None)
+                        updated_data['완료일시'] = pd.to_datetime(naive_time)
+                else:
                     updated_data['완료일시'] = None
 
                 st.session_state.container_list[selected_idx] = updated_data
@@ -111,7 +105,6 @@ if st.session_state.container_list:
 else:
     st.info("현재 데이터가 없습니다.")
 
-# --- 백업 시트에서 데이터 복구 ---
 st.divider()
 st.markdown("#### ⬆️ 데이터 복구")
 st.info("실수로 데이터를 초기화했거나 이전 데이터를 추가할 때 사용하세요.")

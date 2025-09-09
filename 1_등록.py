@@ -17,14 +17,11 @@ from utils import (
     delete_row_from_gsheet
 )
 
-# --- 앱 초기 설정 ---
 st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="expanded")
 
-# --- 한국 시간 함수 ---
 def get_korea_now():
     return datetime.now(timezone(timedelta(hours=9)))
 
-# --- 초기화 함수와 성공 플래그 로직 ---
 def clear_form_inputs():
     st.session_state["form_container_no"] = ""
     st.session_state["form_seal_no"] = ""
@@ -35,7 +32,6 @@ if st.session_state.get("submission_success", False):
     clear_form_inputs()
     st.session_state.submission_success = False
 
-# --- 사이드바 스타일 ---
 st.markdown(
     """
     <style>
@@ -53,18 +49,15 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- 데이터 초기화 ---
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
-# --- 제목 (여백 조절됨) ---
 st.markdown("""
     <div style="margin-top: -3rem;">
         <h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>
     </div>
 """, unsafe_allow_html=True)
 
-# --- 바코드 생성 ---
 st.markdown("#### 🔳 바코드 생성")
 with st.container(border=True):
     shippable_containers = [c.get('컨테이너 번호', '') for c in st.session_state.container_list if c.get('상태') == '선적중']
@@ -88,7 +81,6 @@ with st.container(border=True):
 
 st.divider()
 
-# --- 컨테이너 현황 ---
 col_header, col_button = st.columns([0.8, 0.2])
 with col_header:
     st.markdown("#### 📋 컨테이너 현황")
@@ -211,7 +203,6 @@ if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
 
 st.divider()
 
-# --- 신규 컨테이너 등록 ---
 st.markdown("#### 📝 신규 컨테이너 등록")
 with st.form(key="new_container_form"):
     destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
