@@ -189,16 +189,65 @@ if spreadsheet:
                 st.error(f"백업 시트 정보를 불러오는 중 오류가 발생했습니다: {e}")
 
 st.divider()
+st.markdown("#### 🛠️ 미정리 데이터 강제 동기화")
+st.info(
+    """
+    **"백업은 성공했으나 메인 시트 정리 중 오류가 발생"**했다는 메시지를 보셨을 때 사용하세요.\n
+    이 버튼은 `현재 데이터`와 모든 `월별 백업` 시트를 비교하여, 이미 백업된 '선적완료' 항목이 `현재 데이터`에 남아있을 경우 안전하게 삭제하여 데이터를 동기화합니다.
+    """
+)
+if st.button("강제 동기화 실행", use_container_width=True):
+    with st.spinner("데이터를 동기화하는 중..."):
+        try:
+            spreadsheet = connect_to_gsheet()
+            if spreadsheet:
+                all_sheets = spreadsheet.worksheets()
+                backup_sheets = [s for s in all_sheets if s.title.startswith(MONTHLY_BACKUP_PREFIX)]
+                backed_up_container_nos = set()
+                for sheet in backup_sheets:
+                    values = sheet.get_all_values()
+                    if len(values) > 1:
+                        df = pd.DataFrame(values[1:], columns=values[0])
+                        backed_up_container_nos.update(df['컨테이너 번호'].tolist())
+                
+                main_sheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+                main_values = main_sheet.get_all_values()
+                rows_to_delete_indices = []
+                if len(main_values) > 1:
+                    headers = main_values[0]
+                    # '컨테이너 번호'와 '상태' 컬럼의 인덱스를 동적으로 찾음
+                    container_no_idx = headers.index('컨테이너 번호')
+                    status_idx = headers.index('상태')
+                    
+                    for i, row in enumerate(main_values[1:]):
+                        container_no_in_main = row[container_no_idx]
+                        status_in_main = row[status_idx]
+                        if status_in_main == '선적완료' and container_no_in_main in backed_up_container_nos:
+                            rows_to_delete_indices.append(i + 2)
+                
+                if rows_to_delete_indices:
+                    for row_index in sorted(rows_to_delete_indices, reverse=True):
+                        main_sheet.delete_rows(row_index)
+                    st.success(f"총 {len(rows_to_delete_indices)}개의 미정리 데이터를 성공적으로 동기화(삭제)했습니다.")
+                    if 'container_list' in st.session_state:
+                        del st.session_state['container_list']
+                    st.rerun()
+                else:
+                    st.info("정리할 데이터가 없습니다. 모든 데이터가 이미 동기화된 상태입니다.")
+        except Exception as e:
+            st.error(f"동기화 중 오류가 발생했습니다: {e}")
+
+
+st.divider()
 st.markdown("#### 🗑️ 임시 백업 전체 삭제")
 st.warning(
     """
     **주의: 이 작업은 복구할 수 없습니다!**\n
-    아래 버튼을 누르면 '일별 백업'(`백업_YYYY-MM-DD`)와 '월별 백업'(`백업_YYYY-MM`) 시트는 안전하게 유지되지만,\n
+    아래 버튼을 누르면 '일별 백업'(`임시백업_...`)과 '월별 백업'(`백업_YYYY-MM`) 시트는 안전하게 유지되지만,\n
     모든 개별 실시간 백업 시트(`임시백업_...`)는 **영구적으로 삭제**됩니다.
     """
 )
 
-# 현재 임시 백업 시트 개수 표시
 try:
     spreadsheet = connect_to_gsheet()
     if spreadsheet:

@@ -121,17 +121,25 @@ def backup_data_to_new_sheet(container_data):
             if header not in df_new.columns: df_new[header] = ""
         df_new = df_new[SHEET_HEADERS]
 
-        # --- 1. 월별 통합 백업 (Monthly Archive) ---
+        # --- 1. 월별 통합 백업 (중복 방지 기능 추가) ---
         month_str = date.today().strftime('%Y-%m')
         monthly_backup_name = f"{MONTHLY_BACKUP_PREFIX}{month_str}"
         try:
             backup_sheet = spreadsheet.worksheet(monthly_backup_name)
-            backup_sheet.append_rows(df_new.values.tolist(), value_input_option='USER_ENTERED')
+            existing_values = backup_sheet.get_all_values()
+            if len(existing_values) > 1:
+                existing_df = pd.DataFrame(existing_values[1:], columns=existing_values[0])
+                new_unique_df = df_new[~df_new['컨테이너 번호'].isin(existing_df['컨테이너 번호'])]
+            else:
+                new_unique_df = df_new
+
+            if not new_unique_df.empty:
+                backup_sheet.append_rows(new_unique_df.values.tolist(), value_input_option='USER_ENTERED')
         except gspread.exceptions.WorksheetNotFound:
             new_sheet = spreadsheet.add_worksheet(title=monthly_backup_name, rows=len(df_new) + 1, cols=len(SHEET_HEADERS))
             new_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
 
-        # --- 2. 실시간 임시 백업 (Temporary Snapshot) ---
+        # --- 2. 실시간 임시 백업 (기존과 동일) ---
         now_str = datetime.now(KST).strftime('%Y-%m-%d_%H%M%S')
         temp_backup_name = f"{TEMP_BACKUP_PREFIX}{now_str}"
         temp_sheet = spreadsheet.add_worksheet(title=temp_backup_name, rows=len(df_new) + 1, cols=len(SHEET_HEADERS))
