@@ -89,9 +89,11 @@ if st.session_state.container_list:
                     '상태': new_status,
                 })
 
+                # [수정] session_state 저장을 위해 pandas.Timestamp 타입으로 통일
                 if new_status == '선적완료' and current_status == '선적중':
                     aware_time = datetime.now(timezone(timedelta(hours=9)))
-                    updated_data['완료일시'] = aware_time.replace(tzinfo=None)
+                    naive_time = aware_time.replace(tzinfo=None)
+                    updated_data['완료일시'] = pd.to_datetime(naive_time)
                 elif new_status == '선적중':
                     updated_data['완료일시'] = None
 
@@ -219,7 +221,6 @@ if spreadsheet:
                                 st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 컨테이너를 성공적으로 복구했습니다!")
                                 st.rerun()
                         
-                        # [복원] '시트 전체 복구' 기능
                         st.divider()
                         st.markdown("##### 시트 전체 복구 (현재 목록에 없는 데이터만)")
                         st.warning("주의: 이 작업은 위 테이블에 보이는 모든 컨테이너를 한 번에 추가합니다.")
@@ -297,7 +298,7 @@ st.markdown("#### 🗑️ 임시 백업 전체 삭제")
 st.warning(
     """
     **주의: 이 작업은 복구할 수 없습니다!**\n
-    아래 버튼을 누르면 '일별 백업'(`임시백업_...`)과 '월별 백업'(`백업_YYYY-MM`) 시트는 안전하게 유지되지만,\n
+    아래 버튼을 누르면 '월별 백업'(`백업_YYYY-MM`) 시트는 안전하게 유지되지만,\n
     모든 개별 실시간 백업 시트(`임시백업_...`)는 **영구적으로 삭제**됩니다.
     """
 )

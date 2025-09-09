@@ -161,7 +161,7 @@ else:
                 if new_status_bool:
                     aware_completion_time = get_korea_now()
                     naive_completion_time = aware_completion_time.replace(tzinfo=None)
-                    edited_row['완료일시'] = naive_completion_time
+                    edited_row['완료일시'] = pd.to_datetime(naive_completion_time)
                 else:
                     edited_row['완료일시'] = None
 
@@ -239,7 +239,7 @@ with st.form(key="new_container_form"):
             new_container = {
                 '컨테이너 번호': container_no, '출고처': destination, '피트수': feet,
                 '씰 번호': seal_no, '상태': '선적중',
-                '등록일시': naive_datetime,
+                '등록일시': pd.to_datetime(naive_datetime),
                 '완료일시': ''
             }
 
