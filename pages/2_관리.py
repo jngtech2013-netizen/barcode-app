@@ -13,7 +13,8 @@ from utils import (
     connect_to_gsheet,
     delete_temporary_backups,
     TEMP_BACKUP_PREFIX,
-    MONTHLY_BACKUP_PREFIX
+    MONTHLY_BACKUP_PREFIX,
+    DAILY_BACKUP_PREFIX
 )
 
 st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
@@ -112,6 +113,7 @@ st.info("실수로 데이터를 초기화했거나 이전 데이터를 추가할
 spreadsheet = connect_to_gsheet()
 if spreadsheet:
     all_sheets = [s.title for s in spreadsheet.worksheets()]
+    # 일별/월별 백업 시트 모두 포함 (동일한 접두사 사용)
     backup_sheets = sorted([s for s in all_sheets if s.startswith(MONTHLY_BACKUP_PREFIX)], reverse=True)
     
     if not backup_sheets:
@@ -291,7 +293,7 @@ st.markdown("#### 🗑️ 임시 백업 전체 삭제")
 st.warning(
     """
     **주의: 이 작업은 복구할 수 없습니다!**\n
-    아래 버튼을 누르면 '월별 백업'(`백업_YYYY-MM`) 시트는 안전하게 유지되지만,\n
+    아래 버튼을 누르면 '일별 백업'(`백업_YYYY-MM-DD`)와 '월별 백업'(`백업_YYYY-MM`) 시트는 안전하게 유지되지만,\n
     모든 개별 실시간 백업 시트(`임시백업_...`)는 **영구적으로 삭제**됩니다.
     """
 )

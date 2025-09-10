@@ -12,6 +12,7 @@ LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
 TEMP_BACKUP_PREFIX = "임시백업_"
 MONTHLY_BACKUP_PREFIX = "백업_"
+DAILY_BACKUP_PREFIX = "백업_" 
 
 # --- Google Sheets 연동 (공용) ---
 @st.cache_resource
@@ -111,7 +112,6 @@ def update_row_in_gsheet(index, data):
         if isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
             data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')
         
-        # '완료일시'가 None일 경우 빈 문자열로 변환
         if data_copy.get('완료일시') is None or pd.isna(data_copy.get('완료일시')):
              data_copy['완료일시'] = ''
         elif isinstance(data_copy.get('완료일시'), (datetime, pd.Timestamp)):
@@ -146,6 +146,27 @@ def backup_data_to_new_sheet(container_data):
             if header not in df_new.columns: df_new[header] = ""
         df_new = df_new[SHEET_HEADERS]
 
+        # --- 1. 일별 백업 (Daily Report & Restore Point) ---
+        today_str = date.today().isoformat()
+        daily_backup_name = f"{DAILY_BACKUP_PREFIX}{today_str}"
+        try:
+            backup_sheet = spreadsheet.worksheet(daily_backup_name)
+            ensure_text_format(backup_sheet, '씰 번호')
+            existing_values = backup_sheet.get_all_values()
+            if len(existing_values) > 1:
+                df_existing = pd.DataFrame(existing_values[1:], columns=existing_values[0])
+                df_combined = pd.concat([df_existing, df_new])
+                df_final = df_combined.drop_duplicates(subset=['컨테이너 번호'], keep='last')
+                backup_sheet.clear()
+                backup_sheet.update([SHEET_HEADERS] + df_final.values.tolist(), value_input_option='USER_ENTERED')
+            else:
+                backup_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
+        except gspread.exceptions.WorksheetNotFound:
+            new_sheet = spreadsheet.add_worksheet(title=daily_backup_name, rows=len(df_new) + 50, cols=len(SHEET_HEADERS)) # 넉넉하게 행 추가
+            ensure_text_format(new_sheet, '씰 번호')
+            new_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
+
+        # --- 2. 월별 통합 백업 (Monthly Aggregation) ---
         month_str = date.today().strftime('%Y-%m')
         monthly_backup_name = f"{MONTHLY_BACKUP_PREFIX}{month_str}"
         try:
@@ -160,10 +181,11 @@ def backup_data_to_new_sheet(container_data):
             if not new_unique_df.empty:
                 backup_sheet.append_rows(new_unique_df.values.tolist(), value_input_option='USER_ENTERED')
         except gspread.exceptions.WorksheetNotFound:
-            new_sheet = spreadsheet.add_worksheet(title=monthly_backup_name, rows=len(df_new) + 1, cols=len(SHEET_HEADERS))
+            new_sheet = spreadsheet.add_worksheet(title=monthly_backup_name, rows=len(df_new) + 50, cols=len(SHEET_HEADERS))
             ensure_text_format(new_sheet, '씰 번호')
             new_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
 
+        # --- 3. 실시간 임시 백업 (Instant Snapshot) ---
         now_str = datetime.now(KST).strftime('%Y-%m-%d_%H%M%S')
         temp_backup_name = f"{TEMP_BACKUP_PREFIX}{now_str}"
         temp_sheet = spreadsheet.add_worksheet(title=temp_backup_name, rows=len(df_new) + 1, cols=len(SHEET_HEADERS))
