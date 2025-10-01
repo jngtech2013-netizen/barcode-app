@@ -113,7 +113,9 @@ st.markdown(
 if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
-    df = pd.DataFrame(st.session_state.container_list)
+    # [수정] DataFrame 생성 시 모든 데이터를 먼저 문자열(str)로 강제하여 자동 숫자 변환을 원천 차단
+    df = pd.DataFrame(st.session_state.container_list, dtype=str)
+    
     df['선적완료'] = df['상태'].apply(lambda x: True if x == '선적완료' else False)
     if '등록일시' in df.columns:
         df['등록일시'] = pd.to_datetime(df['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
