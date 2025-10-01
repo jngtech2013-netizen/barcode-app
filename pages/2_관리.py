@@ -13,8 +13,7 @@ from utils import (
     connect_to_gsheet,
     delete_temporary_backups,
     TEMP_BACKUP_PREFIX,
-    MONTHLY_BACKUP_PREFIX,
-    DAILY_BACKUP_PREFIX
+    BACKUP_PREFIX
 )
 
 st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
@@ -113,8 +112,7 @@ st.info("실수로 데이터를 초기화했거나 이전 데이터를 추가할
 spreadsheet = connect_to_gsheet()
 if spreadsheet:
     all_sheets = [s.title for s in spreadsheet.worksheets()]
-    # 일별/월별 백업 시트 모두 포함 (동일한 접두사 사용)
-    backup_sheets = sorted([s for s in all_sheets if s.startswith(MONTHLY_BACKUP_PREFIX)], reverse=True)
+    backup_sheets = sorted([s for s in all_sheets if s.startswith(BACKUP_PREFIX)], reverse=True)
     
     if not backup_sheets:
         st.warning("복구할 백업 시트가 없습니다.")
@@ -135,9 +133,8 @@ if spreadsheet:
                 else:
                     headers = all_values[0]
                     data = all_values[1:]
-                    df_backup = pd.DataFrame(data, columns=headers)
+                    df_backup = pd.DataFrame(data, columns=headers, dtype=str)
                     
-                    if '씰 번호' in df_backup.columns: df_backup['씰 번호'] = df_backup['씰 번호'].astype(str)
                     if '등록일시' not in df_backup.columns: df_backup['등록일시'] = pd.NA
                     if '완료일시' not in df_backup.columns: df_backup['완료일시'] = pd.NA
 
@@ -253,7 +250,7 @@ if st.button("강제 동기화 실행", use_container_width=True):
             spreadsheet = connect_to_gsheet()
             if spreadsheet:
                 all_sheets = spreadsheet.worksheets()
-                backup_sheets = [s for s in all_sheets if s.title.startswith(MONTHLY_BACKUP_PREFIX)]
+                backup_sheets = [s for s in all_sheets if s.title.startswith(BACKUP_PREFIX)]
                 backed_up_container_nos = set()
                 for sheet in backup_sheets:
                     values = sheet.get_all_values()
@@ -286,38 +283,3 @@ if st.button("강제 동기화 실행", use_container_width=True):
                     st.info("정리할 데이터가 없습니다. 모든 데이터가 이미 동기화된 상태입니다.")
         except Exception as e:
             st.error(f"동기화 중 오류가 발생했습니다: {e}")
-
-
-st.divider()
-st.markdown("#### 🗑️ 임시 백업 전체 삭제")
-st.warning(
-    """
-    **주의: 이 작업은 복구할 수 없습니다!**\n
-    아래 버튼을 누르면 '일별 백업'(`백업_YYYY-MM-DD`)와 '월별 백업'(`백업_YYYY-MM`) 시트는 안전하게 유지되지만,\n
-    모든 개별 실시간 백업 시트(`임시백업_...`)는 **영구적으로 삭제**됩니다.
-    """
-)
-
-try:
-    spreadsheet = connect_to_gsheet()
-    if spreadsheet:
-        all_sheets = [s.title for s in spreadsheet.worksheets()]
-        temp_backup_count = len([s for s in all_sheets if s.startswith(TEMP_BACKUP_PREFIX)])
-        if temp_backup_count > 0:
-            st.info(f"현재 삭제 가능한 임시 백업 시트가 **{temp_backup_count}개** 있습니다.")
-        else:
-            st.info("현재 삭제할 임시 백업 시트가 없습니다.")
-except Exception as e:
-    st.error(f"임시 백업 시트 개수를 불러오는 중 오류 발생: {e}")
-
-
-if st.button("모든 임시 백업 시트 영구 삭제", type="primary", use_container_width=True):
-    with st.spinner("임시 백업 시트를 삭제하는 중..."):
-        count, msg = delete_temporary_backups()
-    
-    if msg == "성공":
-        st.success(f"총 {count}개의 임시 백업 시트를 성공적으로 삭제했습니다.")
-    elif msg == "삭제할 임시 백업 시트가 없습니다.":
-        st.info(msg)
-    else:
-        st.error(f"삭제 중 오류 발생: {msg}")

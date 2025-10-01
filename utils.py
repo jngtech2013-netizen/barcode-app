@@ -5,15 +5,15 @@ import gspread
 from gspread.utils import column_letter_to_index
 from google.oauth2.service_account import Credentials
 
-# --- (상단 코드는 이전과 동일) ...
+# --- 상수 정의 (공용) ---
 MAIN_SHEET_NAME = "현재 데이터"
 SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '상태', '등록일시', '완료일시']
 LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
-TEMP_BACKUP_PREFIX = "임시백업_"
-MONTHLY_BACKUP_PREFIX = "백업_"
-DAILY_BACKUP_PREFIX = "백업_" 
+# MONTHLY_BACKUP_PREFIX와 DAILY_BACKUP_PREFIX는 동일한 "백업_"을 사용
+BACKUP_PREFIX = "백업_"
 
+# --- Google Sheets 연동 (공용) ---
 @st.cache_resource
 def connect_to_gsheet():
     try:
@@ -28,6 +28,7 @@ def connect_to_gsheet():
 
 spreadsheet = connect_to_gsheet()
 
+# --- 서식 강제 함수 ---
 def ensure_text_format(worksheet, column_name):
     try:
         headers = worksheet.row_values(1)
@@ -38,6 +39,7 @@ def ensure_text_format(worksheet, column_name):
     except Exception as e:
         st.warning(f"'{worksheet.title}' 시트의 '{column_name}' 열 서식을 강제하는 중 오류 발생: {e}")
 
+# --- 로그 기록 함수 (공용) ---
 def log_change(action):
     if spreadsheet is None: return
     try:
@@ -60,11 +62,9 @@ def load_data_from_gsheet():
         headers = all_values[0]
         data = all_values[1:]
         
-        # [수정] DataFrame 생성 시 모든 데이터를 먼저 문자열(str)로 강제하여 자동 숫자 변환을 원천 차단
         df = pd.DataFrame(data, columns=headers, dtype=str)
         df.replace('', pd.NA, inplace=True)
         
-        # 이제 안전하게 필요한 컬럼만 다른 타입으로 변환
         if '등록일시' in df.columns: df['등록일시'] = pd.to_datetime(df['등록일시'], errors='coerce')
         if '완료일시' in df.columns: df['완료일시'] = pd.to_datetime(df['완료일시'], errors='coerce')
 
@@ -81,7 +81,6 @@ def load_data_from_gsheet():
         st.error(f"데이터 로딩 중 오류 발생: {e}")
         return []
 
-# --- (이하 모든 함수는 이전과 동일) ---
 def add_row_to_gsheet(data):
     if spreadsheet is None: return False, "Google Sheets에 연결되지 않았습니다."
     try:
@@ -145,8 +144,11 @@ def backup_data_to_new_sheet(container_data):
             if header not in df_new.columns: df_new[header] = ""
         df_new = df_new[SHEET_HEADERS]
 
-        today_str = date.today().isoformat()
-        daily_backup_name = f"{DAILY_BACKUP_PREFIX}{today_str}"
+        kst_now = datetime.now(KST)
+
+        # --- 1. 일별 백업 (Daily Report & Restore Point) ---
+        today_str = kst_now.date().isoformat()
+        daily_backup_name = f"{BACKUP_PREFIX}{today_str}"
         try:
             backup_sheet = spreadsheet.worksheet(daily_backup_name)
             ensure_text_format(backup_sheet, '씰 번호')
@@ -164,8 +166,9 @@ def backup_data_to_new_sheet(container_data):
             ensure_text_format(new_sheet, '씰 번호')
             new_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
 
-        month_str = date.today().strftime('%Y-%m')
-        monthly_backup_name = f"{MONTHLY_BACKUP_PREFIX}{month_str}"
+        # --- 2. 월별 통합 백업 (Monthly Aggregation) ---
+        month_str = kst_now.date().strftime('%Y-%m')
+        monthly_backup_name = f"{BACKUP_PREFIX}{month_str}"
         try:
             backup_sheet = spreadsheet.worksheet(monthly_backup_name)
             ensure_text_format(backup_sheet, '씰 번호')
@@ -181,31 +184,7 @@ def backup_data_to_new_sheet(container_data):
             new_sheet = spreadsheet.add_worksheet(title=monthly_backup_name, rows=len(df_new) + 50, cols=len(SHEET_HEADERS))
             ensure_text_format(new_sheet, '씰 번호')
             new_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
-
-        now_str = datetime.now(KST).strftime('%Y-%m-%d_%H%M%S')
-        temp_backup_name = f"{TEMP_BACKUP_PREFIX}{now_str}"
-        temp_sheet = spreadsheet.add_worksheet(title=temp_backup_name, rows=len(df_new) + 1, cols=len(SHEET_HEADERS))
-        ensure_text_format(temp_sheet, '씰 번호')
-        temp_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
             
         return True, None
     except Exception as e:
         return False, str(e)
-
-def delete_temporary_backups():
-    if spreadsheet is None: return 0, "스프레드시트 연결 안됨"
-    try:
-        all_worksheets = spreadsheet.worksheets()
-        sheets_to_delete = [
-            sheet for sheet in all_worksheets if sheet.title.startswith(TEMP_BACKUP_PREFIX)
-        ]
-        
-        if not sheets_to_delete:
-            return 0, "삭제할 임시 백업 시트가 없습니다."
-
-        for sheet in sheets_to_delete:
-            spreadsheet.del_worksheet(sheet)
-        
-        return len(sheets_to_delete), "성공"
-    except Exception as e:
-        return 0, str(e)

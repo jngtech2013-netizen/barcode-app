@@ -176,7 +176,7 @@ if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
             success, error_msg = backup_data_to_new_sheet(completed_data)
         
         if success:
-            st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 일별/월별/임시 백업했습니다!")
+            st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 일별/월별 백업했습니다!")
             
             with st.spinner('메인 시트를 정리하는 중...'):
                 try:
