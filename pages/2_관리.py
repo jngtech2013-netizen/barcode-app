@@ -11,8 +11,6 @@ from utils import (
     backup_data_to_new_sheet,
     log_change,
     connect_to_gsheet,
-    delete_temporary_backups,
-    TEMP_BACKUP_PREFIX,
     BACKUP_PREFIX
 )
 
@@ -241,7 +239,7 @@ st.markdown("#### 🛠️ 미정리 데이터 강제 동기화")
 st.info(
     """
     **"백업은 성공했으나 메인 시트 정리 중 오류가 발생"**했다는 메시지를 보셨을 때 사용하세요.\n
-    이 버튼은 `현재 데이터`와 모든 `월별 백업` 시트를 비교하여, 이미 백업된 '선적완료' 항목이 `현재 데이터`에 남아있을 경우 안전하게 삭제하여 데이터를 동기화합니다.
+    이 버튼은 `현재 데이터`와 모든 `백업` 시트를 비교하여, 이미 백업된 '선적완료' 항목이 `현재 데이터`에 남아있을 경우 안전하게 삭제하여 데이터를 동기화합니다.
     """
 )
 if st.button("강제 동기화 실행", use_container_width=True):
