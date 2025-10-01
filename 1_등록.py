@@ -242,7 +242,8 @@ with st.form(key="new_container_form"):
                 st.session_state.container_list.append(new_container)
                 st.session_state["form_success_message"] = f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다."
                 st.session_state.submission_success = True
-                st.rerun()
+                # [수정] 불필요하고 부자연스러운 새로고침을 유발하는 st.rerun()을 제거합니다.
+                # st.rerun() 
             else:
                 st.session_state["form_error_message"] = f"등록 실패: {message}. 잠시 후 다시 시도해주세요."
 
