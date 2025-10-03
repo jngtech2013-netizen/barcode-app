@@ -113,19 +113,20 @@ st.markdown(
 if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
-    df = pd.DataFrame(st.session_state.container_list, dtype=str)
-    
+    df = pd.DataFrame(st.session_state.container_list)
     df['선적완료'] = df['상태'].apply(lambda x: True if x == '선적완료' else False)
-    if '등록일시' in df.columns:
-        df['등록일시'] = pd.to_datetime(df['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
-    if '완료일시' in df.columns:
-        df['완료일시'] = pd.to_datetime(df['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
-    df.fillna('', inplace=True)
+    
+    display_df = df.copy()
+    if '등록일시' in display_df.columns:
+        display_df['등록일시'] = pd.to_datetime(display_df['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
+    if '완료일시' in display_df.columns:
+        display_df['완료일시'] = pd.to_datetime(display_df['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
+    display_df.fillna('', inplace=True)
 
     column_order = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '등록일시', '완료일시', '선적완료']
 
     edited_df = st.data_editor(
-        df,
+        display_df,
         column_order=column_order,
         use_container_width=True,
         hide_index=True,
@@ -141,27 +142,18 @@ else:
         }
     )
 
-    if edited_df is not None:
-        edited_list = edited_df.to_dict('records')
-        for i, (original_row, edited_row) in enumerate(zip(st.session_state.container_list, edited_list)):
-            original_status = original_row.get('상태', '선적중')
-            new_status_from_checkbox = "선적완료" if edited_row.get('선적완료') else "선적중"
-
-            if original_status != new_status_from_checkbox:
-                new_status_bool = edited_row.get('선적완료', False)
-                edited_row['상태'] = "선적완료" if new_status_bool else "선적중"
-
-                if new_status_bool:
+    if not df['선적완료'].equals(edited_df['선적완료']):
+        for i, (original_bool, edited_bool) in enumerate(zip(df['선적완료'], edited_df['선적완료'])):
+            if original_bool != edited_bool:
+                st.session_state.container_list[i]['상태'] = "선적완료" if edited_bool else "선적중"
+                if edited_bool:
                     aware_completion_time = get_korea_now()
                     naive_completion_time = aware_completion_time.replace(tzinfo=None)
-                    edited_row['완료일시'] = pd.to_datetime(naive_completion_time)
+                    st.session_state.container_list[i]['완료일시'] = pd.to_datetime(naive_completion_time)
                 else:
-                    edited_row['완료일시'] = None
-
-                edited_row['등록일시'] = original_row.get('등록일시')
-
-                st.session_state.container_list[i] = edited_row
-                update_row_in_gsheet(i, edited_row)
+                    st.session_state.container_list[i]['완료일시'] = None
+                
+                update_row_in_gsheet(i, st.session_state.container_list[i])
                 st.rerun()
 
 if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
@@ -198,7 +190,7 @@ if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
 
                 except Exception as e:
                     st.error(f"메인 시트 정리 중 오류가 발생했습니다: {e}")
-                    st.warning("데이터 백업은 완료되었으나, 메인 시트 정리에 실패했습니다. 관리 페이지의 '강제 동기화' 기능을 사용해주세요.")
+                    st.warning("데이터 백업은 완료되었으나, 메인 시트 정리에 실패했습니다. 잠시 후 '데이터 새로고침'을 누르고 다시 시도하거나, 수동으로 정리해주세요.")
         else:
             st.error(f"백업 중 오류 발생: {error_msg}")
 
@@ -232,7 +224,7 @@ with st.form(key="new_container_form"):
                 '컨테이너 번호': container_no, '출고처': destination, '피트수': feet,
                 '씰 번호': seal_no, '상태': '선적중',
                 '등록일시': pd.to_datetime(naive_datetime),
-                '완료일시': ''
+                '완료일시': None
             }
 
             with st.spinner('데이터를 저장하는 중...'):
@@ -240,14 +232,15 @@ with st.form(key="new_container_form"):
 
             if success:
                 st.session_state.container_list.append(new_container)
-                st.session_state["form_success_message"] = f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다."
                 st.session_state.submission_success = True
-                # [수정] 불필요하고 부자연스러운 새로고침을 유발하는 st.rerun()을 제거합니다.
-                # st.rerun() 
+                st.session_state.form_success_message = f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다."
+                st.rerun()
             else:
                 st.session_state["form_error_message"] = f"등록 실패: {message}. 잠시 후 다시 시도해주세요."
 
 if st.session_state.get("form_success_message"):
     st.success(st.session_state.get("form_success_message"))
+    st.session_state["form_success_message"] = "" 
 if st.session_state.get("form_error_message"):
     st.error(st.session_state.get("form_error_message"))
+    st.session_state["form_error_message"] = ""

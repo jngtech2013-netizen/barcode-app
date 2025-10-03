@@ -10,7 +10,6 @@ MAIN_SHEET_NAME = "현재 데이터"
 SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '상태', '등록일시', '완료일시']
 LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
-# MONTHLY_BACKUP_PREFIX와 DAILY_BACKUP_PREFIX는 동일한 "백업_"을 사용
 BACKUP_PREFIX = "백업_"
 
 # --- Google Sheets 연동 (공용) ---
@@ -146,7 +145,6 @@ def backup_data_to_new_sheet(container_data):
 
         kst_now = datetime.now(KST)
 
-        # --- 1. 일별 백업 (Daily Report & Restore Point) ---
         today_str = kst_now.date().isoformat()
         daily_backup_name = f"{BACKUP_PREFIX}{today_str}"
         try:
@@ -166,7 +164,6 @@ def backup_data_to_new_sheet(container_data):
             ensure_text_format(new_sheet, '씰 번호')
             new_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
 
-        # --- 2. 월별 통합 백업 (Monthly Aggregation) ---
         month_str = kst_now.date().strftime('%Y-%m')
         monthly_backup_name = f"{BACKUP_PREFIX}{month_str}"
         try:
