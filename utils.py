@@ -72,7 +72,6 @@ def load_data_from_gsheet():
             df.loc[inconsistent_rows, '완료일시'] = pd.NaT
         
         return df.to_dict('records')
-        
     except gspread.exceptions.WorksheetNotFound:
         st.error(f"'{MAIN_SHEET_NAME}' 시트를 찾을 수 없습니다.")
         return []
@@ -145,6 +144,7 @@ def backup_data_to_new_sheet(container_data):
 
         kst_now = datetime.now(KST)
 
+        # --- 1. 일별 백업 (Daily Report & Restore Point) ---
         today_str = kst_now.date().isoformat()
         daily_backup_name = f"{BACKUP_PREFIX}{today_str}"
         try:
@@ -161,9 +161,12 @@ def backup_data_to_new_sheet(container_data):
                 backup_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
         except gspread.exceptions.WorksheetNotFound:
             new_sheet = spreadsheet.add_worksheet(title=daily_backup_name, rows=len(df_new) + 50, cols=len(SHEET_HEADERS))
+            new_sheet.update('A1', [SHEET_HEADERS], value_input_option='USER_ENTERED')
             ensure_text_format(new_sheet, '씰 번호')
-            new_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
+            if not df_new.empty:
+                new_sheet.update('A2', df_new.values.tolist(), value_input_option='USER_ENTERED')
 
+        # --- 2. 월별 통합 백업 (Monthly Aggregation) ---
         month_str = kst_now.date().strftime('%Y-%m')
         monthly_backup_name = f"{BACKUP_PREFIX}{month_str}"
         try:
@@ -179,8 +182,10 @@ def backup_data_to_new_sheet(container_data):
                 backup_sheet.append_rows(new_unique_df.values.tolist(), value_input_option='USER_ENTERED')
         except gspread.exceptions.WorksheetNotFound:
             new_sheet = spreadsheet.add_worksheet(title=monthly_backup_name, rows=len(df_new) + 50, cols=len(SHEET_HEADERS))
+            new_sheet.update('A1', [SHEET_HEADERS], value_input_option='USER_ENTERED')
             ensure_text_format(new_sheet, '씰 번호')
-            new_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
+            if not df_new.empty:
+                new_sheet.update('A2', df_new.values.tolist(), value_input_option='USER_ENTERED')
             
         return True, None
     except Exception as e:
