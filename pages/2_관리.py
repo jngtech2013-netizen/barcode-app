@@ -60,7 +60,7 @@ if st.session_state.container_list:
 
         with st.form(key=f"edit_form_{selected_for_edit}"):
             st.write(f"**'{selected_for_edit}' 정보 수정**")
-            dest_options = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '기타']
+            dest_options = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '타이닌', '기타']
             current_dest_idx = dest_options.index(selected_data.get('출고처', '베트남'))
             new_dest = st.radio("출고처 수정", options=dest_options, index=current_dest_idx, horizontal=True)
             feet_options = ['40', '20']
