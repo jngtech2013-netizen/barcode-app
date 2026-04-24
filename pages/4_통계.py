@@ -94,8 +94,8 @@ st.markdown(
     .green-value {{ color: #28A745; }}
     </style>
     <div class="row">
-        <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending}</div><div class="metric-label">선적중</div></div></div>
         <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed}</div><div class="metric-label">선적완료</div></div></div>
+        <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending}</div><div class="metric-label">선적중</div></div></div>
     </div>
     """, unsafe_allow_html=True
 )
@@ -103,10 +103,13 @@ st.markdown(
 st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
 st.markdown("---")
 
-# --- 출고처별 현황 (테이블만, 선적완료 / 선적중 / 합계 순) ---
-st.markdown("##### 📦 출고처별 현황")
+# --- 출고처별 현황 (피트수 합계 기준, 선적완료 / 선적중 / 합계 순) ---
+st.markdown("##### 📦 출고처별 현황 (단위: ft)")
 if '출고처' in df_all.columns:
-    dest_stats = df_all.groupby(['출고처', '상태']).size().unstack(fill_value=0)
+    df_feet = df_all.copy()
+    df_feet['피트수'] = pd.to_numeric(df_feet['피트수'], errors='coerce').fillna(0).astype(int)
+
+    dest_stats = df_feet.groupby(['출고처', '상태'])['피트수'].sum().unstack(fill_value=0)
     if '선적중' not in dest_stats.columns:
         dest_stats['선적중'] = 0
     if '선적완료' not in dest_stats.columns:
