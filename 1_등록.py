@@ -155,41 +155,38 @@ else:
     display_df.fillna('', inplace=True)
 
     # 상태 뱃지 HTML 테이블 (data_editor 위에 읽기 전용 뷰로 표시)
-    badge_rows = ""
+    badge_rows_list = []
     for _, row in display_df.iterrows():
         status = row.get('상태', '')
         if status == '선적중':
             badge = '<span class="badge-pending">🔴 선적중</span>'
         else:
             badge = '<span class="badge-done">🟢 선적완료</span>'
-        badge_rows += f"""
-        <tr>
-            <td style="padding:6px 8px; font-weight:bold;">{row.get('컨테이너 번호','')}</td>
-            <td style="padding:6px 8px;">{row.get('출고처','')}</td>
-            <td style="padding:6px 8px; text-align:center;">{row.get('피트수','')}ft</td>
-            <td style="padding:6px 8px;">{badge}</td>
-            <td style="padding:6px 8px; color:#888; font-size:0.85rem;">{row.get('등록일시','')}</td>
-        </tr>
-        """
+        badge_rows_list.append(
+            f'<tr>'
+            f'<td style="padding:6px 8px;font-weight:bold;">{row.get("컨테이너 번호","")}</td>'
+            f'<td style="padding:6px 8px;">{row.get("출고처","")}</td>'
+            f'<td style="padding:6px 8px;text-align:center;">{row.get("피트수","")}ft</td>'
+            f'<td style="padding:6px 8px;">{badge}</td>'
+            f'<td style="padding:6px 8px;color:#888;font-size:0.85rem;">{row.get("등록일시","")}</td>'
+            f'</tr>'
+        )
+    badge_rows = "".join(badge_rows_list)
 
-    st.markdown(f"""
-    <div style="overflow-x:auto; margin-bottom:8px;">
-        <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
-            <thead>
-                <tr style="background:#f0f2f6; border-bottom:2px solid #ddd;">
-                    <th style="padding:8px; text-align:left;">컨테이너 번호</th>
-                    <th style="padding:8px; text-align:left;">출고처</th>
-                    <th style="padding:8px; text-align:center;">피트수</th>
-                    <th style="padding:8px; text-align:left;">상태</th>
-                    <th style="padding:8px; text-align:left;">등록일시</th>
-                </tr>
-            </thead>
-            <tbody>
-                {badge_rows}
-            </tbody>
-        </table>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="overflow-x:auto;margin-bottom:8px;">'
+        f'<table style="width:100%;border-collapse:collapse;font-size:0.9rem;">'
+        f'<thead><tr style="background:#f0f2f6;border-bottom:2px solid #ddd;">'
+        f'<th style="padding:8px;text-align:left;">컨테이너 번호</th>'
+        f'<th style="padding:8px;text-align:left;">출고처</th>'
+        f'<th style="padding:8px;text-align:center;">피트수</th>'
+        f'<th style="padding:8px;text-align:left;">상태</th>'
+        f'<th style="padding:8px;text-align:left;">등록일시</th>'
+        f'</tr></thead>'
+        f'<tbody>{badge_rows}</tbody>'
+        f'</table></div>',
+        unsafe_allow_html=True
+    )
 
     st.caption("✅ 선적완료 처리는 아래 체크박스를 사용하세요.")
 
