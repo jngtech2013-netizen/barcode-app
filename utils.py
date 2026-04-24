@@ -174,9 +174,10 @@ def backup_data_to_new_sheet(container_data):
                 df_combined = pd.concat([df_existing, df_new])
                 df_final = df_combined.drop_duplicates(subset=['컨테이너 번호'], keep='last')
                 backup_sheet.clear()
-                backup_sheet.update([SHEET_HEADERS] + df_final.values.tolist(), value_input_option='USER_ENTERED')
+                backup_sheet.update('A1', [SHEET_HEADERS] + df_final.values.tolist(), value_input_option='USER_ENTERED')
             else:
-                backup_sheet.update([SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
+                # 헤더만 있거나 빈 시트인 경우 A1부터 명시적으로 덮어쓰기
+                backup_sheet.update('A1', [SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
         except gspread.exceptions.WorksheetNotFound:
             new_sheet = spreadsheet.add_worksheet(title=daily_backup_name, rows=len(df_new) + 50, cols=len(SHEET_HEADERS))
             new_sheet.update('A1', [SHEET_HEADERS], value_input_option='USER_ENTERED')
@@ -199,7 +200,8 @@ def backup_data_to_new_sheet(container_data):
             if not new_unique_df.empty:
                 backup_sheet.append_rows(new_unique_df.values.tolist(), value_input_option='USER_ENTERED')
         except gspread.exceptions.WorksheetNotFound:
-            new_sheet = spreadsheet.add_worksheet(title=monthly_backup_name, rows=len(df_new) + 50, cols=len(SHEET_HEADERS))
+            # 월별 시트는 한 달 누적 데이터를 담으므로 넉넉하게 1000행으로 고정
+            new_sheet = spreadsheet.add_worksheet(title=monthly_backup_name, rows=1000, cols=len(SHEET_HEADERS))
             new_sheet.update('A1', [SHEET_HEADERS], value_input_option='USER_ENTERED')
             ensure_text_format(new_sheet, '씰 번호')
             if not df_new.empty:

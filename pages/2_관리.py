@@ -202,11 +202,9 @@ if spreadsheet:
                                 for index, row in selected_rows.iterrows():
                                     # '선택', 'No.' 컬럼 제거 후 SHEET_HEADERS 컬럼만 추출
                                     row_to_add = {k: v for k, v in row.to_dict().items() if k in SHEET_HEADERS}
-                                    try:
-                                        row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시'))
-                                        row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'))
-                                    except Exception:
-                                        pass
+                                    # errors='coerce'로 변환 실패 시 NaT 처리 (예외 없이 안전하게)
+                                    row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시'), errors='coerce')
+                                    row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'), errors='coerce')
                                     st.session_state.container_list.append(row_to_add)
                                     add_row_to_gsheet(row_to_add)
                                     added_count += 1
@@ -223,11 +221,9 @@ if spreadsheet:
                             for index, row in recoverable_df.iterrows():
                                 # '선택', 'No.' 컬럼 제거 후 SHEET_HEADERS 컬럼만 추출
                                 row_to_add = {k: v for k, v in row.to_dict().items() if k in SHEET_HEADERS}
-                                try:
-                                    row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시'))
-                                    row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'))
-                                except Exception:
-                                    pass
+                                # errors='coerce'로 변환 실패 시 NaT 처리 (예외 없이 안전하게)
+                                row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시'), errors='coerce')
+                                row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'), errors='coerce')
                                 st.session_state.container_list.append(row_to_add)
                                 add_row_to_gsheet(row_to_add)
                                 added_count += 1
