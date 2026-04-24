@@ -48,18 +48,9 @@ st.markdown(
     [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
     [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] div,
     [data-testid="stSidebar"] span, [data-testid="stSidebar"] button { font-size: 22px !important; font-weight: bold !important; }
-
-    /* 모바일 최적화 */
     @media (max-width: 768px) {
         [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
         [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
-        .stButton > button { min-height: 48px !important; font-size: 16px !important; }
-        .stTextInput input { min-height: 48px !important; font-size: 16px !important; }
-    }
-
-    /* data_editor 체크된 행(선적완료) 배경색 초록 */
-    [data-testid="stDataEditor"] tr:has(input[type="checkbox"]:checked) td {
-        background-color: #e8f5e9 !important;
     }
     </style>
     """,
@@ -132,18 +123,12 @@ else:
 
     display_df = df.copy()
     if '등록일시' in display_df.columns:
-        display_df['등록일시'] = pd.to_datetime(display_df['등록일시'], errors='coerce').dt.strftime('%m-%d %H:%M')
+        display_df['등록일시'] = pd.to_datetime(display_df['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
     if '완료일시' in display_df.columns:
-        display_df['완료일시'] = pd.to_datetime(display_df['완료일시'], errors='coerce').dt.strftime('%m-%d %H:%M')
+        display_df['완료일시'] = pd.to_datetime(display_df['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
     display_df.fillna('', inplace=True)
 
-    # 선적완료 행 배경색 초록으로 강조
-    def highlight_completed(row):
-        if row.get('상태') == '선적완료':
-            return ['background-color: #e8f5e9'] * len(row)
-        return [''] * len(row)
-
-    column_order = ['컨테이너 번호', '출고처', '피트수', '선적완료', '씰 번호', '등록일시', '완료일시']
+    column_order = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '등록일시', '완료일시', '선적완료']
 
     edited_df = st.data_editor(
         display_df,
@@ -152,13 +137,13 @@ else:
         hide_index=True,
         key="data_editor_final",
         column_config={
-            "선적완료": st.column_config.CheckboxColumn("선적완료", width="medium"),
-            "컨테이너 번호": st.column_config.TextColumn("컨테이너 번호", disabled=True, width="small"),
-            "출고처": st.column_config.TextColumn("출고처", disabled=True, width="small"),
-            "피트수": st.column_config.TextColumn("피트수", disabled=True, width="small"),
-            "씰 번호": st.column_config.TextColumn("씰 번호", disabled=True, width="small"),
-            "등록일시": st.column_config.TextColumn("등록일시", disabled=True, width="small"),
-            "완료일시": st.column_config.TextColumn("완료일시", disabled=True, width="small"),
+            "선적완료": st.column_config.CheckboxColumn("선적완료", width="small"),
+            "컨테이너 번호": st.column_config.TextColumn(disabled=True),
+            "출고처": st.column_config.TextColumn(disabled=True),
+            "피트수": st.column_config.TextColumn(disabled=True),
+            "씰 번호": st.column_config.TextColumn(disabled=True),
+            "등록일시": st.column_config.TextColumn(disabled=True),
+            "완료일시": st.column_config.TextColumn(disabled=True),
         }
     )
 
@@ -193,7 +178,6 @@ if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
 
             with st.spinner('메인 시트를 정리하는 중...'):
                 try:
-                    # 역순 정렬 후 시트 삭제와 세션 삭제를 하나의 루프에서 처리 → 인덱스 밀림 방지
                     indices_to_delete = sorted([i for i, item in completed_items_with_indices], reverse=True)
 
                     for index in indices_to_delete:
