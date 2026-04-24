@@ -3,7 +3,7 @@ import pandas as pd
 from barcode import Code128
 from barcode.writer import ImageWriter
 from io import BytesIO
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 import re
 from utils import (
     SHEET_HEADERS,
@@ -21,6 +21,14 @@ st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar
 
 def get_korea_now():
     return datetime.now(timezone(timedelta(hours=9)))
+
+# 바코드 생성 함수 캐싱 - 동일 컨테이너 번호면 재생성 없이 재사용
+@st.cache_data
+def generate_barcode(barcode_data: str) -> bytes:
+    fp = BytesIO()
+    Code128(barcode_data, writer=ImageWriter()).write(fp)
+    fp.seek(0)
+    return fp.getvalue()
 
 def clear_form_inputs():
     st.session_state["form_container_no"] = ""
@@ -71,13 +79,11 @@ with st.container(border=True):
 
         st.info(f"**출고처:** {container_info.get('출고처', 'N/A')} / **피트수:** {container_info.get('피트수', 'N/A')}")
 
-        barcode_data = selected_for_barcode
-        fp = BytesIO()
-        Code128(barcode_data, writer=ImageWriter()).write(fp)
+        barcode_bytes = generate_barcode(selected_for_barcode)
 
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.image(fp)
+            st.image(barcode_bytes)
 
 st.divider()
 
@@ -86,8 +92,7 @@ with col_header:
     st.markdown("#### 📋 컨테이너 현황")
 with col_button:
     if st.button("🔄 데이터 새로고침", use_container_width=True):
-        if 'container_list' in st.session_state:
-            del st.session_state['container_list']
+        st.session_state.container_list = load_data_from_gsheet()
         st.rerun()
 
 completed_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적완료'])
@@ -115,7 +120,7 @@ if not st.session_state.container_list:
 else:
     df = pd.DataFrame(st.session_state.container_list)
     df['선적완료'] = df['상태'].apply(lambda x: True if x == '선적완료' else False)
-    
+
     display_df = df.copy()
     if '등록일시' in display_df.columns:
         display_df['등록일시'] = pd.to_datetime(display_df['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
@@ -152,7 +157,7 @@ else:
                     st.session_state.container_list[i]['완료일시'] = pd.to_datetime(naive_completion_time)
                 else:
                     st.session_state.container_list[i]['완료일시'] = None
-                
+
                 update_row_in_gsheet(i, st.session_state.container_list[i])
                 st.rerun()
 
@@ -160,31 +165,30 @@ if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
     completed_items_with_indices = [
         (i, item) for i, item in enumerate(st.session_state.container_list) if item.get('상태') == '선적완료'
     ]
-    
+
     if not completed_items_with_indices:
         st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
     else:
         completed_data = [item for i, item in completed_items_with_indices]
         with st.spinner('데이터를 백업하는 중...'):
             success, error_msg = backup_data_to_new_sheet(completed_data)
-        
+
         if success:
             st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 일별/월별 백업했습니다!")
-            
+
             with st.spinner('메인 시트를 정리하는 중...'):
                 try:
+                    # 역순 정렬 후 시트 삭제와 세션 삭제를 하나의 루프에서 처리 → 인덱스 밀림 방지
                     indices_to_delete = sorted([i for i, item in completed_items_with_indices], reverse=True)
-                    
+
                     for index in indices_to_delete:
                         container_no_to_delete = st.session_state.container_list[index].get('컨테이너 번호')
                         delete_row_from_gsheet(index, container_no_to_delete)
-                    
-                    for index in indices_to_delete:
                         st.session_state.container_list.pop(index)
 
                     log_message = f"데이터 백업: {len(completed_data)}개 백업 완료 후 메인 시트에서 삭제."
                     log_change(log_message)
-                    
+
                     st.success("메인 시트 정리가 완료되었습니다.")
                     st.rerun()
 
@@ -240,7 +244,7 @@ with st.form(key="new_container_form"):
 
 if st.session_state.get("form_success_message"):
     st.success(st.session_state.get("form_success_message"))
-    st.session_state["form_success_message"] = "" 
+    st.session_state["form_success_message"] = ""
 if st.session_state.get("form_error_message"):
     st.error(st.session_state.get("form_error_message"))
     st.session_state["form_error_message"] = ""

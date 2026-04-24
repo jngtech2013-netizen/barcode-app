@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import date, datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta
 from utils import (
     SHEET_HEADERS,
     MAIN_SHEET_NAME,
@@ -75,9 +75,9 @@ if st.session_state.container_list:
             if st.form_submit_button("💾 수정사항 저장", use_container_width=True):
                 updated_data = selected_data.copy()
                 updated_data.update({
-                    '출고처': new_dest, 
+                    '출고처': new_dest,
                     '피트수': new_feet,
-                    '씰 번호': str(new_seal), 
+                    '씰 번호': str(new_seal),
                     '상태': new_status,
                 })
 
@@ -111,7 +111,7 @@ spreadsheet = connect_to_gsheet()
 if spreadsheet:
     all_sheets = [s.title for s in spreadsheet.worksheets()]
     backup_sheets = sorted([s for s in all_sheets if s.startswith(BACKUP_PREFIX)], reverse=True)
-    
+
     if not backup_sheets:
         st.warning("복구할 백업 시트가 없습니다.")
     else:
@@ -132,9 +132,11 @@ if spreadsheet:
                     headers = all_values[0]
                     data = all_values[1:]
                     df_backup = pd.DataFrame(data, columns=headers, dtype=str)
-                    
-                    if '등록일시' not in df_backup.columns: df_backup['등록일시'] = pd.NA
-                    if '완료일시' not in df_backup.columns: df_backup['완료일시'] = pd.NA
+
+                    if '등록일시' not in df_backup.columns:
+                        df_backup['등록일시'] = pd.NA
+                    if '완료일시' not in df_backup.columns:
+                        df_backup['완료일시'] = pd.NA
 
                     st.markdown("##### 📋 선택된 백업 시트 현황")
                     if '상태' in df_backup.columns:
@@ -157,7 +159,7 @@ if spreadsheet:
                             </div>
                             """, unsafe_allow_html=True
                         )
-                                        
+
                     existing_nos = {c.get('컨테이너 번호') for c in st.session_state.container_list}
                     recoverable_df = df_backup[~df_backup['컨테이너 번호'].isin(existing_nos)].copy()
 
@@ -170,9 +172,9 @@ if spreadsheet:
 
                         recoverable_df.insert(0, '선택', False)
                         recoverable_df.insert(1, 'No.', range(1, len(recoverable_df) + 1))
-                        
+
                         display_order = ['선택', 'No.'] + [h for h in SHEET_HEADERS if h in recoverable_df.columns and h != 'No.']
-                        
+
                         edited_df = st.data_editor(
                             recoverable_df,
                             column_order=display_order,
@@ -191,18 +193,19 @@ if spreadsheet:
                                 "완료일시": st.column_config.TextColumn(disabled=True),
                             }
                         )
-                        
+
                         selected_rows = edited_df[edited_df['선택']]
 
                         if not selected_rows.empty:
                             if st.button(f"선택된 {len(selected_rows)}개 컨테이너 복구하기", use_container_width=True, type="primary"):
                                 added_count = 0
                                 for index, row in selected_rows.iterrows():
-                                    row_to_add = row.to_dict()
+                                    # '선택', 'No.' 컬럼 제거 후 SHEET_HEADERS 컬럼만 추출
+                                    row_to_add = {k: v for k, v in row.to_dict().items() if k in SHEET_HEADERS}
                                     try:
                                         row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시'))
                                         row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'))
-                                    except:
+                                    except Exception:
                                         pass
                                     st.session_state.container_list.append(row_to_add)
                                     add_row_to_gsheet(row_to_add)
@@ -210,19 +213,20 @@ if spreadsheet:
                                 log_change(f"데이터 복구: '{selected_backup_sheet}'에서 {added_count}개 선택 복구")
                                 st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 컨테이너를 성공적으로 복구했습니다!")
                                 st.rerun()
-                        
+
                         st.divider()
                         st.markdown("##### 시트 전체 복구 (현재 목록에 없는 데이터만)")
                         st.warning("주의: 이 작업은 위 테이블에 보이는 모든 컨테이너를 한 번에 추가합니다.")
-                        
+
                         if st.button(f"'{selected_backup_sheet}' 시트의 모든 데이터 추가하기", use_container_width=True):
                             added_count = 0
                             for index, row in recoverable_df.iterrows():
-                                row_to_add = row.to_dict()
+                                # '선택', 'No.' 컬럼 제거 후 SHEET_HEADERS 컬럼만 추출
+                                row_to_add = {k: v for k, v in row.to_dict().items() if k in SHEET_HEADERS}
                                 try:
                                     row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시'))
                                     row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'))
-                                except:
+                                except Exception:
                                     pass
                                 st.session_state.container_list.append(row_to_add)
                                 add_row_to_gsheet(row_to_add)

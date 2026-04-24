@@ -1,5 +1,5 @@
 import streamlit as st
-from datetime import date, datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta
 import pandas as pd
 import gspread
 from gspread.utils import column_letter_to_index
@@ -25,8 +25,6 @@ def connect_to_gsheet():
         st.error(f"Google Sheets 연결에 실패했습니다: {e}")
         return None
 
-spreadsheet = connect_to_gsheet()
-
 # --- 서식 강제 함수 ---
 def ensure_text_format(worksheet, column_name):
     try:
@@ -40,7 +38,9 @@ def ensure_text_format(worksheet, column_name):
 
 # --- 로그 기록 함수 (공용) ---
 def log_change(action):
-    if spreadsheet is None: return
+    spreadsheet = connect_to_gsheet()
+    if spreadsheet is None:
+        return
     try:
         log_sheet = spreadsheet.worksheet(LOG_SHEET_NAME)
         timestamp = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
@@ -50,27 +50,32 @@ def log_change(action):
 
 # --- 데이터 관리 함수들 (공용) ---
 def load_data_from_gsheet():
-    if spreadsheet is None: return []
+    spreadsheet = connect_to_gsheet()
+    if spreadsheet is None:
+        return []
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
         ensure_text_format(worksheet, '씰 번호')
-        
+
         all_values = worksheet.get_all_values()
-        if len(all_values) < 2: return []
-        
+        if len(all_values) < 2:
+            return []
+
         headers = all_values[0]
         data = all_values[1:]
-        
+
         df = pd.DataFrame(data, columns=headers, dtype=str)
         df.replace('', pd.NA, inplace=True)
-        
-        if '등록일시' in df.columns: df['등록일시'] = pd.to_datetime(df['등록일시'], errors='coerce')
-        if '완료일시' in df.columns: df['완료일시'] = pd.to_datetime(df['완료일시'], errors='coerce')
+
+        if '등록일시' in df.columns:
+            df['등록일시'] = pd.to_datetime(df['등록일시'], errors='coerce')
+        if '완료일시' in df.columns:
+            df['완료일시'] = pd.to_datetime(df['완료일시'], errors='coerce')
 
         if '상태' in df.columns and '완료일시' in df.columns:
             inconsistent_rows = (df['상태'] == '선적중') & (df['완료일시'].notna())
             df.loc[inconsistent_rows, '완료일시'] = pd.NaT
-        
+
         return df.to_dict('records')
     except gspread.exceptions.WorksheetNotFound:
         st.error(f"'{MAIN_SHEET_NAME}' 시트를 찾을 수 없습니다.")
@@ -79,8 +84,11 @@ def load_data_from_gsheet():
         st.error(f"데이터 로딩 중 오류 발생: {e}")
         return []
 
+
 def add_row_to_gsheet(data):
-    if spreadsheet is None: return False, "Google Sheets에 연결되지 않았습니다."
+    spreadsheet = connect_to_gsheet()
+    if spreadsheet is None:
+        return False, "Google Sheets에 연결되지 않았습니다."
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
         ensure_text_format(worksheet, '씰 번호')
@@ -100,16 +108,18 @@ def add_row_to_gsheet(data):
 
 
 def update_row_in_gsheet(index, data):
-    if spreadsheet is None: return
+    spreadsheet = connect_to_gsheet()
+    if spreadsheet is None:
+        return
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
         ensure_text_format(worksheet, '씰 번호')
         data_copy = data.copy()
         if isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
             data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')
-        
+
         if data_copy.get('완료일시') is None or pd.isna(data_copy.get('완료일시')):
-             data_copy['완료일시'] = ''
+            data_copy['완료일시'] = ''
         elif isinstance(data_copy.get('완료일시'), (datetime, pd.Timestamp)):
             data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
 
@@ -121,7 +131,9 @@ def update_row_in_gsheet(index, data):
 
 
 def delete_row_from_gsheet(index, container_no):
-    if spreadsheet is None: return
+    spreadsheet = connect_to_gsheet()
+    if spreadsheet is None:
+        return
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
         worksheet.delete_rows(index + 2)
@@ -131,15 +143,21 @@ def delete_row_from_gsheet(index, container_no):
 
 
 def backup_data_to_new_sheet(container_data):
-    if spreadsheet is None: return False, "스프레드시트 연결 안됨"
+    spreadsheet = connect_to_gsheet()
+    if spreadsheet is None:
+        return False, "스프레드시트 연결 안됨"
     try:
         df_new = pd.DataFrame(container_data)
-        
-        if '등록일시' in df_new.columns: df_new['등록일시'] = pd.to_datetime(df_new['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
-        if '완료일시' in df_new.columns: df_new['완료일시'] = pd.to_datetime(df_new['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
-        if '씰 번호' in df_new.columns: df_new['씰 번호'] = df_new['씰 번호'].astype(str)
+
+        if '등록일시' in df_new.columns:
+            df_new['등록일시'] = pd.to_datetime(df_new['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
+        if '완료일시' in df_new.columns:
+            df_new['완료일시'] = pd.to_datetime(df_new['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
+        if '씰 번호' in df_new.columns:
+            df_new['씰 번호'] = df_new['씰 번호'].astype(str)
         for header in SHEET_HEADERS:
-            if header not in df_new.columns: df_new[header] = ""
+            if header not in df_new.columns:
+                df_new[header] = ""
         df_new = df_new[SHEET_HEADERS]
 
         kst_now = datetime.now(KST)
@@ -186,7 +204,7 @@ def backup_data_to_new_sheet(container_data):
             ensure_text_format(new_sheet, '씰 번호')
             if not df_new.empty:
                 new_sheet.update('A2', df_new.values.tolist(), value_input_option='USER_ENTERED')
-            
+
         return True, None
     except Exception as e:
         return False, str(e)
