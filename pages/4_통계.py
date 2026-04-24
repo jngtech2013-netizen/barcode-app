@@ -16,9 +16,6 @@ st.markdown(
         [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
         [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
     }
-    .metric-card { padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }
-    .metric-value { font-size: 2.5rem; font-weight: bold; }
-    .metric-label { font-size: 1rem; color: #555555; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -77,17 +74,14 @@ if df_all.empty:
     st.info("표시할 데이터가 없습니다.")
     st.stop()
 
-# 날짜 변환
 df_all['등록일시'] = pd.to_datetime(df_all['등록일시'], errors='coerce')
 df_all['완료일시'] = pd.to_datetime(df_all['완료일시'], errors='coerce')
 
 st.markdown("---")
 
-# --- 요약 카드 ---
-total = len(df_all)
+# --- 요약 카드 (선적중 / 선적완료만 표시) ---
 pending = len(df_all[df_all['상태'] == '선적중'])
 completed = len(df_all[df_all['상태'] == '선적완료'])
-completion_rate = round(completed / total * 100, 1) if total > 0 else 0
 
 st.markdown(
     f"""
@@ -96,16 +90,12 @@ st.markdown(
     .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
     .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
     .metric-label {{ font-size: 1rem; color: #555555; }}
-    .blue-value {{ color: #1a73e8; }}
     .red-value {{ color: #FF4B4B; }}
     .green-value {{ color: #28A745; }}
-    .gray-value {{ color: #555555; }}
     </style>
     <div class="row">
-        <div class="col"><div class="metric-card"><div class="metric-value blue-value">{total}</div><div class="metric-label">전체</div></div></div>
         <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending}</div><div class="metric-label">선적중</div></div></div>
         <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed}</div><div class="metric-label">선적완료</div></div></div>
-        <div class="col"><div class="metric-card"><div class="metric-value gray-value">{completion_rate}%</div><div class="metric-label">완료율</div></div></div>
     </div>
     """, unsafe_allow_html=True
 )
@@ -113,7 +103,7 @@ st.markdown(
 st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
 st.markdown("---")
 
-# --- 출고처별 통계 ---
+# --- 출고처별 현황 (테이블만, 선적완료 / 선적중 / 합계 순) ---
 st.markdown("##### 📦 출고처별 현황")
 if '출고처' in df_all.columns:
     dest_stats = df_all.groupby(['출고처', '상태']).size().unstack(fill_value=0)
@@ -121,67 +111,8 @@ if '출고처' in df_all.columns:
         dest_stats['선적중'] = 0
     if '선적완료' not in dest_stats.columns:
         dest_stats['선적완료'] = 0
-    dest_stats['합계'] = dest_stats['선적중'] + dest_stats['선적완료']
-    dest_stats = dest_stats[['선적중', '선적완료', '합계']].sort_values('합계', ascending=False)
+    dest_stats['합계'] = dest_stats['선적완료'] + dest_stats['선적중']
+    dest_stats = dest_stats[['선적완료', '선적중', '합계']].sort_values('합계', ascending=False)
     dest_stats.index.name = '출고처'
 
     st.dataframe(dest_stats, use_container_width=True)
-    st.bar_chart(dest_stats[['선적중', '선적완료']])
-
-st.markdown("---")
-
-# --- 피트수별 통계 ---
-st.markdown("##### 📐 피트수별 현황")
-if '피트수' in df_all.columns:
-    feet_stats = df_all.groupby(['피트수', '상태']).size().unstack(fill_value=0)
-    if '선적중' not in feet_stats.columns:
-        feet_stats['선적중'] = 0
-    if '선적완료' not in feet_stats.columns:
-        feet_stats['선적완료'] = 0
-    feet_stats['합계'] = feet_stats['선적중'] + feet_stats['선적완료']
-    feet_stats = feet_stats[['선적중', '선적완료', '합계']]
-    feet_stats.index.name = '피트수'
-
-    st.dataframe(feet_stats, use_container_width=True)
-
-st.markdown("---")
-
-# --- 일별 등록 추이 ---
-st.markdown("##### 📈 일별 등록 추이")
-if '등록일시' in df_all.columns and df_all['등록일시'].notna().any():
-    daily = df_all.copy()
-    daily['등록일'] = daily['등록일시'].dt.date
-    daily_count = daily.groupby('등록일').size().reset_index(name='등록건수')
-    daily_count = daily_count.set_index('등록일')
-    st.line_chart(daily_count)
-
-st.markdown("---")
-
-# --- 평균 선적 소요 시간 ---
-st.markdown("##### ⏱️ 평균 선적 소요 시간")
-completed_df = df_all[
-    (df_all['상태'] == '선적완료') &
-    df_all['등록일시'].notna() &
-    df_all['완료일시'].notna()
-].copy()
-
-if not completed_df.empty:
-    completed_df['소요시간(시간)'] = (
-        completed_df['완료일시'] - completed_df['등록일시']
-    ).dt.total_seconds() / 3600
-    completed_df = completed_df[completed_df['소요시간(시간)'] > 0]
-
-    if not completed_df.empty:
-        avg_hours = completed_df['소요시간(시간)'].mean()
-        avg_days = avg_hours / 24
-        st.metric("평균 소요 시간", f"{avg_hours:.1f}시간 ({avg_days:.1f}일)")
-
-        # 출고처별 평균 소요시간
-        dest_avg = completed_df.groupby('출고처')['소요시간(시간)'].mean().round(1).reset_index()
-        dest_avg.columns = ['출고처', '평균 소요시간(시간)']
-        dest_avg = dest_avg.sort_values('평균 소요시간(시간)')
-        st.dataframe(dest_avg, use_container_width=True, hide_index=True)
-    else:
-        st.info("소요 시간 계산 가능한 데이터가 없습니다.")
-else:
-    st.info("선적완료된 데이터가 없습니다.")
