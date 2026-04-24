@@ -53,29 +53,8 @@ st.markdown(
     @media (max-width: 768px) {
         [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
         [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
-        [data-testid="stDataEditor"] { font-size: 12px !important; }
         .stButton > button { min-height: 48px !important; font-size: 16px !important; }
         .stTextInput input { min-height: 48px !important; font-size: 16px !important; }
-    }
-
-    /* 상태 뱃지 스타일 */
-    .badge-pending {
-        display: inline-block;
-        padding: 3px 10px;
-        border-radius: 12px;
-        background-color: #FFE0E0;
-        color: #CC0000;
-        font-weight: bold;
-        font-size: 0.85rem;
-    }
-    .badge-done {
-        display: inline-block;
-        padding: 3px 10px;
-        border-radius: 12px;
-        background-color: #D4EDDA;
-        color: #155724;
-        font-weight: bold;
-        font-size: 0.85rem;
     }
     </style>
     """,
@@ -143,86 +122,60 @@ st.markdown(
 if not st.session_state.container_list:
     st.info("등록된 컨테이너가 없습니다.")
 else:
-    df = pd.DataFrame(st.session_state.container_list)
-    df['선적완료'] = df['상태'].apply(lambda x: True if x == '선적완료' else False)
+    # 컬럼 헤더
+    header_cols = st.columns([2.5, 1.2, 0.8, 1.5, 1.2, 1.2, 1.2])
+    headers = ['컨테이너 번호', '출고처', '피트수', '상태', '씰 번호', '등록일시', '완료일시']
+    for col, h in zip(header_cols, headers):
+        col.markdown(f"<div style='font-weight:bold;font-size:0.85rem;color:#555;padding:4px 0;border-bottom:2px solid #ddd;'>{h}</div>", unsafe_allow_html=True)
 
-    display_df = df.copy()
-    if '등록일시' in display_df.columns:
-        # 모바일 최적화: 날짜만 표시 (MM-DD HH:MM)
-        display_df['등록일시'] = pd.to_datetime(display_df['등록일시'], errors='coerce').dt.strftime('%m-%d %H:%M')
-    if '완료일시' in display_df.columns:
-        display_df['완료일시'] = pd.to_datetime(display_df['완료일시'], errors='coerce').dt.strftime('%m-%d %H:%M')
-    display_df.fillna('', inplace=True)
+    st.markdown("<div style='margin-bottom:4px;'></div>", unsafe_allow_html=True)
 
-    # 상태 뱃지 HTML 테이블 (data_editor 위에 읽기 전용 뷰로 표시)
-    badge_rows_list = []
-    for _, row in display_df.iterrows():
-        status = row.get('상태', '')
-        if status == '선적중':
-            badge = '<span class="badge-pending">🔴 선적중</span>'
-        else:
-            badge = '<span class="badge-done">🟢 선적완료</span>'
-        badge_rows_list.append(
-            f'<tr>'
-            f'<td style="padding:6px 8px;font-weight:bold;">{row.get("컨테이너 번호","")}</td>'
-            f'<td style="padding:6px 8px;">{row.get("출고처","")}</td>'
-            f'<td style="padding:6px 8px;text-align:center;">{row.get("피트수","")}ft</td>'
-            f'<td style="padding:6px 8px;">{badge}</td>'
-            f'<td style="padding:6px 8px;color:#888;font-size:0.85rem;">{row.get("등록일시","")}</td>'
-            f'</tr>'
-        )
-    badge_rows = "".join(badge_rows_list)
+    for i, item in enumerate(st.session_state.container_list):
+        status = item.get('상태', '')
+        reg_time = pd.to_datetime(item.get('등록일시'), errors='coerce')
+        done_time = pd.to_datetime(item.get('완료일시'), errors='coerce')
+        reg_str = reg_time.strftime('%m-%d %H:%M') if pd.notna(reg_time) else ''
+        done_str = done_time.strftime('%m-%d %H:%M') if pd.notna(done_time) else ''
 
-    st.markdown(
-        f'<div style="overflow-x:auto;margin-bottom:8px;">'
-        f'<table style="width:100%;border-collapse:collapse;font-size:0.9rem;">'
-        f'<thead><tr style="background:#f0f2f6;border-bottom:2px solid #ddd;">'
-        f'<th style="padding:8px;text-align:left;">컨테이너 번호</th>'
-        f'<th style="padding:8px;text-align:left;">출고처</th>'
-        f'<th style="padding:8px;text-align:center;">피트수</th>'
-        f'<th style="padding:8px;text-align:left;">상태</th>'
-        f'<th style="padding:8px;text-align:left;">등록일시</th>'
-        f'</tr></thead>'
-        f'<tbody>{badge_rows}</tbody>'
-        f'</table></div>',
-        unsafe_allow_html=True
-    )
+        row_bg = "#f8fff8" if status == '선적완료' else "#ffffff"
+        row_cols = st.columns([2.5, 1.2, 0.8, 1.5, 1.2, 1.2, 1.2])
 
-    st.caption("✅ 선적완료 처리는 아래 체크박스를 사용하세요.")
+        with row_cols[0]:
+            st.markdown(f"<div style='padding:6px 2px;font-weight:bold;font-size:0.9rem;background:{row_bg};'>{item.get('컨테이너 번호','')}</div>", unsafe_allow_html=True)
+        with row_cols[1]:
+            st.markdown(f"<div style='padding:6px 2px;font-size:0.9rem;background:{row_bg};'>{item.get('출고처','')}</div>", unsafe_allow_html=True)
+        with row_cols[2]:
+            st.markdown(f"<div style='padding:6px 2px;font-size:0.9rem;background:{row_bg};'>{item.get('피트수','')}ft</div>", unsafe_allow_html=True)
+        with row_cols[3]:
+            # 토글 버튼 - 선적중(빨강) / 선적완료(초록)
+            if status == '선적완료':
+                btn_label = "🟢 선적완료"
+                btn_type = "primary"
+                btn_style = "background-color:#28A745;"
+            else:
+                btn_label = "🔴 선적중"
+                btn_type = "secondary"
+                btn_style = ""
 
-    # 선적완료 체크 전용 경량 에디터 (체크박스 컬럼만 편집 가능)
-    column_order = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '등록일시', '완료일시', '선적완료']
-
-    edited_df = st.data_editor(
-        display_df,
-        column_order=column_order,
-        use_container_width=True,
-        hide_index=True,
-        key="data_editor_final",
-        column_config={
-            "선적완료": st.column_config.CheckboxColumn("선적완료", width="small"),
-            "컨테이너 번호": st.column_config.TextColumn("컨테이너 번호", disabled=True, width="medium"),
-            "출고처": st.column_config.TextColumn("출고처", disabled=True, width="small"),
-            "피트수": st.column_config.TextColumn("피트수", disabled=True, width="small"),
-            "씰 번호": st.column_config.TextColumn("씰 번호", disabled=True, width="small"),
-            "등록일시": st.column_config.TextColumn("등록일시", disabled=True, width="small"),
-            "완료일시": st.column_config.TextColumn("완료일시", disabled=True, width="small"),
-        }
-    )
-
-    if not df['선적완료'].equals(edited_df['선적완료']):
-        for i, (original_bool, edited_bool) in enumerate(zip(df['선적완료'], edited_df['선적완료'])):
-            if original_bool != edited_bool:
-                st.session_state.container_list[i]['상태'] = "선적완료" if edited_bool else "선적중"
-                if edited_bool:
-                    aware_completion_time = get_korea_now()
-                    naive_completion_time = aware_completion_time.replace(tzinfo=None)
-                    st.session_state.container_list[i]['완료일시'] = pd.to_datetime(naive_completion_time)
+            if st.button(btn_label, key=f"toggle_{i}", use_container_width=True):
+                new_status = '선적중' if status == '선적완료' else '선적완료'
+                st.session_state.container_list[i]['상태'] = new_status
+                if new_status == '선적완료':
+                    naive_time = get_korea_now().replace(tzinfo=None)
+                    st.session_state.container_list[i]['완료일시'] = pd.to_datetime(naive_time)
                 else:
                     st.session_state.container_list[i]['완료일시'] = None
-
                 update_row_in_gsheet(i, st.session_state.container_list[i])
                 st.rerun()
+
+        with row_cols[4]:
+            st.markdown(f"<div style='padding:6px 2px;font-size:0.9rem;color:#555;background:{row_bg};'>{item.get('씰 번호','')}</div>", unsafe_allow_html=True)
+        with row_cols[5]:
+            st.markdown(f"<div style='padding:6px 2px;font-size:0.85rem;color:#888;background:{row_bg};'>{reg_str}</div>", unsafe_allow_html=True)
+        with row_cols[6]:
+            st.markdown(f"<div style='padding:6px 2px;font-size:0.85rem;color:#888;background:{row_bg};'>{done_str}</div>", unsafe_allow_html=True)
+
+        st.markdown("<div style='border-bottom:1px solid #f0f0f0;margin:0;'></div>", unsafe_allow_html=True)
 
 if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
     completed_items_with_indices = [
