@@ -48,9 +48,34 @@ st.markdown(
     [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
     [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] div,
     [data-testid="stSidebar"] span, [data-testid="stSidebar"] button { font-size: 22px !important; font-weight: bold !important; }
+
+    /* 모바일 최적화 */
     @media (max-width: 768px) {
         [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
         [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
+        [data-testid="stDataEditor"] { font-size: 12px !important; }
+        .stButton > button { min-height: 48px !important; font-size: 16px !important; }
+        .stTextInput input { min-height: 48px !important; font-size: 16px !important; }
+    }
+
+    /* 상태 뱃지 스타일 */
+    .badge-pending {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 12px;
+        background-color: #FFE0E0;
+        color: #CC0000;
+        font-weight: bold;
+        font-size: 0.85rem;
+    }
+    .badge-done {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 12px;
+        background-color: #D4EDDA;
+        color: #155724;
+        font-weight: bold;
+        font-size: 0.85rem;
     }
     </style>
     """,
@@ -123,11 +148,52 @@ else:
 
     display_df = df.copy()
     if '등록일시' in display_df.columns:
-        display_df['등록일시'] = pd.to_datetime(display_df['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
+        # 모바일 최적화: 날짜만 표시 (MM-DD HH:MM)
+        display_df['등록일시'] = pd.to_datetime(display_df['등록일시'], errors='coerce').dt.strftime('%m-%d %H:%M')
     if '완료일시' in display_df.columns:
-        display_df['완료일시'] = pd.to_datetime(display_df['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
+        display_df['완료일시'] = pd.to_datetime(display_df['완료일시'], errors='coerce').dt.strftime('%m-%d %H:%M')
     display_df.fillna('', inplace=True)
 
+    # 상태 뱃지 HTML 테이블 (data_editor 위에 읽기 전용 뷰로 표시)
+    badge_rows = ""
+    for _, row in display_df.iterrows():
+        status = row.get('상태', '')
+        if status == '선적중':
+            badge = '<span class="badge-pending">🔴 선적중</span>'
+        else:
+            badge = '<span class="badge-done">🟢 선적완료</span>'
+        badge_rows += f"""
+        <tr>
+            <td style="padding:6px 8px; font-weight:bold;">{row.get('컨테이너 번호','')}</td>
+            <td style="padding:6px 8px;">{row.get('출고처','')}</td>
+            <td style="padding:6px 8px; text-align:center;">{row.get('피트수','')}ft</td>
+            <td style="padding:6px 8px;">{badge}</td>
+            <td style="padding:6px 8px; color:#888; font-size:0.85rem;">{row.get('등록일시','')}</td>
+        </tr>
+        """
+
+    st.markdown(f"""
+    <div style="overflow-x:auto; margin-bottom:8px;">
+        <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+            <thead>
+                <tr style="background:#f0f2f6; border-bottom:2px solid #ddd;">
+                    <th style="padding:8px; text-align:left;">컨테이너 번호</th>
+                    <th style="padding:8px; text-align:left;">출고처</th>
+                    <th style="padding:8px; text-align:center;">피트수</th>
+                    <th style="padding:8px; text-align:left;">상태</th>
+                    <th style="padding:8px; text-align:left;">등록일시</th>
+                </tr>
+            </thead>
+            <tbody>
+                {badge_rows}
+            </tbody>
+        </table>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.caption("✅ 선적완료 처리는 아래 체크박스를 사용하세요.")
+
+    # 선적완료 체크 전용 경량 에디터 (체크박스 컬럼만 편집 가능)
     column_order = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '등록일시', '완료일시', '선적완료']
 
     edited_df = st.data_editor(
@@ -138,12 +204,12 @@ else:
         key="data_editor_final",
         column_config={
             "선적완료": st.column_config.CheckboxColumn("선적완료", width="small"),
-            "컨테이너 번호": st.column_config.TextColumn(disabled=True),
-            "출고처": st.column_config.TextColumn(disabled=True),
-            "피트수": st.column_config.TextColumn(disabled=True),
-            "씰 번호": st.column_config.TextColumn(disabled=True),
-            "등록일시": st.column_config.TextColumn(disabled=True),
-            "완료일시": st.column_config.TextColumn(disabled=True),
+            "컨테이너 번호": st.column_config.TextColumn("컨테이너 번호", disabled=True, width="medium"),
+            "출고처": st.column_config.TextColumn("출고처", disabled=True, width="small"),
+            "피트수": st.column_config.TextColumn("피트수", disabled=True, width="small"),
+            "씰 번호": st.column_config.TextColumn("씰 번호", disabled=True, width="small"),
+            "등록일시": st.column_config.TextColumn("등록일시", disabled=True, width="small"),
+            "완료일시": st.column_config.TextColumn("완료일시", disabled=True, width="small"),
         }
     )
 
