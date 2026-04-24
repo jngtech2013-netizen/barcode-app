@@ -152,8 +152,8 @@ else:
         hide_index=True,
         key="data_editor_final",
         column_config={
-            "선적완료": st.column_config.CheckboxColumn("선적완료", width="small"),
-            "컨테이너 번호": st.column_config.TextColumn("컨테이너 번호", disabled=True, width="medium"),
+            "선적완료": st.column_config.CheckboxColumn("선적완료", width="medium"),
+            "컨테이너 번호": st.column_config.TextColumn("컨테이너 번호", disabled=True, width="small"),
             "출고처": st.column_config.TextColumn("출고처", disabled=True, width="small"),
             "피트수": st.column_config.TextColumn("피트수", disabled=True, width="small"),
             "씰 번호": st.column_config.TextColumn("씰 번호", disabled=True, width="small"),
