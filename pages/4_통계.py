@@ -127,10 +127,8 @@ st.markdown(
     .blue-value {{ color: #1a73e8; }}
     </style>
     <div class="row">
-        <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed}</div><div class="metric-label">선적완료 건수</div></div></div>
-        <div class="col"><div class="metric-card"><div class="metric-value blue-value">{total_ft}ft</div><div class="metric-label">전체 피트수</div></div></div>
-        <div class="col"><div class="metric-card"><div class="metric-value blue-value">{ft40}ft</div><div class="metric-label">40ft 합계</div></div></div>
-        <div class="col"><div class="metric-card"><div class="metric-value blue-value">{ft20}ft</div><div class="metric-label">20ft 합계</div></div></div>
+        <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed:,}</div><div class="metric-label">선적완료 건수</div></div></div>
+        <div class="col"><div class="metric-card"><div class="metric-value blue-value">{total_ft:,}ft</div><div class="metric-label">전체 피트수</div></div></div>
     </div>
     """, unsafe_allow_html=True
 )
@@ -139,15 +137,13 @@ st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
 st.markdown("---")
 
 # -------------------------------------------------------
-# 출고처별 현황 (40ft 건수 / 20ft 건수 / 전체 건수 / 전체 피트수 합계)
+# 출고처별 현황 (전체 건수 / 전체 피트수 합계, 천자리 컴마)
 # -------------------------------------------------------
-st.markdown("##### 📦 출고처별 현황 (선적완료)")
+st.markdown("##### 📦 출고처별 현황")
 
 dest_group = df_done.groupby('출고처')
 
 dest_stats = pd.DataFrame({
-    '40ft 건수': df_done[df_done['피트수'] == 40].groupby('출고처').size(),
-    '20ft 건수': df_done[df_done['피트수'] == 20].groupby('출고처').size(),
     '전체 건수': dest_group.size(),
     '전체 피트수(ft)': dest_group['피트수'].sum(),
 }).fillna(0).astype(int)
@@ -155,25 +151,38 @@ dest_stats = pd.DataFrame({
 dest_stats = dest_stats.sort_values('전체 피트수(ft)', ascending=False)
 dest_stats.index.name = '출고처'
 
-st.dataframe(dest_stats, use_container_width=True)
+# 천자리 컴마 포맷
+dest_stats_display = dest_stats.copy()
+dest_stats_display['전체 건수'] = dest_stats_display['전체 건수'].apply(lambda x: f"{x:,}")
+dest_stats_display['전체 피트수(ft)'] = dest_stats_display['전체 피트수(ft)'].apply(lambda x: f"{x:,}")
+
+st.dataframe(dest_stats_display, use_container_width=True)
 
 st.markdown("---")
 
 # -------------------------------------------------------
-# 출고처 × 날짜 크로스 테이블 (전체 피트수 기준)
+# 일자별 현황 크로스 테이블 (출고처 × 날짜, 단위: ft)
 # -------------------------------------------------------
-st.markdown("##### 📅 출고처 × 날짜별 현황 (선적완료, 단위: ft)")
+st.markdown("##### 📅 일자별 현황 (단위: ft)")
 
 if df_done['완료일'].notna().any():
     cross = df_done.groupby(['출고처', '완료일'])['피트수'].sum().unstack(fill_value=0)
     cross.index.name = '출고처'
-    cross.columns = [str(c) for c in cross.columns]
+
+    # 날짜 컬럼을 M/D 형식으로 변환
+    cross.columns = [
+        pd.Timestamp(c).strftime('%-m/%-d') if hasattr(pd.Timestamp(c), 'strftime') else str(c)
+        for c in cross.columns
+    ]
 
     # 합계 행/열 추가
     cross['합계'] = cross.sum(axis=1)
     total_row = cross.sum(axis=0).rename('합계')
     cross = pd.concat([cross, total_row.to_frame().T])
 
-    st.dataframe(cross, use_container_width=True)
+    # 천자리 컴마 포맷
+    cross_display = cross.applymap(lambda x: f"{int(x):,}" if x != 0 else "-")
+
+    st.dataframe(cross_display, use_container_width=True)
 else:
     st.info("완료일시 데이터가 없습니다.")
