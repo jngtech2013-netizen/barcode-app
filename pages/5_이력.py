@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from utils import connect_to_gsheet, LOG_SHEET_NAME
 
-st.set_page_config(page_title="변경 이력", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="이력", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown(
     """
