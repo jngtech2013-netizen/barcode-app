@@ -128,7 +128,7 @@ st.markdown(
     </style>
     <div class="row">
         <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed:,}</div><div class="metric-label">선적완료 건수</div></div></div>
-        <div class="col"><div class="metric-card"><div class="metric-value blue-value">{total_ft:,}ft</div><div class="metric-label">전체 피트수</div></div></div>
+        <div class="col"><div class="metric-card"><div class="metric-value blue-value">{total_ft:,}</div><div class="metric-label">전체 피트수</div></div></div>
     </div>
     """, unsafe_allow_html=True
 )
@@ -169,9 +169,9 @@ if df_done['완료일'].notna().any():
     cross = df_done.groupby(['출고처', '완료일'])['피트수'].sum().unstack(fill_value=0)
     cross.index.name = '출고처'
 
-    # 날짜 컬럼을 M/D 형식으로 변환
+    # 날짜 컬럼을 M/D 형식으로 변환 (크로스플랫폼 호환)
     cross.columns = [
-        pd.Timestamp(c).strftime('%-m/%-d') if hasattr(pd.Timestamp(c), 'strftime') else str(c)
+        pd.Timestamp(str(c)).strftime('%m/%d').lstrip('0').replace('/0', '/')
         for c in cross.columns
     ]
 
@@ -180,8 +180,8 @@ if df_done['완료일'].notna().any():
     total_row = cross.sum(axis=0).rename('합계')
     cross = pd.concat([cross, total_row.to_frame().T])
 
-    # 천자리 컴마 포맷
-    cross_display = cross.applymap(lambda x: f"{int(x):,}" if x != 0 else "-")
+    # 천자리 컴마 포맷 (applymap → map, pandas 최신 버전 대응)
+    cross_display = cross.map(lambda x: f"{int(x):,}" if x != 0 else "-")
 
     st.dataframe(cross_display, use_container_width=True)
 else:
