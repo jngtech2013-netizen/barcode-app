@@ -144,7 +144,7 @@ st.markdown("##### 📦 출고처별 현황")
 dest_group = df_done.groupby('출고처')
 
 dest_stats = pd.DataFrame({
-    '전체 건수': dest_group.size(),
+    '전체 건수(건)': dest_group.size(),
     '전체 피트수(ft)': dest_group['피트수'].sum(),
 }).fillna(0).astype(int)
 
@@ -153,7 +153,7 @@ dest_stats.index.name = '출고처'
 
 # 천자리 컴마 포맷
 dest_stats_display = dest_stats.copy()
-dest_stats_display['전체 건수'] = dest_stats_display['전체 건수'].apply(lambda x: f"{x:,}")
+dest_stats_display['전체 건수(건)'] = dest_stats_display['전체 건수(건)'].apply(lambda x: f"{x:,}")
 dest_stats_display['전체 피트수(ft)'] = dest_stats_display['전체 피트수(ft)'].apply(lambda x: f"{x:,}")
 
 st.dataframe(dest_stats_display, use_container_width=True)
