@@ -121,10 +121,10 @@ st.markdown(
     .red-value {{ color: #FF4B4B; }}
     </style>
     <div class="row">
-        <div class="col"><div class="metric-card"><div class="metric-value blue-value">{total_logs}</div><div class="metric-label">전체 이력</div></div></div>
-        <div class="col"><div class="metric-card"><div class="metric-value green-value">{reg_count}</div><div class="metric-label">신규 등록</div></div></div>
-        <div class="col"><div class="metric-card"><div class="metric-value orange-value">{mod_count}</div><div class="metric-label">수정</div></div></div>
-        <div class="col"><div class="metric-card"><div class="metric-value red-value">{del_count}</div><div class="metric-label">삭제</div></div></div>
+        <div class="col"><div class="metric-card"><div class="metric-value blue-value">{total_logs:,}</div><div class="metric-label">전체 이력</div></div></div>
+        <div class="col"><div class="metric-card"><div class="metric-value green-value">{reg_count:,}</div><div class="metric-label">신규 등록</div></div></div>
+        <div class="col"><div class="metric-card"><div class="metric-value orange-value">{mod_count:,}</div><div class="metric-label">수정</div></div></div>
+        <div class="col"><div class="metric-card"><div class="metric-value red-value">{del_count:,}</div><div class="metric-label">삭제</div></div></div>
     </div>
     """, unsafe_allow_html=True
 )
