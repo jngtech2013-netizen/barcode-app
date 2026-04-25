@@ -38,50 +38,83 @@ with col_refresh[1]:
         st.session_state.container_list = load_data_from_gsheet()
         st.rerun()
 
-# --- 데이터 범위 선택 ---
+# -------------------------------------------------------
+# 데이터 범위 선택 (일별 / 월별)
+# -------------------------------------------------------
 st.markdown("##### 📅 분석 범위 선택")
-data_source = st.radio(
-    "데이터 범위",
-    options=["현재 데이터 (메인 시트)", "백업 데이터 포함 (월별)"],
-    horizontal=True
-)
+range_type = st.radio("범위 유형", options=["월별", "일별"], horizontal=True)
 
-df_all = pd.DataFrame(st.session_state.container_list)
+spreadsheet = connect_to_gsheet()
 
-if data_source == "백업 데이터 포함 (월별)":
-    spreadsheet = connect_to_gsheet()
+def load_backup_sheet(sheet_name):
+    """백업 시트에서 데이터 로드"""
+    try:
+        ws = spreadsheet.worksheet(sheet_name)
+        values = ws.get_all_values()
+        if len(values) >= 2:
+            return pd.DataFrame(values[1:], columns=values[0], dtype=str)
+    except Exception as e:
+        st.error(f"시트 로드 오류: {e}")
+    return pd.DataFrame()
+
+df_selected = pd.DataFrame()
+
+if range_type == "월별":
     if spreadsheet:
         all_sheets = [s.title for s in spreadsheet.worksheets()]
+        # 월별 백업: 백업_YYYY-MM 형태 (길이 체크)
         monthly_sheets = sorted(
             [s for s in all_sheets if s.startswith(BACKUP_PREFIX) and len(s) == len(BACKUP_PREFIX) + 7],
             reverse=True
         )
         if monthly_sheets:
-            selected_month = st.selectbox("월별 백업 시트 선택", monthly_sheets)
-            try:
-                ws = spreadsheet.worksheet(selected_month)
-                values = ws.get_all_values()
-                if len(values) >= 2:
-                    df_backup = pd.DataFrame(values[1:], columns=values[0], dtype=str)
-                    df_all = pd.concat([df_all, df_backup], ignore_index=True)
-                    df_all = df_all.drop_duplicates(subset=['컨테이너 번호'], keep='last')
-            except Exception as e:
-                st.error(f"백업 시트 로드 오류: {e}")
+            selected_month = st.selectbox("월 선택", monthly_sheets)
+            df_selected = load_backup_sheet(selected_month)
         else:
-            st.info("월별 백업 시트가 없습니다. 현재 데이터만 표시합니다.")
+            st.info("월별 백업 시트가 없습니다.")
+    else:
+        st.error("Google Sheets 연결 실패")
 
-if df_all.empty:
-    st.info("표시할 데이터가 없습니다.")
+elif range_type == "일별":
+    if spreadsheet:
+        all_sheets = [s.title for s in spreadsheet.worksheets()]
+        # 일별 백업: 백업_YYYY-MM-DD 형태
+        daily_sheets = sorted(
+            [s for s in all_sheets if s.startswith(BACKUP_PREFIX) and len(s) == len(BACKUP_PREFIX) + 10],
+            reverse=True
+        )
+        if daily_sheets:
+            selected_day = st.selectbox("일 선택", daily_sheets)
+            df_selected = load_backup_sheet(selected_day)
+        else:
+            st.info("일별 백업 시트가 없습니다.")
+    else:
+        st.error("Google Sheets 연결 실패")
+
+if df_selected.empty:
+    st.info("선택한 범위에 데이터가 없습니다.")
     st.stop()
 
-df_all['등록일시'] = pd.to_datetime(df_all['등록일시'], errors='coerce')
-df_all['완료일시'] = pd.to_datetime(df_all['완료일시'], errors='coerce')
+# 선적완료 데이터만 필터
+df_selected['피트수'] = pd.to_numeric(df_selected['피트수'], errors='coerce').fillna(0).astype(int)
+df_selected['완료일시'] = pd.to_datetime(df_selected.get('완료일시', pd.NaT), errors='coerce')
+df_selected['완료일'] = df_selected['완료일시'].dt.date
+
+df_done = df_selected[df_selected['상태'] == '선적완료'].copy()
+
+if df_done.empty:
+    st.info("선택한 범위에 선적완료 데이터가 없습니다.")
+    st.stop()
 
 st.markdown("---")
 
-# --- 요약 카드 (선적중 / 선적완료만 표시) ---
-pending = len(df_all[df_all['상태'] == '선적중'])
-completed = len(df_all[df_all['상태'] == '선적완료'])
+# -------------------------------------------------------
+# 요약 카드 (선적완료만)
+# -------------------------------------------------------
+completed = len(df_done)
+total_ft = int(df_done['피트수'].sum())
+ft40 = int(df_done[df_done['피트수'] == 40]['피트수'].sum())
+ft20 = int(df_done[df_done['피트수'] == 20]['피트수'].sum())
 
 st.markdown(
     f"""
@@ -90,12 +123,14 @@ st.markdown(
     .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
     .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
     .metric-label {{ font-size: 1rem; color: #555555; }}
-    .red-value {{ color: #FF4B4B; }}
     .green-value {{ color: #28A745; }}
+    .blue-value {{ color: #1a73e8; }}
     </style>
     <div class="row">
-        <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed}</div><div class="metric-label">선적완료</div></div></div>
-        <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending}</div><div class="metric-label">선적중</div></div></div>
+        <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed}</div><div class="metric-label">선적완료 건수</div></div></div>
+        <div class="col"><div class="metric-card"><div class="metric-value blue-value">{total_ft}ft</div><div class="metric-label">전체 피트수</div></div></div>
+        <div class="col"><div class="metric-card"><div class="metric-value blue-value">{ft40}ft</div><div class="metric-label">40ft 합계</div></div></div>
+        <div class="col"><div class="metric-card"><div class="metric-value blue-value">{ft20}ft</div><div class="metric-label">20ft 합계</div></div></div>
     </div>
     """, unsafe_allow_html=True
 )
@@ -103,19 +138,42 @@ st.markdown(
 st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
 st.markdown("---")
 
-# --- 출고처별 현황 (피트수 합계 기준, 선적완료 / 선적중 / 합계 순) ---
-st.markdown("##### 📦 출고처별 현황 (단위: ft)")
-if '출고처' in df_all.columns:
-    df_feet = df_all.copy()
-    df_feet['피트수'] = pd.to_numeric(df_feet['피트수'], errors='coerce').fillna(0).astype(int)
+# -------------------------------------------------------
+# 출고처별 현황 (40ft 건수 / 20ft 건수 / 전체 건수 / 전체 피트수 합계)
+# -------------------------------------------------------
+st.markdown("##### 📦 출고처별 현황 (선적완료)")
 
-    dest_stats = df_feet.groupby(['출고처', '상태'])['피트수'].sum().unstack(fill_value=0)
-    if '선적중' not in dest_stats.columns:
-        dest_stats['선적중'] = 0
-    if '선적완료' not in dest_stats.columns:
-        dest_stats['선적완료'] = 0
-    dest_stats['합계'] = dest_stats['선적완료'] + dest_stats['선적중']
-    dest_stats = dest_stats[['선적완료', '선적중', '합계']].sort_values('합계', ascending=False)
-    dest_stats.index.name = '출고처'
+dest_group = df_done.groupby('출고처')
 
-    st.dataframe(dest_stats, use_container_width=True)
+dest_stats = pd.DataFrame({
+    '40ft 건수': df_done[df_done['피트수'] == 40].groupby('출고처').size(),
+    '20ft 건수': df_done[df_done['피트수'] == 20].groupby('출고처').size(),
+    '전체 건수': dest_group.size(),
+    '전체 피트수(ft)': dest_group['피트수'].sum(),
+}).fillna(0).astype(int)
+
+dest_stats = dest_stats.sort_values('전체 피트수(ft)', ascending=False)
+dest_stats.index.name = '출고처'
+
+st.dataframe(dest_stats, use_container_width=True)
+
+st.markdown("---")
+
+# -------------------------------------------------------
+# 출고처 × 날짜 크로스 테이블 (전체 피트수 기준)
+# -------------------------------------------------------
+st.markdown("##### 📅 출고처 × 날짜별 현황 (선적완료, 단위: ft)")
+
+if df_done['완료일'].notna().any():
+    cross = df_done.groupby(['출고처', '완료일'])['피트수'].sum().unstack(fill_value=0)
+    cross.index.name = '출고처'
+    cross.columns = [str(c) for c in cross.columns]
+
+    # 합계 행/열 추가
+    cross['합계'] = cross.sum(axis=1)
+    total_row = cross.sum(axis=0).rename('합계')
+    cross = pd.concat([cross, total_row.to_frame().T])
+
+    st.dataframe(cross, use_container_width=True)
+else:
+    st.info("완료일시 데이터가 없습니다.")
