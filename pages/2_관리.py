@@ -9,6 +9,7 @@ from utils import (
     add_rows_to_gsheet_batch,
     update_row_in_gsheet,
     delete_row_from_gsheet,
+    delete_from_backup_sheets,
     backup_data_to_new_sheet,
     log_change,
     connect_to_gsheet,
@@ -220,12 +221,20 @@ if spreadsheet:
                                     row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'), errors='coerce')
                                     rows_to_add.append(row_to_add)
 
-                                # 개선 2: 일괄 API 호출로 복구
+                                # 메인 시트에 일괄 복구
                                 success, msg = add_rows_to_gsheet_batch(rows_to_add)
                                 if success:
                                     st.session_state.container_list.extend(rows_to_add)
                                     log_change(f"데이터 복구: '{selected_backup_sheet}'에서 {len(rows_to_add)}개 선택 복구")
-                                    st.success(f"'{selected_backup_sheet}' 시트에서 {len(rows_to_add)}개의 컨테이너를 성공적으로 복구했습니다!")
+
+                                    # 해당 일별/월별 시트에서만 삭제
+                                    container_nos = [r.get('컨테이너 번호') for r in rows_to_add]
+                                    with st.spinner('백업 시트에서 복구된 데이터를 정리하는 중...'):
+                                        del_success, del_result = delete_from_backup_sheets(container_nos, selected_backup_sheet)
+                                    if del_success:
+                                        st.success(f"{len(rows_to_add)}개 복구 완료, 백업 시트에서 {del_result}행 정리됐습니다.")
+                                    else:
+                                        st.warning(f"복구는 완료됐으나 백업 시트 정리 중 오류 발생: {del_result}")
                                     st.rerun()
                                 else:
                                     st.error(f"복구 중 오류 발생: {msg}")
@@ -242,12 +251,20 @@ if spreadsheet:
                                 row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'), errors='coerce')
                                 rows_to_add.append(row_to_add)
 
-                            # 개선 2: 일괄 API 호출로 복구
+                            # 메인 시트에 일괄 복구
                             success, msg = add_rows_to_gsheet_batch(rows_to_add)
                             if success:
                                 st.session_state.container_list.extend(rows_to_add)
                                 log_change(f"데이터 복구: '{selected_backup_sheet}'에서 {len(rows_to_add)}개 전체 복구")
-                                st.success(f"'{selected_backup_sheet}' 시트에서 {len(rows_to_add)}개의 새로운 데이터를 성공적으로 추가했습니다!")
+
+                                # 해당 일별/월별 시트에서만 삭제
+                                container_nos = [r.get('컨테이너 번호') for r in rows_to_add]
+                                with st.spinner('백업 시트에서 복구된 데이터를 정리하는 중...'):
+                                    del_success, del_result = delete_from_backup_sheets(container_nos, selected_backup_sheet)
+                                if del_success:
+                                    st.success(f"{len(rows_to_add)}개 복구 완료, 백업 시트에서 {del_result}행 정리됐습니다.")
+                                else:
+                                    st.warning(f"복구는 완료됐으나 백업 시트 정리 중 오류 발생: {del_result}")
                                 st.rerun()
                             else:
                                 st.error(f"복구 중 오류 발생: {msg}")

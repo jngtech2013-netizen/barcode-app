@@ -174,6 +174,71 @@ def delete_row_from_gsheet(index, container_no):
         st.error(f"Google Sheets에서 행 삭제 중 오류가 발생했습니다: {e}")
 
 
+def delete_from_backup_sheets(container_nos, source_sheet_name):
+    """복구된 컨테이너를 해당 일별/월별 백업 시트에서만 삭제
+    source_sheet_name: 복구한 시트명 (예: 백업_2025-04-25 또는 백업_2025-04)
+    """
+    spreadsheet = connect_to_gsheet()
+    if spreadsheet is None:
+        return False, "Google Sheets에 연결되지 않았습니다."
+    try:
+        container_nos_set = set(container_nos)
+
+        # 복구한 시트명에서 날짜 추출 후 관련 시트 목록 결정
+        date_part = source_sheet_name.replace(BACKUP_PREFIX, '')  # 예: 2025-04-25 or 2025-04
+
+        if len(date_part) == 10:
+            # 일별 시트에서 복구한 경우 → 해당 일별 + 해당 월별 시트
+            month_part = date_part[:7]  # 2025-04
+            target_sheets = [
+                f"{BACKUP_PREFIX}{date_part}",   # 백업_2025-04-25
+                f"{BACKUP_PREFIX}{month_part}",  # 백업_2025-04
+            ]
+        elif len(date_part) == 7:
+            # 월별 시트에서 복구한 경우 → 해당 월별 시트만 (일별은 이미 정리됐을 수 있음)
+            target_sheets = [f"{BACKUP_PREFIX}{date_part}"]  # 백업_2025-04
+        else:
+            return False, f"시트명 형식을 인식할 수 없습니다: {source_sheet_name}"
+
+        total_deleted = 0
+        all_sheet_titles = [s.title for s in spreadsheet.worksheets()]
+
+        for sheet_name in target_sheets:
+            if sheet_name not in all_sheet_titles:
+                continue
+            try:
+                ws = spreadsheet.worksheet(sheet_name)
+                all_values = ws.get_all_values()
+                if len(all_values) < 2:
+                    continue
+
+                headers = all_values[0]
+                if '컨테이너 번호' not in headers:
+                    continue
+
+                col_idx = headers.index('컨테이너 번호')
+
+                # 삭제할 행 번호를 역순으로 수집
+                rows_to_delete = [
+                    i + 2  # 헤더(1행) + 0-index 보정
+                    for i, row in enumerate(all_values[1:])
+                    if len(row) > col_idx and row[col_idx] in container_nos_set
+                ]
+
+                for row_num in sorted(rows_to_delete, reverse=True):
+                    ws.delete_rows(row_num)
+                    total_deleted += 1
+
+            except Exception:
+                continue
+
+        log_change(f"백업 시트 정리: {len(container_nos)}개 복구 후 {target_sheets}에서 {total_deleted}행 삭제")
+        return True, total_deleted
+
+    except Exception as e:
+        return False, str(e)
+
+
 def backup_data_to_new_sheet(container_data):
     spreadsheet = connect_to_gsheet()
     if spreadsheet is None:
