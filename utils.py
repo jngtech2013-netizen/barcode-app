@@ -107,6 +107,38 @@ def add_row_to_gsheet(data):
         return False, str(e)
 
 
+def add_rows_to_gsheet_batch(data_list):
+    """여러 행을 한 번의 API 호출로 일괄 추가 (복구 시 사용)"""
+    spreadsheet = connect_to_gsheet()
+    if spreadsheet is None:
+        return False, "Google Sheets에 연결되지 않았습니다."
+    try:
+        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        ensure_text_format(worksheet, '씰 번호')
+
+        rows_to_insert = []
+        container_nos = []
+        for data in data_list:
+            data_copy = data.copy()
+            if isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
+                data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')
+            if pd.isna(data_copy.get('등록일시')) or data_copy.get('등록일시') is None:
+                data_copy['등록일시'] = ''
+            if isinstance(data_copy.get('완료일시'), (datetime, pd.Timestamp)):
+                data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
+            if pd.isna(data_copy.get('완료일시')) or data_copy.get('완료일시') is None:
+                data_copy['완료일시'] = ''
+            rows_to_insert.append([data_copy.get(header, "") for header in SHEET_HEADERS])
+            container_nos.append(data_copy.get('컨테이너 번호', ''))
+
+        worksheet.append_rows(rows_to_insert, value_input_option='USER_ENTERED')
+        log_change(f"일괄 복구: {len(data_list)}개 ({', '.join(container_nos)})")
+        return True, "성공"
+    except Exception as e:
+        st.error(f"Google Sheets 일괄 저장 중 오류 발생: {e}")
+        return False, str(e)
+
+
 def update_row_in_gsheet(index, data):
     spreadsheet = connect_to_gsheet()
     if spreadsheet is None:

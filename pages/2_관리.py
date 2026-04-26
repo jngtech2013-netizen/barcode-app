@@ -6,6 +6,7 @@ from utils import (
     MAIN_SHEET_NAME,
     load_data_from_gsheet,
     add_row_to_gsheet,
+    add_rows_to_gsheet_batch,
     update_row_in_gsheet,
     delete_row_from_gsheet,
     backup_data_to_new_sheet,
@@ -110,10 +111,22 @@ st.info("실수로 데이터를 초기화했거나 이전 데이터를 추가할
 spreadsheet = connect_to_gsheet()
 if spreadsheet:
     all_sheets = [s.title for s in spreadsheet.worksheets()]
-    backup_sheets = sorted([s for s in all_sheets if s.startswith(BACKUP_PREFIX)], reverse=True)
+
+    # 개선 3: 일별/월별 시트 분리 표시
+    daily_sheets = sorted(
+        [s for s in all_sheets if s.startswith(BACKUP_PREFIX) and len(s) == len(BACKUP_PREFIX) + 10],
+        reverse=True
+    )
+    monthly_sheets = sorted(
+        [s for s in all_sheets if s.startswith(BACKUP_PREFIX) and len(s) == len(BACKUP_PREFIX) + 7],
+        reverse=True
+    )
+
+    sheet_type = st.radio("백업 시트 유형", options=["일별", "월별"], horizontal=True)
+    backup_sheets = daily_sheets if sheet_type == "일별" else monthly_sheets
 
     if not backup_sheets:
-        st.warning("복구할 백업 시트가 없습니다.")
+        st.warning(f"복구할 {sheet_type} 백업 시트가 없습니다.")
     else:
         selected_backup_sheet = st.selectbox(
             "복구할 백업 시트를 선택하세요:",
@@ -160,7 +173,9 @@ if spreadsheet:
                             """, unsafe_allow_html=True
                         )
 
-                    existing_nos = {c.get('컨테이너 번호') for c in st.session_state.container_list}
+                    # 개선 1: 세션이 아닌 Google Sheets 실시간 데이터 기준으로 중복 체크
+                    current_data = load_data_from_gsheet()
+                    existing_nos = {c.get('컨테이너 번호') for c in current_data}
                     recoverable_df = df_backup[~df_backup['컨테이너 번호'].isin(existing_nos)].copy()
 
                     if recoverable_df.empty:
@@ -198,38 +213,44 @@ if spreadsheet:
 
                         if not selected_rows.empty:
                             if st.button(f"선택된 {len(selected_rows)}개 컨테이너 복구하기", use_container_width=True, type="primary"):
-                                added_count = 0
+                                rows_to_add = []
                                 for index, row in selected_rows.iterrows():
-                                    # '선택', 'No.' 컬럼 제거 후 SHEET_HEADERS 컬럼만 추출
                                     row_to_add = {k: v for k, v in row.to_dict().items() if k in SHEET_HEADERS}
-                                    # errors='coerce'로 변환 실패 시 NaT 처리 (예외 없이 안전하게)
                                     row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시'), errors='coerce')
                                     row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'), errors='coerce')
-                                    st.session_state.container_list.append(row_to_add)
-                                    add_row_to_gsheet(row_to_add)
-                                    added_count += 1
-                                log_change(f"데이터 복구: '{selected_backup_sheet}'에서 {added_count}개 선택 복구")
-                                st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 컨테이너를 성공적으로 복구했습니다!")
-                                st.rerun()
+                                    rows_to_add.append(row_to_add)
+
+                                # 개선 2: 일괄 API 호출로 복구
+                                success, msg = add_rows_to_gsheet_batch(rows_to_add)
+                                if success:
+                                    st.session_state.container_list.extend(rows_to_add)
+                                    log_change(f"데이터 복구: '{selected_backup_sheet}'에서 {len(rows_to_add)}개 선택 복구")
+                                    st.success(f"'{selected_backup_sheet}' 시트에서 {len(rows_to_add)}개의 컨테이너를 성공적으로 복구했습니다!")
+                                    st.rerun()
+                                else:
+                                    st.error(f"복구 중 오류 발생: {msg}")
 
                         st.divider()
                         st.markdown("##### 시트 전체 복구 (현재 목록에 없는 데이터만)")
                         st.warning("주의: 이 작업은 위 테이블에 보이는 모든 컨테이너를 한 번에 추가합니다.")
 
                         if st.button(f"'{selected_backup_sheet}' 시트의 모든 데이터 추가하기", use_container_width=True):
-                            added_count = 0
+                            rows_to_add = []
                             for index, row in recoverable_df.iterrows():
-                                # '선택', 'No.' 컬럼 제거 후 SHEET_HEADERS 컬럼만 추출
                                 row_to_add = {k: v for k, v in row.to_dict().items() if k in SHEET_HEADERS}
-                                # errors='coerce'로 변환 실패 시 NaT 처리 (예외 없이 안전하게)
                                 row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시'), errors='coerce')
                                 row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'), errors='coerce')
-                                st.session_state.container_list.append(row_to_add)
-                                add_row_to_gsheet(row_to_add)
-                                added_count += 1
-                            log_change(f"데이터 복구: '{selected_backup_sheet}'에서 {added_count}개 전체 복구")
-                            st.success(f"'{selected_backup_sheet}' 시트에서 {added_count}개의 새로운 데이터를 성공적으로 추가했습니다!")
-                            st.rerun()
+                                rows_to_add.append(row_to_add)
+
+                            # 개선 2: 일괄 API 호출로 복구
+                            success, msg = add_rows_to_gsheet_batch(rows_to_add)
+                            if success:
+                                st.session_state.container_list.extend(rows_to_add)
+                                log_change(f"데이터 복구: '{selected_backup_sheet}'에서 {len(rows_to_add)}개 전체 복구")
+                                st.success(f"'{selected_backup_sheet}' 시트에서 {len(rows_to_add)}개의 새로운 데이터를 성공적으로 추가했습니다!")
+                                st.rerun()
+                            else:
+                                st.error(f"복구 중 오류 발생: {msg}")
 
             except Exception as e:
                 st.error(f"백업 시트 정보를 불러오는 중 오류가 발생했습니다: {e}")
