@@ -307,3 +307,87 @@ def backup_data_to_new_sheet(container_data):
         return True, None
     except Exception as e:
         return False, str(e)
+
+
+def cleanup_old_daily_sheets(months=3):
+    """3개월 이상 된 일별 백업 시트 삭제 (월별 시트는 보존)"""
+    spreadsheet = connect_to_gsheet()
+    if spreadsheet is None:
+        return False, "Google Sheets에 연결되지 않았습니다."
+    try:
+        from datetime import date
+        cutoff_date = datetime.now(KST).date() - timedelta(days=months * 30)
+
+        all_sheets = [s.title for s in spreadsheet.worksheets()]
+        # 일별 시트만 대상: 백업_YYYY-MM-DD (길이 체크)
+        daily_sheets = [
+            s for s in all_sheets
+            if s.startswith(BACKUP_PREFIX) and len(s) == len(BACKUP_PREFIX) + 10
+        ]
+
+        deleted_sheets = []
+        for sheet_name in daily_sheets:
+            date_part = sheet_name.replace(BACKUP_PREFIX, '')
+            try:
+                sheet_date = datetime.strptime(date_part, '%Y-%m-%d').date()
+                if sheet_date < cutoff_date:
+                    spreadsheet.del_worksheet(spreadsheet.worksheet(sheet_name))
+                    deleted_sheets.append(sheet_name)
+            except ValueError:
+                continue
+
+        if deleted_sheets:
+            log_change(f"일별 백업 정리: {len(deleted_sheets)}개 시트 삭제 ({', '.join(deleted_sheets)})")
+
+        return True, deleted_sheets
+
+    except Exception as e:
+        return False, str(e)
+
+
+def archive_log_sheet(keep_rows=200):
+    """로그 시트가 1000행 초과 시 오래된 로그를 분기별 아카이브 시트로 이관"""
+    spreadsheet = connect_to_gsheet()
+    if spreadsheet is None:
+        return False, "Google Sheets에 연결되지 않았습니다."
+    try:
+        log_sheet = spreadsheet.worksheet(LOG_SHEET_NAME)
+        all_values = log_sheet.get_all_values()
+        total_rows = len(all_values)
+
+        if total_rows <= 1000:
+            return False, f"현재 {total_rows}행으로 아카이브 기준(1000행) 미만입니다."
+
+        # 이관할 행: 최근 keep_rows행을 제외한 나머지
+        rows_to_archive = all_values[:total_rows - keep_rows]
+        rows_to_keep = all_values[total_rows - keep_rows:]
+
+        if not rows_to_archive:
+            return False, "이관할 데이터가 없습니다."
+
+        # 분기 계산 (첫 번째 이관 행의 날짜 기준)
+        try:
+            first_date = datetime.strptime(rows_to_archive[0][0][:10], '%Y-%m-%d')
+            quarter = (first_date.month - 1) // 3 + 1
+            archive_name = f"로그_{first_date.year}-Q{quarter}"
+        except Exception:
+            archive_name = f"로그_아카이브_{datetime.now(KST).strftime('%Y%m%d')}"
+
+        # 아카이브 시트에 저장 (기존 시트가 있으면 이어붙이기)
+        all_sheet_titles = [s.title for s in spreadsheet.worksheets()]
+        if archive_name in all_sheet_titles:
+            archive_sheet = spreadsheet.worksheet(archive_name)
+            archive_sheet.append_rows(rows_to_archive, value_input_option='USER_ENTERED')
+        else:
+            archive_sheet = spreadsheet.add_worksheet(title=archive_name, rows=len(rows_to_archive) + 50, cols=2)
+            archive_sheet.update('A1', rows_to_archive, value_input_option='USER_ENTERED')
+
+        # 메인 로그 시트는 최근 keep_rows행만 남기기
+        log_sheet.clear()
+        log_sheet.update('A1', rows_to_keep, value_input_option='USER_ENTERED')
+
+        log_change(f"로그 아카이브: {len(rows_to_archive)}행 → '{archive_name}'으로 이관, {len(rows_to_keep)}행 유지")
+        return True, (archive_name, len(rows_to_archive))
+
+    except Exception as e:
+        return False, str(e)

@@ -11,6 +11,8 @@ from utils import (
     delete_row_from_gsheet,
     delete_from_backup_sheets,
     backup_data_to_new_sheet,
+    cleanup_old_daily_sheets,
+    archive_log_sheet,
     log_change,
     connect_to_gsheet,
     BACKUP_PREFIX
@@ -271,3 +273,69 @@ if spreadsheet:
 
             except Exception as e:
                 st.error(f"백업 시트 정보를 불러오는 중 오류가 발생했습니다: {e}")
+
+st.divider()
+st.markdown("#### 🗂️ 시트 관리")
+
+# --- 일별 백업 시트 정리 ---
+with st.container(border=True):
+    st.markdown("##### 🗑️ 오래된 일별 백업 시트 삭제")
+    st.info("3개월 이상 된 일별 백업 시트(`백업_YYYY-MM-DD`)를 삭제합니다. 월별 시트는 보존됩니다.")
+
+    # 삭제 대상 미리보기
+    spreadsheet_preview = connect_to_gsheet()
+    if spreadsheet_preview:
+        from datetime import date as date_cls
+        cutoff = datetime.now().date()
+        from datetime import timedelta as td
+        cutoff = (datetime.now() - td(days=90)).date()
+        all_sheet_titles = [s.title for s in spreadsheet_preview.worksheets()]
+        target_daily = [
+            s for s in all_sheet_titles
+            if s.startswith(BACKUP_PREFIX) and len(s) == len(BACKUP_PREFIX) + 10
+            and datetime.strptime(s.replace(BACKUP_PREFIX, ''), '%Y-%m-%d').date() < cutoff
+        ]
+        if target_daily:
+            st.warning(f"삭제 대상: {len(target_daily)}개 시트 ({', '.join(target_daily)})")
+        else:
+            st.success("삭제할 오래된 일별 백업 시트가 없습니다.")
+
+    if st.button("🗑️ 3개월 이상 일별 백업 시트 삭제", use_container_width=True, type="primary"):
+        with st.spinner("오래된 일별 백업 시트를 삭제하는 중..."):
+            success, result = cleanup_old_daily_sheets(months=3)
+        if success:
+            if result:
+                st.success(f"{len(result)}개 일별 백업 시트가 삭제됐습니다: {', '.join(result)}")
+            else:
+                st.info("삭제할 오래된 일별 백업 시트가 없습니다.")
+        else:
+            st.error(f"삭제 중 오류 발생: {result}")
+
+st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
+
+# --- 로그 아카이브 ---
+with st.container(border=True):
+    st.markdown("##### 📦 로그 아카이브")
+    st.info("업데이트 로그가 1000행 초과 시 오래된 로그를 분기별 시트(`로그_YYYY-QN`)로 이관합니다. 최근 200행은 유지됩니다.")
+
+    # 현재 로그 행 수 표시
+    spreadsheet_log = connect_to_gsheet()
+    if spreadsheet_log:
+        try:
+            log_ws = spreadsheet_log.worksheet("업데이트 로그")
+            log_row_count = len(log_ws.get_all_values())
+            if log_row_count > 1000:
+                st.warning(f"현재 로그: {log_row_count}행 — 아카이브를 권장합니다.")
+            else:
+                st.success(f"현재 로그: {log_row_count}행 (기준: 1000행)")
+        except Exception:
+            st.warning("로그 시트 행 수를 불러올 수 없습니다.")
+
+    if st.button("📦 로그 아카이브 실행", use_container_width=True):
+        with st.spinner("로그를 아카이브하는 중..."):
+            success, result = archive_log_sheet(keep_rows=200)
+        if success:
+            archive_name, archived_count = result
+            st.success(f"{archived_count}행을 '{archive_name}' 시트로 이관했습니다. 최근 200행은 유지됩니다.")
+        else:
+            st.info(result)
