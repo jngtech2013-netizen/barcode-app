@@ -309,6 +309,127 @@ def backup_data_to_new_sheet(container_data):
         return False, str(e)
 
 
+def move_containers_between_backup_sheets(container_nos, source_sheet_name, target_date_str, update_completion_date):
+    """백업 시트 간 컨테이너 데이터 이동
+    
+    container_nos: 이동할 컨테이너 번호 리스트
+    source_sheet_name: 원본 시트명 (예: 백업_2025-04-28)
+    target_date_str: 대상 날짜 문자열 (예: 2025-04-27)
+    update_completion_date: True면 완료일시를 target_date로 수정
+    """
+    spreadsheet = connect_to_gsheet()
+    if spreadsheet is None:
+        return False, "Google Sheets에 연결되지 않았습니다."
+    try:
+        container_nos_set = set(container_nos)
+        source_date_str = source_sheet_name.replace(BACKUP_PREFIX, '')
+        target_daily_name = f"{BACKUP_PREFIX}{target_date_str}"
+        target_month_str = target_date_str[:7]
+        target_monthly_name = f"{BACKUP_PREFIX}{target_month_str}"
+        source_month_str = source_date_str[:7] if len(source_date_str) == 10 else source_date_str
+        source_monthly_name = f"{BACKUP_PREFIX}{source_month_str}"
+
+        all_sheet_titles = [s.title for s in spreadsheet.worksheets()]
+
+        # ① 원본 시트에서 이동할 행 추출
+        source_ws = spreadsheet.worksheet(source_sheet_name)
+        source_values = source_ws.get_all_values()
+        if len(source_values) < 2:
+            return False, "원본 시트에 데이터가 없습니다."
+
+        headers = source_values[0]
+        if '컨테이너 번호' not in headers:
+            return False, "원본 시트에 컨테이너 번호 컬럼이 없습니다."
+
+        col_idx = headers.index('컨테이너 번호')
+        completion_col_idx = headers.index('완료일시') if '완료일시' in headers else None
+
+        rows_to_move = []
+        rows_to_delete = []
+        for i, row in enumerate(source_values[1:]):
+            if len(row) > col_idx and row[col_idx] in container_nos_set:
+                row_data = list(row)
+                # 완료일시 수정 옵션
+                if update_completion_date and completion_col_idx is not None:
+                    row_data[completion_col_idx] = f"{target_date_str} 00:00:00"
+                rows_to_move.append(row_data)
+                rows_to_delete.append(i + 2)  # 헤더 + 0-index 보정
+
+        if not rows_to_move:
+            return False, "원본 시트에서 해당 컨테이너를 찾을 수 없습니다."
+
+        # ② 원본 일별 시트에서 삭제 (역순)
+        for row_num in sorted(rows_to_delete, reverse=True):
+            source_ws.delete_rows(row_num)
+
+        # 삭제 후 원본 시트에 데이터가 없으면 시트 자체 삭제
+        remaining = source_ws.get_all_values()
+        if len(remaining) <= 1:  # 헤더만 남은 경우
+            spreadsheet.del_worksheet(source_ws)
+
+        # ③ 대상 일별 시트에 추가
+        if target_daily_name in all_sheet_titles:
+            target_daily_ws = spreadsheet.worksheet(target_daily_name)
+        else:
+            target_daily_ws = spreadsheet.add_worksheet(
+                title=target_daily_name, rows=len(rows_to_move) + 50, cols=len(SHEET_HEADERS)
+            )
+            target_daily_ws.update('A1', [headers], value_input_option='USER_ENTERED')
+            ensure_text_format(target_daily_ws, '씰 번호')
+
+        target_daily_ws.append_rows(rows_to_move, value_input_option='USER_ENTERED')
+
+        # ④ 월별 시트 완료일시 업데이트
+        # 원본 월별 시트가 대상 월별 시트와 다를 경우 이동 처리
+        if source_monthly_name != target_monthly_name:
+            # 원본 월별 시트에서 삭제
+            if source_monthly_name in all_sheet_titles:
+                source_monthly_ws = spreadsheet.worksheet(source_monthly_name)
+                monthly_values = source_monthly_ws.get_all_values()
+                if len(monthly_values) >= 2:
+                    monthly_col_idx = monthly_values[0].index('컨테이너 번호') if '컨테이너 번호' in monthly_values[0] else None
+                    if monthly_col_idx is not None:
+                        monthly_rows_to_delete = [
+                            i + 2 for i, row in enumerate(monthly_values[1:])
+                            if len(row) > monthly_col_idx and row[monthly_col_idx] in container_nos_set
+                        ]
+                        for row_num in sorted(monthly_rows_to_delete, reverse=True):
+                            source_monthly_ws.delete_rows(row_num)
+
+            # 대상 월별 시트에 추가
+            if target_monthly_name in all_sheet_titles:
+                target_monthly_ws = spreadsheet.worksheet(target_monthly_name)
+                target_monthly_ws.append_rows(rows_to_move, value_input_option='USER_ENTERED')
+            else:
+                target_monthly_ws = spreadsheet.add_worksheet(
+                    title=target_monthly_name, rows=1000, cols=len(SHEET_HEADERS)
+                )
+                target_monthly_ws.update('A1', [headers], value_input_option='USER_ENTERED')
+                ensure_text_format(target_monthly_ws, '씰 번호')
+                target_monthly_ws.append_rows(rows_to_move, value_input_option='USER_ENTERED')
+
+        else:
+            # 같은 월이면 완료일시만 업데이트
+            if update_completion_date and target_monthly_name in all_sheet_titles:
+                monthly_ws = spreadsheet.worksheet(target_monthly_name)
+                monthly_values = monthly_ws.get_all_values()
+                if len(monthly_values) >= 2:
+                    m_headers = monthly_values[0]
+                    if '컨테이너 번호' in m_headers and '완료일시' in m_headers:
+                        m_col_idx = m_headers.index('컨테이너 번호')
+                        m_done_idx = m_headers.index('완료일시')
+                        for i, row in enumerate(monthly_values[1:]):
+                            if len(row) > m_col_idx and row[m_col_idx] in container_nos_set:
+                                monthly_ws.update_cell(i + 2, m_done_idx + 1, f"{target_date_str} 00:00:00")
+
+        log_change(f"백업 이동: {container_nos} → '{source_sheet_name}'에서 '{target_daily_name}'으로 이동" +
+                   (" (완료일시 수정)" if update_completion_date else ""))
+        return True, len(rows_to_move)
+
+    except Exception as e:
+        return False, str(e)
+
+
 def cleanup_old_daily_sheets(months=3):
     """3개월 이상 된 일별 백업 시트 삭제 (월별 시트는 보존)"""
     spreadsheet = connect_to_gsheet()

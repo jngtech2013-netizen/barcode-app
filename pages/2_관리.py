@@ -13,6 +13,7 @@ from utils import (
     backup_data_to_new_sheet,
     cleanup_old_daily_sheets,
     archive_log_sheet,
+    move_containers_between_backup_sheets,
     log_change,
     connect_to_gsheet,
     BACKUP_PREFIX
@@ -339,3 +340,100 @@ with st.container(border=True):
             st.success(f"{archived_count}행을 '{archive_name}' 시트로 이관했습니다. 최근 200행은 유지됩니다.")
         else:
             st.info(result)
+
+st.divider()
+st.markdown("#### 📁 백업 데이터 이동")
+st.info("백업 시트 간 컨테이너 데이터를 이동합니다. 선적완료를 늦게 눌러 날짜가 잘못 기록된 경우 사용하세요.")
+
+spreadsheet_move = connect_to_gsheet()
+if spreadsheet_move:
+    all_sheets_move = [s.title for s in spreadsheet_move.worksheets()]
+    daily_sheets_move = sorted(
+        [s for s in all_sheets_move if s.startswith(BACKUP_PREFIX) and len(s) == len(BACKUP_PREFIX) + 10],
+        reverse=True
+    )
+
+    if not daily_sheets_move:
+        st.warning("이동할 수 있는 일별 백업 시트가 없습니다.")
+    else:
+        with st.container(border=True):
+            st.markdown("##### 1단계 - 원본 시트 및 컨테이너 선택")
+
+            source_sheet = st.selectbox(
+                "원본 시트 선택 (이동할 데이터가 있는 시트)",
+                daily_sheets_move,
+                key="move_source_sheet"
+            )
+
+            # 원본 시트 데이터 로드
+            if source_sheet:
+                try:
+                    source_ws = spreadsheet_move.worksheet(source_sheet)
+                    source_values = source_ws.get_all_values()
+
+                    if len(source_values) < 2:
+                        st.warning("선택한 시트에 데이터가 없습니다.")
+                    else:
+                        source_headers = source_values[0]
+                        source_df = pd.DataFrame(source_values[1:], columns=source_headers, dtype=str)
+                        source_df.replace('', pd.NA, inplace=True)
+
+                        # 컨테이너 선택 (멀티셀렉트)
+                        container_options = source_df['컨테이너 번호'].dropna().tolist()
+                        selected_containers = st.multiselect(
+                            "이동할 컨테이너 선택",
+                            container_options,
+                            key="move_containers"
+                        )
+
+                        if selected_containers:
+                            # 선택된 컨테이너 미리보기
+                            preview_df = source_df[source_df['컨테이너 번호'].isin(selected_containers)]
+                            display_cols = [c for c in ['컨테이너 번호', '출고처', '피트수', '상태', '완료일시'] if c in preview_df.columns]
+                            st.dataframe(preview_df[display_cols], use_container_width=True, hide_index=True)
+
+                            st.markdown("##### 2단계 - 대상 날짜 및 옵션 설정")
+                            col1, col2 = st.columns(2)
+
+                            with col1:
+                                # 원본 시트 날짜에서 하루 전을 기본값으로
+                                source_date = datetime.strptime(
+                                    source_sheet.replace(BACKUP_PREFIX, ''), '%Y-%m-%d'
+                                ).date()
+                                default_target = source_date - timedelta(days=1)
+                                target_date = st.date_input(
+                                    "대상 날짜 선택",
+                                    value=default_target,
+                                    key="move_target_date"
+                                )
+
+                            with col2:
+                                update_done_time = st.checkbox(
+                                    "완료일시도 대상 날짜로 수정",
+                                    value=True,
+                                    key="move_update_done_time",
+                                    help="체크 시 완료일시가 선택한 대상 날짜 00:00:00으로 변경됩니다."
+                                )
+
+                            target_date_str = target_date.strftime('%Y-%m-%d')
+                            target_daily_name = f"{BACKUP_PREFIX}{target_date_str}"
+
+                            st.markdown(f"**이동 요약:** `{source_sheet}` → `{target_daily_name}` / {len(selected_containers)}개 컨테이너" +
+                                        (" / 완료일시 수정" if update_done_time else ""))
+
+                            if st.button("📁 선택한 컨테이너 이동", use_container_width=True, type="primary"):
+                                with st.spinner("데이터를 이동하는 중..."):
+                                    success, result = move_containers_between_backup_sheets(
+                                        container_nos=selected_containers,
+                                        source_sheet_name=source_sheet,
+                                        target_date_str=target_date_str,
+                                        update_completion_date=update_done_time
+                                    )
+                                if success:
+                                    st.success(f"{result}개 컨테이너를 '{target_daily_name}'으로 이동했습니다!")
+                                    st.rerun()
+                                else:
+                                    st.error(f"이동 중 오류 발생: {result}")
+
+                except Exception as e:
+                    st.error(f"원본 시트 데이터를 불러오는 중 오류가 발생했습니다: {e}")
