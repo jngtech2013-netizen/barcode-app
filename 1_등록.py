@@ -131,51 +131,60 @@ with st.container(border=True):
 
         st.markdown("<div style='margin-top:4px;'></div>", unsafe_allow_html=True)
 
-        # --- 컨테이너 카드 목록 ---
-        if "barcode_selected" not in st.session_state:
-            st.session_state["barcode_selected"] = []
+        # --- 컨테이너 라디오 목록 ---
+        cno_list = [c.get('컨테이너 번호', '') for c in shippable_containers]
+        info_map = {c.get('컨테이너 번호', ''): c for c in shippable_containers}
+
+        if "selected_container" not in st.session_state or st.session_state["selected_container"] not in cno_list:
+            st.session_state["selected_container"] = cno_list[0]
         if "barcode_preview_open" not in st.session_state:
             st.session_state["barcode_preview_open"] = []
 
+        # 헤더
+        h0, h1, h2, h3, h4, h5 = st.columns([0.05, 0.25, 0.25, 0.10, 0.22, 0.13])
+        with h1: st.caption("컨테이너 번호")
+        with h2: st.caption("출고처")
+        with h3: st.caption("피트수")
+        with h4: st.caption("씰번호")
+
         for c in shippable_containers:
             cno = c.get('컨테이너 번호', '')
-            is_checked = cno in st.session_state["barcode_selected"]
+            is_selected = st.session_state["selected_container"] == cno
             is_preview = cno in st.session_state["barcode_preview_open"]
 
-            with st.container(border=True):
-                col_chk, col_info, col_btn = st.columns([0.08, 0.72, 0.20])
-                with col_chk:
-                    checked = st.checkbox("", value=is_checked, key=f"chk_{cno}", label_visibility="collapsed")
-                    if checked and cno not in st.session_state["barcode_selected"]:
-                        st.session_state["barcode_selected"].append(cno)
-                    elif not checked and cno in st.session_state["barcode_selected"]:
-                        st.session_state["barcode_selected"].remove(cno)
-                with col_info:
-                    st.markdown(f"**{cno}**")
-                    st.caption(f"출고처: {c.get('출고처','N/A')} &nbsp;|&nbsp; 피트수: {c.get('피트수','N/A')} &nbsp;|&nbsp; 씰번호: {c.get('씰 번호','N/A')}")
-                with col_btn:
-                    preview_label = "미리보기 닫기" if is_preview else "🔍 미리보기"
-                    if st.button(preview_label, key=f"prev_{cno}", use_container_width=True):
-                        if is_preview:
-                            st.session_state["barcode_preview_open"].remove(cno)
-                        else:
-                            st.session_state["barcode_preview_open"].append(cno)
-                        st.rerun()
+            col_rb, col_cno, col_dest, col_feet, col_seal, col_prev = st.columns([0.05, 0.25, 0.25, 0.10, 0.22, 0.13])
+            with col_rb:
+                if st.button("🔘" if is_selected else "⚪", key=f"rb_{cno}"):
+                    st.session_state["selected_container"] = cno
+                    st.rerun()
+            with col_cno:
+                st.markdown(f"**{cno}**" if is_selected else cno)
+            with col_dest:
+                st.write(c.get('출고처', 'N/A'))
+            with col_feet:
+                st.write(c.get('피트수', 'N/A'))
+            with col_seal:
+                st.write(c.get('씰 번호', 'N/A'))
+            with col_prev:
+                if st.button("닫기" if is_preview else "미리보기", key=f"prev_{cno}", use_container_width=True):
+                    if is_preview:
+                        st.session_state["barcode_preview_open"].remove(cno)
+                    else:
+                        st.session_state["barcode_preview_open"].append(cno)
+                    st.rerun()
 
-                if is_preview:
-                    bc = generate_barcode(cno)
-                    col_p1, col_p2, col_p3 = st.columns([1, 2, 1])
-                    with col_p2:
-                        st.image(bc, width=200)
+            if is_preview:
+                bc = generate_barcode(cno)
+                col_p1, col_p2, col_p3 = st.columns([1, 2, 1])
+                with col_p2:
+                    st.image(bc, width=200)
 
         st.markdown("<div style='margin-top:8px;'></div>", unsafe_allow_html=True)
 
-        selected_list = st.session_state.get("barcode_selected", [])
-        btn_label = f"🖨️ 선택한 {len(selected_list)}개 출력" if selected_list else "🖨️ 출력 (선택 없음)"
-        if st.button(btn_label, use_container_width=True, type="primary", key="print_barcode_btn", disabled=(not selected_list or not printer_ip)):
-            for i, cno in enumerate(selected_list):
-                zpl_code = make_zpl(cno)
-                send_zpl_to_printer(printer_ip, zpl_code, result_key=f"multi_{i}")
+        selected_cno = st.session_state.get("selected_container", "")
+        if st.button(f"🖨️ {selected_cno} 출력", use_container_width=True, type="primary", key="print_barcode_btn", disabled=(not selected_cno or not printer_ip)):
+            zpl_code = make_zpl(selected_cno)
+            send_zpl_to_printer(printer_ip, zpl_code, result_key="single")
             st.caption(f"전송 대상: {printer_ip} (같은 사내 네트워크에 연결되어 있어야 합니다)")
 
 st.divider()
