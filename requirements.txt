@@ -1,6 +1,6 @@
 streamlit
 pandas
-python-barcode[images]
+qrcode[pil]
 Pillow
 gspread
 google-auth

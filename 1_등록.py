@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
-from barcode import Code128
-from barcode.writer import ImageWriter
+import qrcode
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
 import re
@@ -23,25 +22,25 @@ st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar
 def get_korea_now():
     return datetime.now(timezone(timedelta(hours=9)))
 
-# 바코드 생성 함수 캐싱 - 동일 컨테이너 번호면 재생성 없이 재사용
 @st.cache_data
-def generate_barcode(barcode_data: str) -> bytes:
+def generate_qrcode(data: str) -> bytes:
+    img = qrcode.make(data)
     fp = BytesIO()
-    Code128(barcode_data, writer=ImageWriter()).write(fp)
+    img.save(fp, format="PNG")
     fp.seek(0)
     return fp.getvalue()
 
 def make_zpl(container_no, dpi=203):
-    """컨테이너 번호 바코드만 담은 ZPL 생성 (90mm x 60mm 기준)"""
-    width = 720 if dpi == 203 else 1080   # 90mm
-    height = 480 if dpi == 203 else 720   # 60mm
+    """QR코드 ZPL 생성 (90mm x 60mm 기준)"""
+    width = 720 if dpi == 203 else 1080
+    height = 480 if dpi == 203 else 720
     return (
         "^XA"
         f"^PW{width}"
         f"^LL{height}"
-        "^FO50,150^BY3"
-        "^BCN,150,Y,N,N"
-        f"^FD{container_no}^FS"
+        "^FO260,40"
+        "^BQN,2,8"
+        f"^FDQA,{container_no}^FS"
         "^XZ"
     )
 
@@ -148,17 +147,17 @@ with st.container(border=True):
             df,
             use_container_width=True,
             hide_index=True,
-            selection_mode="single-row",
+            selection_mode="multi-row",
             on_select="rerun",
         )
 
         selected_rows = selection.selection.rows
-        selected_cno = df.iloc[selected_rows[0]]["컨테이너 번호"] if selected_rows else None
+        selected_cnos = [df.iloc[i]["컨테이너 번호"] for i in selected_rows]
 
         if "barcode_preview_open" not in st.session_state:
             st.session_state["barcode_preview_open"] = False
 
-        if selected_cno:
+        if selected_cnos:
             col_prev, col_print = st.columns([0.35, 0.65])
             with col_prev:
                 prev_label = "미리보기 닫기" if st.session_state["barcode_preview_open"] else "🔍 미리보기"
@@ -166,16 +165,21 @@ with st.container(border=True):
                     st.session_state["barcode_preview_open"] = not st.session_state["barcode_preview_open"]
                     st.rerun()
             with col_print:
-                if st.button(f"🖨️ {selected_cno} 출력", use_container_width=True, type="primary", key="print_barcode_btn", disabled=not printer_ip):
-                    zpl_code = make_zpl(selected_cno)
-                    send_zpl_to_printer(printer_ip, zpl_code, result_key="single")
+                btn_label = f"🖨️ {len(selected_cnos)}개 출력 (각 2장)"
+                if st.button(btn_label, use_container_width=True, type="primary", key="print_barcode_btn", disabled=not printer_ip):
+                    for i, cno in enumerate(selected_cnos):
+                        zpl_code = make_zpl(cno)
+                        send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}_1")
+                        send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}_2")
                     st.caption(f"전송 대상: {printer_ip}")
 
             if st.session_state["barcode_preview_open"]:
-                bc = generate_barcode(selected_cno)
-                col_p1, col_p2, col_p3 = st.columns([1, 2, 1])
-                with col_p2:
-                    st.image(bc, width=200)
+                for cno in selected_cnos:
+                    qr = generate_qrcode(cno)
+                    col_p1, col_p2, col_p3 = st.columns([1, 2, 1])
+                    with col_p2:
+                        st.caption(cno)
+                        st.image(qr, width=200)
         else:
             st.caption("행을 선택하면 출력 버튼이 표시됩니다.")
 
