@@ -62,6 +62,7 @@ def send_zpl_to_printer(printer_ip, zpl_code, result_key):
     """브라우저(스마트폰)가 직접 ZT411로 ZPL을 전송 (사내 로컬 네트워크 전용)"""
     zpl_escaped = zpl_code.replace("`", "\\`")
     components.html(f"""
+    <style>body{{margin:0;padding:0;}}</style>
     <div id="print-status-{result_key}" style="font-family:sans-serif;font-size:14px;color:#888;">🔄 프린터 연결 확인 중...</div>
     <script>
     (function() {{
