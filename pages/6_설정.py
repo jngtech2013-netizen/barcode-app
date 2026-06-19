@@ -1,6 +1,23 @@
 import streamlit as st
+import json
+from pathlib import Path
+
+CONFIG_PATH = Path(__file__).parent.parent / "config.json"
+
+def load_config():
+    if CONFIG_PATH.exists():
+        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    return {}
+
+def save_config(data: dict):
+    cfg = load_config()
+    cfg.update(data)
+    CONFIG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
 
 st.set_page_config(page_title="설정", layout="wide", initial_sidebar_state="expanded")
+
+if "printer_ip" not in st.session_state:
+    st.session_state["printer_ip"] = load_config().get("printer_ip", "")
 
 st.markdown("#### ⚙️ 설정")
 
@@ -16,8 +33,10 @@ with st.container(border=True):
         )
     with col_save:
         if st.button("저장", use_container_width=True):
-            st.session_state["printer_ip"] = printer_ip_input.strip()
-            st.success(f"저장됨: {printer_ip_input.strip()}")
+            ip = printer_ip_input.strip()
+            st.session_state["printer_ip"] = ip
+            save_config({"printer_ip": ip})
+            st.success(f"저장됨: {ip}")
 
     if st.session_state.get("printer_ip"):
         st.caption(f"현재 IP: {st.session_state['printer_ip']}")

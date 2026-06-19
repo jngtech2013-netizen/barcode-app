@@ -2,10 +2,22 @@ import streamlit as st
 import pandas as pd
 import qrcode
 import base64
+import json
+from pathlib import Path
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
 import re
 import streamlit.components.v1 as components
+
+CONFIG_PATH = Path(__file__).parent / "config.json"
+
+def load_config():
+    if CONFIG_PATH.exists():
+        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    return {}
+
+if "printer_ip" not in st.session_state:
+    st.session_state["printer_ip"] = load_config().get("printer_ip", "")
 from utils import (
     SHEET_HEADERS,
     MAIN_SHEET_NAME,
@@ -146,7 +158,7 @@ with st.container(border=True):
             qr_bytes = generate_qrcode(preview_cno)
             b64 = base64.b64encode(qr_bytes).decode()
             st.markdown(f"""
-            <div style="text-align:center; margin:10px 0 4px 0;">
+            <div style="text-align:center; margin:0 0 4px 0;">
                 <img src="data:image/png;base64,{b64}" style="width:200px; max-width:80%; display:block; margin:0 auto;">
                 <div style="font-size:22px; font-weight:bold; margin-top:-12px; letter-spacing:1px;">{preview_cno}</div>
             </div>
