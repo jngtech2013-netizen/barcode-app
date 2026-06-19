@@ -148,7 +148,7 @@ with st.container(border=True):
             st.markdown(f"""
             <div style="text-align:center; margin:12px 0 4px 0;">
                 <img src="data:image/png;base64,{b64}" style="width:200px; max-width:80%; display:block; margin:0 auto;">
-                <div style="font-size:22px; font-weight:bold; margin-top:0; letter-spacing:1px;">{preview_cno}</div>
+                <div style="font-size:22px; font-weight:bold; margin-top:-12px; letter-spacing:1px;">{preview_cno}</div>
             </div>
             """, unsafe_allow_html=True)
 
