@@ -117,10 +117,11 @@ with st.container(border=True):
             col_ip, col_save = st.columns([4, 1], vertical_alignment="bottom")
             with col_ip:
                 printer_ip_input = st.text_input(
-                    "ZT411 프린터 IP",
+                    "ip",
                     value=st.session_state.get("printer_ip", ""),
                     placeholder="예: 192.168.0.50",
                     key="printer_ip_input",
+                    label_visibility="collapsed",
                 )
             with col_save:
                 if st.button("저장", key="save_printer_ip", use_container_width=True):
@@ -134,20 +135,27 @@ with st.container(border=True):
         st.markdown("<div style='margin-top:4px;'></div>", unsafe_allow_html=True)
 
         # --- 컨테이너 테이블 ---
+        if "print_selected" not in st.session_state:
+            st.session_state["print_selected"] = set()
+        if "preview_cno" not in st.session_state:
+            st.session_state["preview_cno"] = None
+        if "table_key" not in st.session_state:
+            st.session_state["table_key"] = 0
+
         df = pd.DataFrame([{
-            "선택": False,
+            "선택": c.get("컨테이너 번호", "") in st.session_state["print_selected"],
             "컨테이너 번호": c.get("컨테이너 번호", ""),
             "출고처": c.get("출고처", ""),
             "피트수": c.get("피트수", ""),
             "씰번호": c.get("씰 번호", ""),
-            "미리보기": False,
+            "미리보기": c.get("컨테이너 번호", "") == st.session_state["preview_cno"],
         } for c in shippable_containers])
 
         edited = st.data_editor(
             df,
             use_container_width=True,
             hide_index=True,
-            key="container_table_editor",
+            key=f"container_table_{st.session_state['table_key']}",
             disabled=["컨테이너 번호", "출고처", "피트수", "씰번호"],
             column_config={
                 "선택": st.column_config.CheckboxColumn("선택", default=False, width="small"),
@@ -155,9 +163,24 @@ with st.container(border=True):
             },
         )
 
-        selected_cnos = edited[edited["선택"] == True]["컨테이너 번호"].tolist()
-        preview_cno = edited[edited["미리보기"] == True]["컨테이너 번호"].tolist()
-        preview_cno = preview_cno[0] if preview_cno else None
+        # 선택 상태 저장
+        st.session_state["print_selected"] = set(edited[edited["선택"] == True]["컨테이너 번호"].tolist())
+
+        # 미리보기 단일 선택 강제
+        checked_previews = edited[edited["미리보기"] == True]["컨테이너 번호"].tolist()
+        if len(checked_previews) > 1:
+            prev = st.session_state["preview_cno"]
+            new_one = next((c for c in checked_previews if c != prev), checked_previews[-1])
+            st.session_state["preview_cno"] = new_one
+            st.session_state["table_key"] += 1
+            st.rerun()
+        elif len(checked_previews) == 1:
+            st.session_state["preview_cno"] = checked_previews[0]
+        else:
+            st.session_state["preview_cno"] = None
+
+        selected_cnos = list(st.session_state["print_selected"])
+        preview_cno = st.session_state["preview_cno"]
 
         if selected_cnos:
             btn_label = f"🖨️ {len(selected_cnos)}개 출력 (각 2장)"
