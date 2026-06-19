@@ -140,31 +140,19 @@ with st.container(border=True):
         if "barcode_preview_open" not in st.session_state:
             st.session_state["barcode_preview_open"] = []
 
-        # 헤더
-        h0, h1, h2, h3, h4, h5 = st.columns([0.05, 0.25, 0.25, 0.10, 0.22, 0.13])
-        with h1: st.caption("컨테이너 번호")
-        with h2: st.caption("출고처")
-        with h3: st.caption("피트수")
-        with h4: st.caption("씰번호")
-
         for c in shippable_containers:
             cno = c.get('컨테이너 번호', '')
             is_selected = st.session_state["selected_container"] == cno
             is_preview = cno in st.session_state["barcode_preview_open"]
 
-            col_rb, col_cno, col_dest, col_feet, col_seal, col_prev = st.columns([0.05, 0.25, 0.25, 0.10, 0.22, 0.13])
+            col_rb, col_info, col_prev = st.columns([0.08, 0.67, 0.25])
             with col_rb:
                 if st.button("🔘" if is_selected else "⚪", key=f"rb_{cno}"):
                     st.session_state["selected_container"] = cno
                     st.rerun()
-            with col_cno:
+            with col_info:
                 st.markdown(f"**{cno}**" if is_selected else cno)
-            with col_dest:
-                st.write(c.get('출고처', 'N/A'))
-            with col_feet:
-                st.write(c.get('피트수', 'N/A'))
-            with col_seal:
-                st.write(c.get('씰 번호', 'N/A'))
+                st.caption(f"{c.get('출고처','N/A')} | {c.get('피트수','N/A')}ft | 씰 {c.get('씰 번호','N/A')}")
             with col_prev:
                 if st.button("닫기" if is_preview else "미리보기", key=f"prev_{cno}", use_container_width=True):
                     if is_preview:
