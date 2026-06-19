@@ -146,7 +146,7 @@ with st.container(border=True):
             qr_bytes = generate_qrcode(preview_cno)
             b64 = base64.b64encode(qr_bytes).decode()
             st.markdown(f"""
-            <div style="text-align:center; margin:20px 0 4px 0;">
+            <div style="text-align:center; margin:10px 0 4px 0;">
                 <img src="data:image/png;base64,{b64}" style="width:200px; max-width:80%; display:block; margin:0 auto;">
                 <div style="font-size:22px; font-weight:bold; margin-top:-12px; letter-spacing:1px;">{preview_cno}</div>
             </div>
