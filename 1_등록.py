@@ -191,7 +191,7 @@ with st.container(border=True):
                 for i, cno in enumerate(selected_cnos):
                     zpl_code = make_zpl(cno, copies=2)
                     send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}")
-                st.caption(f"전송 대상: {printer_ip}")
+                st.markdown(f'<div style="font-family:sans-serif;font-size:14px;color:#888;margin-top:4px;">전송 대상: {printer_ip}</div>', unsafe_allow_html=True)
 
 st.divider()
 
