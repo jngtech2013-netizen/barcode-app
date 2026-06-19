@@ -166,8 +166,18 @@ with st.container(border=True):
             st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
 
         btn_label = f"🖨️ {len(selected_cnos)}개 출력 (각 2장)" if selected_cnos else "🖨️ 출력"
-        btn_type = "primary" if selected_cnos else "secondary"
-        if st.button(btn_label, use_container_width=True, type=btn_type, key="print_barcode_btn", disabled=not selected_cnos):
+        if selected_cnos:
+            st.markdown("""
+            <style>
+            .element-container:has(#print-btn-marker) + .element-container button {
+                background-color: #0068C9 !important;
+                border-color: #0068C9 !important;
+                color: white !important;
+            }
+            </style>
+            <div id="print-btn-marker" style="display:none"></div>
+            """, unsafe_allow_html=True)
+        if st.button(btn_label, use_container_width=True, type="secondary", key="print_barcode_btn", disabled=not selected_cnos):
             if not printer_ip:
                 st.warning("프린터 IP를 먼저 설정 페이지에서 입력해주세요.")
             else:
