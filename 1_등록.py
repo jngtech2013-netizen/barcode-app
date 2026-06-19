@@ -113,17 +113,21 @@ with st.container(border=True):
         st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
     else:
         # --- 프린터 IP 설정 ---
-        with st.expander("🖨️ 프린터 설정", expanded=("printer_ip" not in st.session_state or not st.session_state.get("printer_ip"))):
-            printer_ip_input = st.text_input(
-                "ZT411 프린터 IP 주소",
-                value=st.session_state.get("printer_ip", ""),
-                placeholder="예: 192.168.0.50",
-                key="printer_ip_input"
-            )
-            if st.button("저장", key="save_printer_ip"):
-                st.session_state["printer_ip"] = printer_ip_input.strip()
-                st.success(f"프린터 IP가 저장되었습니다: {printer_ip_input.strip()}")
-                st.rerun()
+        with st.expander("🖨️ 프린터 설정", expanded=False):
+            col_ip, col_save = st.columns([0.75, 0.25])
+            with col_ip:
+                printer_ip_input = st.text_input(
+                    "ZT411 프린터 IP 주소",
+                    value=st.session_state.get("printer_ip", ""),
+                    placeholder="예: 192.168.0.50",
+                    key="printer_ip_input",
+                    label_visibility="collapsed"
+                )
+            with col_save:
+                if st.button("저장", key="save_printer_ip", use_container_width=True):
+                    st.session_state["printer_ip"] = printer_ip_input.strip()
+                    st.success(f"저장: {printer_ip_input.strip()}")
+                    st.rerun()
 
         printer_ip = st.session_state.get("printer_ip", "")
         if not printer_ip:
