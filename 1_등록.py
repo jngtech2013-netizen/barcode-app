@@ -320,7 +320,7 @@ with st.form(key="new_container_form"):
     </style>
     <div id="register-btn-marker" style="display:none"></div>
     """, unsafe_allow_html=True)
-    submitted = st.form_submit_button("등록", use_container_width=True)
+    submitted = st.form_submit_button("➕ 등록", use_container_width=True)
     if submitted:
         st.session_state["form_success_message"] = ""
         st.session_state["form_error_message"] = ""
