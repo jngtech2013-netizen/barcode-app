@@ -167,12 +167,15 @@ with st.container(border=True):
 
         btn_label = f"🖨️ {len(selected_cnos)}개 출력 (각 2장)" if selected_cnos else "🖨️ 출력"
         btn_type = "primary" if selected_cnos else "secondary"
-        if st.button(btn_label, use_container_width=True, type=btn_type, key="print_barcode_btn", disabled=(not selected_cnos or not printer_ip)):
-            for i, cno in enumerate(selected_cnos):
-                zpl_code = make_zpl(cno)
-                send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}_1")
-                send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}_2")
-            st.caption(f"전송 대상: {printer_ip}")
+        if st.button(btn_label, use_container_width=True, type=btn_type, key="print_barcode_btn", disabled=not selected_cnos):
+            if not printer_ip:
+                st.warning("프린터 IP를 먼저 설정 페이지에서 입력해주세요.")
+            else:
+                for i, cno in enumerate(selected_cnos):
+                    zpl_code = make_zpl(cno)
+                    send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}_1")
+                    send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}_2")
+                st.caption(f"전송 대상: {printer_ip}")
 
 st.divider()
 
