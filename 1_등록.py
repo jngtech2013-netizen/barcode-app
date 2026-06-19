@@ -114,19 +114,17 @@ with st.container(border=True):
     else:
         # --- 프린터 IP 설정 ---
         with st.expander("🖨️ 프린터 설정", expanded=False):
-            col_ip, col_save = st.columns([0.75, 0.25])
+            col_ip, col_save = st.columns([4, 1], vertical_alignment="bottom")
             with col_ip:
                 printer_ip_input = st.text_input(
-                    "ZT411 프린터 IP 주소",
+                    "ZT411 프린터 IP",
                     value=st.session_state.get("printer_ip", ""),
                     placeholder="예: 192.168.0.50",
                     key="printer_ip_input",
-                    label_visibility="collapsed"
                 )
             with col_save:
                 if st.button("저장", key="save_printer_ip", use_container_width=True):
                     st.session_state["printer_ip"] = printer_ip_input.strip()
-                    st.success(f"저장: {printer_ip_input.strip()}")
                     st.rerun()
 
         printer_ip = st.session_state.get("printer_ip", "")
@@ -177,8 +175,8 @@ with st.container(border=True):
             b64 = base64.b64encode(qr_bytes).decode()
             st.markdown(f"""
             <div style="text-align:center; margin:16px 0 8px 0;">
-                <div style="font-size:18px; font-weight:bold; margin-bottom:8px;">{preview_cno}</div>
-                <img src="data:image/png;base64,{b64}" style="width:200px; max-width:80%;">
+                <img src="data:image/png;base64,{b64}" style="width:200px; max-width:80%; display:block; margin:0 auto;">
+                <div style="font-size:22px; font-weight:bold; margin-top:2px; letter-spacing:1px;">{preview_cno}</div>
             </div>
             """, unsafe_allow_html=True)
 
