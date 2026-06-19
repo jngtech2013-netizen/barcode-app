@@ -112,50 +112,25 @@ with st.container(border=True):
     if not shippable_containers:
         st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
     else:
-        # --- 프린터 IP 설정 ---
-        with st.expander("🖨️ 프린터 설정", expanded=False):
-            col_ip, col_save = st.columns([4, 1], vertical_alignment="bottom")
-            with col_ip:
-                printer_ip_input = st.text_input(
-                    "ip",
-                    value=st.session_state.get("printer_ip", ""),
-                    placeholder="예: 192.168.0.50",
-                    key="printer_ip_input",
-                    label_visibility="collapsed",
-                )
-            with col_save:
-                if st.button("저장", key="save_printer_ip", use_container_width=True):
-                    st.session_state["printer_ip"] = printer_ip_input.strip()
-                    st.rerun()
-
         printer_ip = st.session_state.get("printer_ip", "")
         if not printer_ip:
-            st.warning("프린터 IP가 설정되지 않았습니다. 위 '프린터 설정'에서 ZT411 IP를 먼저 입력해주세요.")
-
-        st.markdown("<div style='margin-top:4px;'></div>", unsafe_allow_html=True)
+            st.warning("프린터 IP 미설정 — 사이드바 '설정' 페이지에서 입력해주세요.")
 
         # --- 컨테이너 테이블 ---
-        if "print_selected" not in st.session_state:
-            st.session_state["print_selected"] = set()
-        if "preview_cno" not in st.session_state:
-            st.session_state["preview_cno"] = None
-        if "table_key" not in st.session_state:
-            st.session_state["table_key"] = 0
-
         df = pd.DataFrame([{
-            "선택": c.get("컨테이너 번호", "") in st.session_state["print_selected"],
+            "선택": False,
             "컨테이너 번호": c.get("컨테이너 번호", ""),
             "출고처": c.get("출고처", ""),
             "피트수": c.get("피트수", ""),
             "씰번호": c.get("씰 번호", ""),
-            "미리보기": c.get("컨테이너 번호", "") == st.session_state["preview_cno"],
+            "미리보기": False,
         } for c in shippable_containers])
 
         edited = st.data_editor(
             df,
             use_container_width=True,
             hide_index=True,
-            key=f"container_table_{st.session_state['table_key']}",
+            key="container_table",
             disabled=["컨테이너 번호", "출고처", "피트수", "씰번호"],
             column_config={
                 "선택": st.column_config.CheckboxColumn("선택", default=False, width="small"),
@@ -163,24 +138,19 @@ with st.container(border=True):
             },
         )
 
-        # 선택 상태 저장
-        st.session_state["print_selected"] = set(edited[edited["선택"] == True]["컨테이너 번호"].tolist())
+        selected_cnos = edited[edited["선택"] == True]["컨테이너 번호"].tolist()
+        preview_cnos = edited[edited["미리보기"] == True]["컨테이너 번호"].tolist()
+        preview_cno = preview_cnos[-1] if preview_cnos else None
 
-        # 미리보기 단일 선택 강제
-        checked_previews = edited[edited["미리보기"] == True]["컨테이너 번호"].tolist()
-        if len(checked_previews) > 1:
-            prev = st.session_state["preview_cno"]
-            new_one = next((c for c in checked_previews if c != prev), checked_previews[-1])
-            st.session_state["preview_cno"] = new_one
-            st.session_state["table_key"] += 1
-            st.rerun()
-        elif len(checked_previews) == 1:
-            st.session_state["preview_cno"] = checked_previews[0]
-        else:
-            st.session_state["preview_cno"] = None
-
-        selected_cnos = list(st.session_state["print_selected"])
-        preview_cno = st.session_state["preview_cno"]
+        if preview_cno:
+            qr_bytes = generate_qrcode(preview_cno)
+            b64 = base64.b64encode(qr_bytes).decode()
+            st.markdown(f"""
+            <div style="text-align:center; margin:12px 0 4px 0;">
+                <img src="data:image/png;base64,{b64}" style="width:200px; max-width:80%; display:block; margin:0 auto;">
+                <div style="font-size:22px; font-weight:bold; margin-top:0; letter-spacing:1px;">{preview_cno}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
         if selected_cnos:
             btn_label = f"🖨️ {len(selected_cnos)}개 출력 (각 2장)"
@@ -192,16 +162,6 @@ with st.container(border=True):
                 st.caption(f"전송 대상: {printer_ip}")
         else:
             st.caption("'선택' 체크박스로 출력할 컨테이너를 선택하세요.")
-
-        if preview_cno:
-            qr_bytes = generate_qrcode(preview_cno)
-            b64 = base64.b64encode(qr_bytes).decode()
-            st.markdown(f"""
-            <div style="text-align:center; margin:16px 0 8px 0;">
-                <img src="data:image/png;base64,{b64}" style="width:200px; max-width:80%; display:block; margin:0 auto;">
-                <div style="font-size:22px; font-weight:bold; margin-top:2px; letter-spacing:1px;">{preview_cno}</div>
-            </div>
-            """, unsafe_allow_html=True)
 
 st.divider()
 
