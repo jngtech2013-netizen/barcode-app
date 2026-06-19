@@ -138,15 +138,15 @@ with st.container(border=True):
 
         selected_cnos = edited[edited["선택"] == True]["컨테이너 번호"].tolist()
 
-        cno_options = ["없음"] + [c.get("컨테이너 번호", "") for c in shippable_containers]
+        cno_options = ["미리보기"] + [c.get("컨테이너 번호", "") for c in shippable_containers]
         preview_sel = st.selectbox("미리보기", cno_options, label_visibility="collapsed")
-        preview_cno = None if preview_sel == "없음" else preview_sel
+        preview_cno = None if preview_sel == "미리보기" else preview_sel
 
         if preview_cno:
             qr_bytes = generate_qrcode(preview_cno)
             b64 = base64.b64encode(qr_bytes).decode()
             st.markdown(f"""
-            <div style="text-align:center; margin:-20px 0 4px 0;">
+            <div style="text-align:center; margin:20px 0 4px 0;">
                 <img src="data:image/png;base64,{b64}" style="width:200px; max-width:80%; display:block; margin:0 auto;">
                 <div style="font-size:22px; font-weight:bold; margin-top:-12px; letter-spacing:1px;">{preview_cno}</div>
             </div>
