@@ -5,6 +5,7 @@ from barcode.writer import ImageWriter
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
 import re
+import streamlit.components.v1 as components
 from utils import (
     SHEET_HEADERS,
     MAIN_SHEET_NAME,
@@ -29,6 +30,44 @@ def generate_barcode(barcode_data: str) -> bytes:
     Code128(barcode_data, writer=ImageWriter()).write(fp)
     fp.seek(0)
     return fp.getvalue()
+
+def make_zpl(container_no, dpi=203):
+    """컨테이너 번호 바코드만 담은 ZPL 생성 (90mm x 60mm 기준)"""
+    width = 720 if dpi == 203 else 1080   # 90mm
+    height = 480 if dpi == 203 else 720   # 60mm
+    return (
+        "^XA"
+        f"^PW{width}"
+        f"^LL{height}"
+        "^FO50,150^BY3"
+        "^BCN,150,Y,N,N"
+        f"^FD{container_no}^FS"
+        "^XZ"
+    )
+
+def send_zpl_to_printer(printer_ip, zpl_code, result_key):
+    """브라우저(스마트폰)가 직접 ZT411로 ZPL을 전송 (사내 로컬 네트워크 전용)"""
+    zpl_escaped = zpl_code.replace("`", "\\`")
+    components.html(f"""
+    <div id="print-status-{result_key}" style="font-family:sans-serif;font-size:14px;color:#888;">출력 요청 전송 중...</div>
+    <script>
+    (function() {{
+        fetch('http://{printer_ip}:9100', {{
+            method: 'POST',
+            body: `{zpl_escaped}`,
+            mode: 'no-cors'
+        }})
+        .then(function() {{
+            document.getElementById('print-status-{result_key}').innerHTML =
+                '<span style="color:#28A745;">✅ 출력 요청을 프린터로 전송했습니다.</span>';
+        }})
+        .catch(function(err) {{
+            document.getElementById('print-status-{result_key}').innerHTML =
+                '<span style="color:#FF4B4B;">❌ 프린터 연결 실패: ' + err + '</span>';
+        }});
+    }})();
+    </script>
+    """, height=40)
 
 def clear_form_inputs():
     st.session_state["form_container_no"] = ""
@@ -66,7 +105,7 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-st.markdown("#### 🔳 바코드 생성")
+st.markdown("#### 🔳 바코드 생성 및 출력")
 with st.container(border=True):
     shippable_containers = [c.get('컨테이너 번호', '') for c in st.session_state.container_list if c.get('상태') == '선적중']
     shippable_containers = [c for c in shippable_containers if c]
@@ -83,7 +122,33 @@ with st.container(border=True):
 
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.image(barcode_bytes)
+            # 화면 표시용 바코드 - 높이를 줄여서 컴팩트하게 표시
+            st.image(barcode_bytes, width=320)
+
+        st.markdown("<div style='margin-top:8px;'></div>", unsafe_allow_html=True)
+
+        # --- ZT411 프린터 IP 설정 (session_state에 저장, 화면에서 입력) ---
+        with st.expander("🖨️ 프린터 설정", expanded=("printer_ip" not in st.session_state or not st.session_state.get("printer_ip"))):
+            printer_ip_input = st.text_input(
+                "ZT411 프린터 IP 주소",
+                value=st.session_state.get("printer_ip", ""),
+                placeholder="예: 192.168.0.50",
+                key="printer_ip_input"
+            )
+            if st.button("저장", key="save_printer_ip"):
+                st.session_state["printer_ip"] = printer_ip_input.strip()
+                st.success(f"프린터 IP가 저장되었습니다: {printer_ip_input.strip()}")
+                st.rerun()
+
+        printer_ip = st.session_state.get("printer_ip", "")
+
+        if not printer_ip:
+            st.warning("프린터 IP가 설정되지 않았습니다. 위 '프린터 설정'에서 ZT411 IP를 먼저 입력해주세요.")
+        else:
+            if st.button("🖨️ ZT411로 출력", use_container_width=True, type="primary", key="print_barcode_btn"):
+                zpl_code = make_zpl(selected_for_barcode)
+                send_zpl_to_printer(printer_ip, zpl_code, result_key="single")
+                st.caption(f"전송 대상: {printer_ip} (같은 사내 네트워크에 연결되어 있어야 합니다)")
 
 st.divider()
 
