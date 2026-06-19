@@ -67,7 +67,7 @@ def send_zpl_to_printer(printer_ip, zpl_code, result_key):
     (function() {{
         var statusEl = document.getElementById('print-status-{result_key}');
         var timeoutId = setTimeout(function() {{
-            statusEl.innerHTML = '<span style="color:#FF4B4B;">❌ 프린터 응답 없음 (IP: {printer_ip} 확인 필요)</span>';
+            statusEl.innerHTML = '<span style="color:#FF4B4B;">❌ 라벨기와 와이파이를 연결하세요.</span>';
         }}, 5000);
 
         fetch('http://{printer_ip}:9100', {{
@@ -81,7 +81,7 @@ def send_zpl_to_printer(printer_ip, zpl_code, result_key):
         }})
         .catch(function(err) {{
             clearTimeout(timeoutId);
-            statusEl.innerHTML = '<span style="color:#FF4B4B;">❌ 프린터 연결 실패: ' + err + '</span>';
+            statusEl.innerHTML = '<span style="color:#FF4B4B;">❌ 라벨기와 와이파이를 연결하세요.</span>';
         }});
     }})();
     </script>
