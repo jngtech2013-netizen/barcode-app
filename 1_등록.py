@@ -123,7 +123,6 @@ with st.container(border=True):
             "출고처": c.get("출고처", ""),
             "피트수": c.get("피트수", ""),
             "씰번호": c.get("씰 번호", ""),
-            "미리보기": False,
         } for c in shippable_containers])
 
         edited = st.data_editor(
@@ -134,13 +133,14 @@ with st.container(border=True):
             disabled=["컨테이너 번호", "출고처", "피트수", "씰번호"],
             column_config={
                 "선택": st.column_config.CheckboxColumn("선택", default=False, width="small"),
-                "미리보기": st.column_config.CheckboxColumn("미리보기", default=False, width="small"),
             },
         )
 
         selected_cnos = edited[edited["선택"] == True]["컨테이너 번호"].tolist()
-        preview_cnos = edited[edited["미리보기"] == True]["컨테이너 번호"].tolist()
-        preview_cno = preview_cnos[-1] if preview_cnos else None
+
+        cno_options = ["없음"] + [c.get("컨테이너 번호", "") for c in shippable_containers]
+        preview_sel = st.selectbox("미리보기", cno_options, label_visibility="collapsed")
+        preview_cno = None if preview_sel == "없음" else preview_sel
 
         if preview_cno:
             qr_bytes = generate_qrcode(preview_cno)
