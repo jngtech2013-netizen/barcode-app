@@ -63,7 +63,7 @@ def send_zpl_to_printer(printer_ip, zpl_code, result_key):
     zpl_escaped = zpl_code.replace("`", "\\`")
     components.html(f"""
     <style>body{{margin:0;padding:0;}}</style>
-    <div id="print-status-{result_key}" style="font-family:sans-serif;font-size:14px;color:#888;">🔄 프린터 연결 확인 중...</div>
+    <div id="print-status-{result_key}" style="font-family:sans-serif;font-size:14px;color:#888;background:#E8F0FE;padding:6px 10px;border-radius:6px;">🔄 프린터 연결 확인 중...</div>
     <script>
     (function() {{
         var statusEl = document.getElementById('print-status-{result_key}');
