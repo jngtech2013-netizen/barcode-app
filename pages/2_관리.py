@@ -33,6 +33,7 @@ st.markdown(
         [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
         [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
     }
+    label, p { font-size: 15px !important; }
     </style>
     """,
     unsafe_allow_html=True,
