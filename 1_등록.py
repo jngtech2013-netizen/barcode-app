@@ -151,6 +151,7 @@ with st.container(border=True):
                 <div style="font-size:22px; font-weight:bold; margin-top:-12px; letter-spacing:1px;">{preview_cno}</div>
             </div>
             """, unsafe_allow_html=True)
+            st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
 
         if selected_cnos:
             btn_label = f"🖨️ {len(selected_cnos)}개 출력 (각 2장)"
