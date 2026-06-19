@@ -43,8 +43,8 @@ def generate_qrcode(data: str) -> bytes:
     fp.seek(0)
     return fp.getvalue()
 
-def make_zpl(container_no, dpi=203):
-    """QR코드 ZPL 생성 (90mm x 60mm 기준)"""
+def make_zpl(container_no, copies=2, dpi=203):
+    """QR코드 ZPL 생성 (90mm x 60mm 기준), ^PQ로 매수 지정"""
     width = 720 if dpi == 203 else 1080
     height = 480 if dpi == 203 else 720
     return (
@@ -54,6 +54,7 @@ def make_zpl(container_no, dpi=203):
         "^FO260,40"
         "^BQN,2,8"
         f"^FDQA,{container_no}^FS"
+        f"^PQ{copies}"
         "^XZ"
     )
 
@@ -61,21 +62,26 @@ def send_zpl_to_printer(printer_ip, zpl_code, result_key):
     """브라우저(스마트폰)가 직접 ZT411로 ZPL을 전송 (사내 로컬 네트워크 전용)"""
     zpl_escaped = zpl_code.replace("`", "\\`")
     components.html(f"""
-    <div id="print-status-{result_key}" style="font-family:sans-serif;font-size:14px;color:#888;">출력 요청 전송 중...</div>
+    <div id="print-status-{result_key}" style="font-family:sans-serif;font-size:14px;color:#888;">🔄 프린터 연결 확인 중...</div>
     <script>
     (function() {{
+        var statusEl = document.getElementById('print-status-{result_key}');
+        var timeoutId = setTimeout(function() {{
+            statusEl.innerHTML = '<span style="color:#FF4B4B;">❌ 프린터 응답 없음 (IP: {printer_ip} 확인 필요)</span>';
+        }}, 5000);
+
         fetch('http://{printer_ip}:9100', {{
             method: 'POST',
             body: `{zpl_escaped}`,
             mode: 'no-cors'
         }})
         .then(function() {{
-            document.getElementById('print-status-{result_key}').innerHTML =
-                '<span style="color:#28A745;">✅ 출력 요청을 프린터로 전송했습니다.</span>';
+            clearTimeout(timeoutId);
+            statusEl.innerHTML = '<span style="color:#28A745;">✅ 출력 요청을 프린터로 전송했습니다.</span>';
         }})
         .catch(function(err) {{
-            document.getElementById('print-status-{result_key}').innerHTML =
-                '<span style="color:#FF4B4B;">❌ 프린터 연결 실패: ' + err + '</span>';
+            clearTimeout(timeoutId);
+            statusEl.innerHTML = '<span style="color:#FF4B4B;">❌ 프린터 연결 실패: ' + err + '</span>';
         }});
     }})();
     </script>
@@ -183,9 +189,8 @@ with st.container(border=True):
                 st.warning("프린터 IP를 먼저 설정 페이지에서 입력해주세요.")
             else:
                 for i, cno in enumerate(selected_cnos):
-                    zpl_code = make_zpl(cno)
-                    send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}_1")
-                    send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}_2")
+                    zpl_code = make_zpl(cno, copies=2)
+                    send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}")
                 st.caption(f"전송 대상: {printer_ip}")
 
 st.divider()
