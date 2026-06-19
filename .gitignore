@@ -1,3 +1,4 @@
 # Streamlit Secrets
 .streamlit/secrets.toml
 config.json
+__pycache__/
