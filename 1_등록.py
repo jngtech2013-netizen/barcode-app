@@ -63,7 +63,10 @@ def send_zpl_to_printer(printer_ip, zpl_code, result_key):
     zpl_escaped = zpl_code.replace("`", "\\`")
     components.html(f"""
     <style>body{{margin:0;padding:0;}}</style>
-    <div id="print-status-{result_key}" style="font-family:sans-serif;font-size:14px;color:#888;background:#E8F0FE;padding:6px 10px;border-radius:6px;">🔄 프린터 연결 확인 중...</div>
+    <div style="font-family:sans-serif;font-size:14px;background:#E8F0FE;padding:6px 10px;border-radius:6px;">
+        <div style="color:#555;">🖨️ 전송 대상: {printer_ip}</div>
+        <div id="print-status-{result_key}" style="color:#888;margin-top:4px;">🔄 프린터 연결 확인 중...</div>
+    </div>
     <script>
     (function() {{
         var statusEl = document.getElementById('print-status-{result_key}');
@@ -86,7 +89,7 @@ def send_zpl_to_printer(printer_ip, zpl_code, result_key):
         }});
     }})();
     </script>
-    """, height=40)
+    """, height=65)
 
 def clear_form_inputs():
     st.session_state["form_container_no"] = ""
@@ -189,7 +192,6 @@ with st.container(border=True):
             if not printer_ip:
                 st.warning("프린터 IP를 먼저 설정 페이지에서 입력해주세요.")
             else:
-                st.markdown(f'<div style="font-family:sans-serif;font-size:14px;color:#555;margin-top:4px;background:#E8F0FE;padding:6px 10px;border-radius:6px;">🖨️ 전송 대상: {printer_ip}</div>', unsafe_allow_html=True)
                 for i, cno in enumerate(selected_cnos):
                     zpl_code = make_zpl(cno, copies=2)
                     send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}")
