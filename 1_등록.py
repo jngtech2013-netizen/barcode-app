@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import qrcode
+import base64
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
 import re
@@ -135,53 +136,51 @@ with st.container(border=True):
         st.markdown("<div style='margin-top:4px;'></div>", unsafe_allow_html=True)
 
         # --- 컨테이너 테이블 ---
-        import pandas as pd
         df = pd.DataFrame([{
+            "선택": False,
             "컨테이너 번호": c.get("컨테이너 번호", ""),
             "출고처": c.get("출고처", ""),
             "피트수": c.get("피트수", ""),
             "씰번호": c.get("씰 번호", ""),
+            "미리보기": False,
         } for c in shippable_containers])
 
-        selection = st.dataframe(
+        edited = st.data_editor(
             df,
             use_container_width=True,
             hide_index=True,
-            selection_mode="multi-row",
-            on_select="rerun",
+            key="container_table_editor",
+            disabled=["컨테이너 번호", "출고처", "피트수", "씰번호"],
+            column_config={
+                "선택": st.column_config.CheckboxColumn("선택", default=False, width="small"),
+                "미리보기": st.column_config.CheckboxColumn("미리보기", default=False, width="small"),
+            },
         )
 
-        selected_rows = selection.selection.rows
-        selected_cnos = [df.iloc[i]["컨테이너 번호"] for i in selected_rows]
-
-        if "barcode_preview_open" not in st.session_state:
-            st.session_state["barcode_preview_open"] = False
+        selected_cnos = edited[edited["선택"] == True]["컨테이너 번호"].tolist()
+        preview_cno = edited[edited["미리보기"] == True]["컨테이너 번호"].tolist()
+        preview_cno = preview_cno[0] if preview_cno else None
 
         if selected_cnos:
-            col_prev, col_print = st.columns([0.35, 0.65])
-            with col_prev:
-                prev_label = "미리보기 닫기" if st.session_state["barcode_preview_open"] else "🔍 미리보기"
-                if st.button(prev_label, use_container_width=True, key="preview_btn"):
-                    st.session_state["barcode_preview_open"] = not st.session_state["barcode_preview_open"]
-                    st.rerun()
-            with col_print:
-                btn_label = f"🖨️ {len(selected_cnos)}개 출력 (각 2장)"
-                if st.button(btn_label, use_container_width=True, type="primary", key="print_barcode_btn", disabled=not printer_ip):
-                    for i, cno in enumerate(selected_cnos):
-                        zpl_code = make_zpl(cno)
-                        send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}_1")
-                        send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}_2")
-                    st.caption(f"전송 대상: {printer_ip}")
-
-            if st.session_state["barcode_preview_open"]:
-                for cno in selected_cnos:
-                    qr = generate_qrcode(cno)
-                    col_p1, col_p2, col_p3 = st.columns([1, 2, 1])
-                    with col_p2:
-                        st.caption(cno)
-                        st.image(qr, width=200)
+            btn_label = f"🖨️ {len(selected_cnos)}개 출력 (각 2장)"
+            if st.button(btn_label, use_container_width=True, type="primary", key="print_barcode_btn", disabled=not printer_ip):
+                for i, cno in enumerate(selected_cnos):
+                    zpl_code = make_zpl(cno)
+                    send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}_1")
+                    send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}_2")
+                st.caption(f"전송 대상: {printer_ip}")
         else:
-            st.caption("행을 선택하면 출력 버튼이 표시됩니다.")
+            st.caption("'선택' 체크박스로 출력할 컨테이너를 선택하세요.")
+
+        if preview_cno:
+            qr_bytes = generate_qrcode(preview_cno)
+            b64 = base64.b64encode(qr_bytes).decode()
+            st.markdown(f"""
+            <div style="text-align:center; margin:16px 0 8px 0;">
+                <div style="font-size:18px; font-weight:bold; margin-bottom:8px;">{preview_cno}</div>
+                <img src="data:image/png;base64,{b64}" style="width:200px; max-width:80%;">
+            </div>
+            """, unsafe_allow_html=True)
 
 st.divider()
 
