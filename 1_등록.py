@@ -310,7 +310,17 @@ with st.form(key="new_container_form"):
     feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
     seal_no = st.text_input("4. 씰 번호", key="form_seal_no")
 
-    submitted = st.form_submit_button("➕ 등록하기", use_container_width=True)
+    st.markdown("""
+    <style>
+    .element-container:has(#register-btn-marker) + .element-container button {
+        background-color: #28A745 !important;
+        border-color: #28A745 !important;
+        color: white !important;
+    }
+    </style>
+    <div id="register-btn-marker" style="display:none"></div>
+    """, unsafe_allow_html=True)
+    submitted = st.form_submit_button("등록", use_container_width=True)
     if submitted:
         st.session_state["form_success_message"] = ""
         st.session_state["form_error_message"] = ""
