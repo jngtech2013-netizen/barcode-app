@@ -1,7 +1,7 @@
 import streamlit as st
 import json
 from pathlib import Path
-from utils import apply_sidebar_style, render_app_title
+from utils import apply_sidebar_style, render_app_title, DEFAULT_PRINTER_IP
 
 CONFIG_PATH = Path(__file__).parent.parent / "config.json"
 
@@ -22,7 +22,7 @@ apply_sidebar_style()
 render_app_title()
 
 if "printer_ip" not in st.session_state:
-    st.session_state["printer_ip"] = load_config().get("printer_ip", "")
+    st.session_state["printer_ip"] = load_config().get("printer_ip", DEFAULT_PRINTER_IP)
 
 st.markdown("#### ⚙️ 설정")
 

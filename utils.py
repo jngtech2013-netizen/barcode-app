@@ -12,6 +12,7 @@ LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
 BACKUP_PREFIX = "백업_"
 DESTINATIONS = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '타이닌', '기타']
+DEFAULT_PRINTER_IP = "192.168.0.99"
 
 # --- 공용 UI 헬퍼 ---
 def apply_sidebar_style(extra_css: str = ""):

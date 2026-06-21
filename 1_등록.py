@@ -10,13 +10,6 @@ import streamlit.components.v1 as components
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
 
-def load_config():
-    if CONFIG_PATH.exists():
-        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    return {}
-
-if "printer_ip" not in st.session_state:
-    st.session_state["printer_ip"] = load_config().get("printer_ip", "")
 from utils import (
     load_data_from_gsheet,
     add_row_to_gsheet,
@@ -28,8 +21,17 @@ from utils import (
     render_app_title,
     DESTINATIONS,
     make_zpl,
-    is_valid_container_no
+    is_valid_container_no,
+    DEFAULT_PRINTER_IP
 )
+
+def load_config():
+    if CONFIG_PATH.exists():
+        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    return {}
+
+if "printer_ip" not in st.session_state:
+    st.session_state["printer_ip"] = load_config().get("printer_ip", DEFAULT_PRINTER_IP)
 
 st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="expanded")
 
@@ -109,8 +111,6 @@ with st.container(border=True):
         st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
     else:
         printer_ip = st.session_state.get("printer_ip", "")
-        if not printer_ip:
-            st.warning("프린터 IP 미설정 — 사이드바 '설정' 페이지에서 입력해주세요.")
 
         # --- 컨테이너 테이블 ---
         df = pd.DataFrame([{
