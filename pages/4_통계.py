@@ -1,34 +1,15 @@
 import streamlit as st
 import pandas as pd
-from utils import load_data_from_gsheet, connect_to_gsheet, BACKUP_PREFIX
+from utils import load_data_from_gsheet, connect_to_gsheet, apply_sidebar_style, render_app_title, filter_backup_sheets
 
 st.set_page_config(page_title="통계 대시보드", layout="wide", initial_sidebar_state="expanded")
 
-st.markdown(
-    """
-    <style>
-    [data-testid="stSidebar"] { width: 150px !important; }
-    [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
-    [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
-    [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] div,
-    [data-testid="stSidebar"] span, [data-testid="stSidebar"] button { font-size: 22px !important; font-weight: bold !important; }
-    @media (max-width: 768px) {
-        [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
-        [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+apply_sidebar_style()
 
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
-st.markdown("""
-    <div style="margin-top: -3rem;">
-        <h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>
-    </div>
-""", unsafe_allow_html=True)
+render_app_title()
 
 st.markdown("#### 📊 통계 대시보드")
 
@@ -62,11 +43,7 @@ df_selected = pd.DataFrame()
 if range_type == "월별":
     if spreadsheet:
         all_sheets = [s.title for s in spreadsheet.worksheets()]
-        # 월별 백업: 백업_YYYY-MM 형태 (길이 체크)
-        monthly_sheets = sorted(
-            [s for s in all_sheets if s.startswith(BACKUP_PREFIX) and len(s) == len(BACKUP_PREFIX) + 7],
-            reverse=True
-        )
+        monthly_sheets = filter_backup_sheets(all_sheets, "monthly")
         if monthly_sheets:
             selected_month = st.selectbox("월 선택", monthly_sheets)
             df_selected = load_backup_sheet(selected_month)
@@ -78,11 +55,7 @@ if range_type == "월별":
 elif range_type == "일별":
     if spreadsheet:
         all_sheets = [s.title for s in spreadsheet.worksheets()]
-        # 일별 백업: 백업_YYYY-MM-DD 형태
-        daily_sheets = sorted(
-            [s for s in all_sheets if s.startswith(BACKUP_PREFIX) and len(s) == len(BACKUP_PREFIX) + 10],
-            reverse=True
-        )
+        daily_sheets = filter_backup_sheets(all_sheets, "daily")
         if daily_sheets:
             selected_day = st.selectbox("일 선택", daily_sheets)
             df_selected = load_backup_sheet(selected_day)

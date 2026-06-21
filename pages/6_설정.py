@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 from pathlib import Path
+from utils import apply_sidebar_style, render_app_title
 
 CONFIG_PATH = Path(__file__).parent.parent / "config.json"
 
@@ -16,28 +17,9 @@ def save_config(data: dict):
 
 st.set_page_config(page_title="설정", layout="wide", initial_sidebar_state="expanded")
 
-st.markdown(
-    """
-    <style>
-    [data-testid="stSidebar"] { width: 150px !important; }
-    [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
-    [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
-    [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] div,
-    [data-testid="stSidebar"] span, [data-testid="stSidebar"] button { font-size: 22px !important; font-weight: bold !important; }
-    @media (max-width: 768px) {
-        [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
-        [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+apply_sidebar_style()
 
-st.markdown("""
-    <div style="margin-top: -3rem;">
-        <h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>
-    </div>
-""", unsafe_allow_html=True)
+render_app_title()
 
 if "printer_ip" not in st.session_state:
     st.session_state["printer_ip"] = load_config().get("printer_ip", "")

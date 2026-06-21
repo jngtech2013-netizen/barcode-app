@@ -1,8 +1,8 @@
 import streamlit as st
 from datetime import datetime, timezone, timedelta
+import re
 import pandas as pd
 import gspread
-from gspread.utils import column_letter_to_index
 from google.oauth2.service_account import Credentials
 
 # --- 상수 정의 (공용) ---
@@ -11,6 +11,71 @@ SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', 
 LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
 BACKUP_PREFIX = "백업_"
+DESTINATIONS = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '타이닌', '기타']
+
+# --- 공용 UI 헬퍼 ---
+def apply_sidebar_style(extra_css: str = ""):
+    """모든 페이지 공통 사이드바 스타일을 적용한다. (페이지별 추가 CSS는 extra_css로 전달)"""
+    st.markdown(
+        f"""
+        <style>
+        [data-testid="stSidebar"] {{ width: 150px !important; }}
+        [data-testid="stSidebar"] * {{ font-size: 22px !important; font-weight: bold !important; }}
+        [data-testid="stSidebar"] a {{ font-size: 22px !important; font-weight: bold !important; }}
+        [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] div,
+        [data-testid="stSidebar"] span, [data-testid="stSidebar"] button {{ font-size: 22px !important; font-weight: bold !important; }}
+        @media (max-width: 768px) {{
+            [data-testid="stSidebar"] * {{ font-size: 22px !important; font-weight: bold !important; }}
+            [data-testid="stSidebar"] a {{ font-size: 22px !important; font-weight: bold !important; }}
+        }}
+        {extra_css}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+def render_app_title():
+    """모든 페이지 공통 상단 타이틀."""
+    st.markdown("""
+        <div style="margin-top: -3rem;">
+            <h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>
+        </div>
+    """, unsafe_allow_html=True)
+
+# --- 공용 순수 헬퍼 (UI/네트워크 비종속, 단위 테스트 대상) ---
+CONTAINER_NO_PATTERN = re.compile(r'^[A-Z]{4}\d{7}$')
+
+def is_valid_container_no(container_no) -> bool:
+    """컨테이너 번호 형식 검증: 영문 대문자 4자리 + 숫자 7자리 (예: ABCD1234567)."""
+    return bool(container_no) and CONTAINER_NO_PATTERN.match(container_no) is not None
+
+def filter_backup_sheets(sheet_titles, kind="daily"):
+    """시트 제목 목록에서 일별/월별 백업 시트만 골라 최신순으로 반환한다.
+
+    kind="daily"   → 백업_YYYY-MM-DD (접두사 뒤 10자)
+    kind="monthly" → 백업_YYYY-MM    (접두사 뒤 7자)
+    """
+    suffix_len = 10 if kind == "daily" else 7
+    return sorted(
+        [s for s in sheet_titles
+         if s.startswith(BACKUP_PREFIX) and len(s) == len(BACKUP_PREFIX) + suffix_len],
+        reverse=True,
+    )
+
+def make_zpl(container_no, copies=2, dpi=203):
+    """QR코드 ZPL 생성 (90mm x 60mm 기준), ^PQ로 매수 지정."""
+    width = 720 if dpi == 203 else 1080
+    height = 480 if dpi == 203 else 720
+    return (
+        "^XA"
+        f"^PW{width}"
+        f"^LL{height}"
+        "^FO260,40"
+        "^BQN,2,8"
+        f"^FDQA,{container_no}^FS"
+        f"^PQ{copies}"
+        "^XZ"
+    )
 
 # --- Google Sheets 연동 (공용) ---
 @st.cache_resource
@@ -27,14 +92,35 @@ def connect_to_gsheet():
 
 # --- 서식 강제 함수 ---
 def ensure_text_format(worksheet, column_name):
+    # TEXT 서식은 시트에 영구 적용되므로, 매 load/add/update마다 다시 적용할 필요가 없다.
+    # 세션 단위로 한 번만 호출하여 불필요한 읽기·쓰기 API 호출(작업당 2회)을 제거한다.
+    cache_key = f"_text_format_done::{worksheet.title}::{column_name}"
+    if st.session_state.get(cache_key):
+        return
     try:
         headers = worksheet.row_values(1)
         if column_name in headers:
             col_index = headers.index(column_name) + 1
             col_letter = gspread.utils.rowcol_to_a1(1, col_index)[0]
             worksheet.format(f"{col_letter}:{col_letter}", {"numberFormat": {"type": "TEXT"}})
+        st.session_state[cache_key] = True
     except Exception as e:
         st.warning(f"'{worksheet.title}' 시트의 '{column_name}' 열 서식을 강제하는 중 오류 발생: {e}")
+
+# --- 행 조회 헬퍼 (공용) ---
+def find_row_by_container_no(worksheet, container_no):
+    """컨테이너 번호로 시트의 실제 행 번호(1-based)를 찾는다. 없으면 None.
+
+    세션의 리스트 인덱스는 다른 기기의 추가/삭제로 시트 행 순서와 어긋날 수 있으므로,
+    고유값인 컨테이너 번호(A열)로 직접 행을 찾아 잘못된 행을 덮어쓰는 사고를 방지한다.
+    """
+    if not container_no:
+        return None
+    col_values = worksheet.col_values(1)  # A열 전체 (1행=헤더)
+    for i, val in enumerate(col_values):
+        if val == container_no:
+            return i + 1  # 1-based 행 번호
+    return None
 
 # --- 로그 기록 함수 (공용) ---
 def log_change(action):
@@ -103,7 +189,6 @@ def add_row_to_gsheet(data):
         log_change(f"신규 등록: {data_copy.get('컨테이너 번호')}")
         return True, "성공"
     except Exception as e:
-        st.error(f"Google Sheets 저장 중 오류 발생: {e}")
         return False, str(e)
 
 
@@ -135,17 +220,21 @@ def add_rows_to_gsheet_batch(data_list):
         log_change(f"일괄 복구: {len(data_list)}개 ({', '.join(container_nos)})")
         return True, "성공"
     except Exception as e:
-        st.error(f"Google Sheets 일괄 저장 중 오류 발생: {e}")
         return False, str(e)
 
 
-def update_row_in_gsheet(index, data):
+def update_row_in_gsheet(data):
     spreadsheet = connect_to_gsheet()
     if spreadsheet is None:
-        return
+        return False, "Google Sheets에 연결되지 않았습니다."
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
         ensure_text_format(worksheet, '씰 번호')
+        container_no = data.get('컨테이너 번호')
+        row_num = find_row_by_container_no(worksheet, container_no)
+        if row_num is None:
+            return False, f"'{container_no}' 컨테이너를 시트에서 찾을 수 없습니다. '데이터 새로고침' 후 다시 시도해주세요."
+
         data_copy = data.copy()
         if isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
             data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')
@@ -156,22 +245,68 @@ def update_row_in_gsheet(index, data):
             data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
 
         row_to_update = [data_copy.get(header, "") for header in SHEET_HEADERS]
-        worksheet.update(f'A{index+2}:G{index+2}', [row_to_update], value_input_option='USER_ENTERED')
-        log_change(f"데이터 수정: {data_copy.get('컨테이너 번호')}")
+        worksheet.update(f'A{row_num}:G{row_num}', [row_to_update], value_input_option='USER_ENTERED')
+        log_change(f"데이터 수정: {container_no}")
+        return True, "성공"
     except Exception as e:
-        st.error(f"Google Sheets 업데이트 중 오류가 발생했습니다: {e}")
+        return False, str(e)
 
 
-def delete_row_from_gsheet(index, container_no):
+def delete_row_from_gsheet(container_no):
     spreadsheet = connect_to_gsheet()
     if spreadsheet is None:
-        return
+        return False, "Google Sheets에 연결되지 않았습니다."
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
-        worksheet.delete_rows(index + 2)
+        row_num = find_row_by_container_no(worksheet, container_no)
+        if row_num is None:
+            return False, f"'{container_no}' 컨테이너를 시트에서 찾을 수 없습니다. '데이터 새로고침' 후 다시 시도해주세요."
+        worksheet.delete_rows(row_num)
         log_change(f"데이터 삭제: {container_no}")
+        return True, "성공"
     except Exception as e:
-        st.error(f"Google Sheets에서 행 삭제 중 오류가 발생했습니다: {e}")
+        return False, str(e)
+
+
+def delete_rows_by_container_nos(container_nos):
+    """여러 컨테이너 행을 A열 1회 조회 + batch_update 1회로 일괄 삭제한다.
+
+    행마다 삭제 API를 호출하던 방식(N개 → 2N회 호출)을 2회 호출로 줄여
+    백업 정리 시 gspread 분당 쿼터 초과 위험을 없앤다.
+    """
+    spreadsheet = connect_to_gsheet()
+    if spreadsheet is None:
+        return False, "Google Sheets에 연결되지 않았습니다."
+    try:
+        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        target = set(container_nos)
+        col_values = worksheet.col_values(1)  # A열 한 번만 읽기
+        # 0-based 행 인덱스(헤더=0). 삭제 시 인덱스가 밀리므로 내림차순으로 처리해야 안전.
+        row_indices = sorted(
+            [i for i, val in enumerate(col_values) if val in target],
+            reverse=True
+        )
+        if not row_indices:
+            return True, 0
+
+        requests = [
+            {
+                "deleteDimension": {
+                    "range": {
+                        "sheetId": worksheet.id,
+                        "dimension": "ROWS",
+                        "startIndex": idx,      # 0-based, 포함
+                        "endIndex": idx + 1,    # 미포함
+                    }
+                }
+            }
+            for idx in row_indices
+        ]
+        spreadsheet.batch_update({"requests": requests})
+        log_change(f"데이터 삭제(일괄): {len(row_indices)}개 ({', '.join(container_nos)})")
+        return True, len(row_indices)
+    except Exception as e:
+        return False, str(e)
 
 
 def delete_from_backup_sheets(container_nos, source_sheet_name):
@@ -436,15 +571,11 @@ def cleanup_old_daily_sheets(months=3):
     if spreadsheet is None:
         return False, "Google Sheets에 연결되지 않았습니다."
     try:
-        from datetime import date
         cutoff_date = datetime.now(KST).date() - timedelta(days=months * 30)
 
         all_sheets = [s.title for s in spreadsheet.worksheets()]
-        # 일별 시트만 대상: 백업_YYYY-MM-DD (길이 체크)
-        daily_sheets = [
-            s for s in all_sheets
-            if s.startswith(BACKUP_PREFIX) and len(s) == len(BACKUP_PREFIX) + 10
-        ]
+        # 일별 시트만 대상: 백업_YYYY-MM-DD
+        daily_sheets = filter_backup_sheets(all_sheets, "daily")
 
         deleted_sheets = []
         for sheet_name in daily_sheets:

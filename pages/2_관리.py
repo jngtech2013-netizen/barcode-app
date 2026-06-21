@@ -3,50 +3,31 @@ import pandas as pd
 from datetime import datetime, timezone, timedelta
 from utils import (
     SHEET_HEADERS,
-    MAIN_SHEET_NAME,
     load_data_from_gsheet,
-    add_row_to_gsheet,
     add_rows_to_gsheet_batch,
     update_row_in_gsheet,
     delete_row_from_gsheet,
     delete_from_backup_sheets,
-    backup_data_to_new_sheet,
     cleanup_old_daily_sheets,
     archive_log_sheet,
     move_containers_between_backup_sheets,
     log_change,
     connect_to_gsheet,
-    BACKUP_PREFIX
+    BACKUP_PREFIX,
+    DESTINATIONS,
+    apply_sidebar_style,
+    render_app_title,
+    filter_backup_sheets
 )
 
 st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
 
-st.markdown(
-    """
-    <style>
-    [data-testid="stSidebar"] { width: 150px !important; }
-    [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
-    [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
-    [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] div,
-    [data-testid="stSidebar"] span, [data-testid="stSidebar"] button { font-size: 22px !important; font-weight: bold !important; }
-    @media (max-width: 768px) {
-        [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
-        [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
-    }
-    label, p { font-size: 15px !important; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+apply_sidebar_style('label, p { font-size: 15px !important; }')
 
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
-st.markdown("""
-    <div style="margin-top: -3rem;">
-        <h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>
-    </div>
-""", unsafe_allow_html=True)
+render_app_title()
 
 st.markdown("#### ✏️ 데이터 수정 및 삭제")
 
@@ -66,7 +47,7 @@ if st.session_state.container_list:
 
         with st.form(key=f"edit_form_{selected_for_edit}"):
             st.write(f"**'{selected_for_edit}' 정보 수정**")
-            dest_options = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '타이닌', '기타']
+            dest_options = DESTINATIONS
             current_dest_idx = dest_options.index(selected_data.get('출고처', '베트남'))
             new_dest = st.radio("출고처 수정", options=dest_options, index=current_dest_idx, horizontal=True)
             feet_options = ['40', '20']
@@ -95,17 +76,23 @@ if st.session_state.container_list:
                 else:
                     updated_data['완료일시'] = None
 
-                st.session_state.container_list[selected_idx] = updated_data
-                update_row_in_gsheet(selected_idx, updated_data)
-                st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
-                st.rerun()
+                ok, msg = update_row_in_gsheet(updated_data)
+                if ok:
+                    st.session_state.container_list[selected_idx] = updated_data
+                    st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
+                    st.rerun()
+                else:
+                    st.error(f"수정 실패: {msg}")
 
         st.error("주의: 아래 버튼은 데이터를 영구적으로 삭제합니다.")
         if st.button("🗑️ 이 컨테이너 삭제", use_container_width=True):
-            delete_row_from_gsheet(selected_idx, selected_for_edit)
-            st.session_state.container_list.pop(selected_idx)
-            st.success(f"'{selected_for_edit}' 컨테이너 정보가 삭제되었습니다.")
-            st.rerun()
+            ok, msg = delete_row_from_gsheet(selected_for_edit)
+            if ok:
+                st.session_state.container_list.pop(selected_idx)
+                st.success(f"'{selected_for_edit}' 컨테이너 정보가 삭제되었습니다.")
+                st.rerun()
+            else:
+                st.error(f"삭제 실패: {msg}")
 else:
     st.info("현재 데이터가 없습니다.")
 
@@ -118,14 +105,8 @@ if spreadsheet:
     all_sheets = [s.title for s in spreadsheet.worksheets()]
 
     # 개선 3: 일별/월별 시트 분리 표시
-    daily_sheets = sorted(
-        [s for s in all_sheets if s.startswith(BACKUP_PREFIX) and len(s) == len(BACKUP_PREFIX) + 10],
-        reverse=True
-    )
-    monthly_sheets = sorted(
-        [s for s in all_sheets if s.startswith(BACKUP_PREFIX) and len(s) == len(BACKUP_PREFIX) + 7],
-        reverse=True
-    )
+    daily_sheets = filter_backup_sheets(all_sheets, "daily")
+    monthly_sheets = filter_backup_sheets(all_sheets, "monthly")
 
     sheet_type = st.radio("백업 시트 유형", options=["일별", "월별"], horizontal=True)
     backup_sheets = daily_sheets if sheet_type == "일별" else monthly_sheets
@@ -287,15 +268,11 @@ with st.container(border=True):
     # 삭제 대상 미리보기
     spreadsheet_preview = connect_to_gsheet()
     if spreadsheet_preview:
-        from datetime import date as date_cls
-        cutoff = datetime.now().date()
-        from datetime import timedelta as td
-        cutoff = (datetime.now() - td(days=90)).date()
+        cutoff = (datetime.now() - timedelta(days=90)).date()
         all_sheet_titles = [s.title for s in spreadsheet_preview.worksheets()]
         target_daily = [
-            s for s in all_sheet_titles
-            if s.startswith(BACKUP_PREFIX) and len(s) == len(BACKUP_PREFIX) + 10
-            and datetime.strptime(s.replace(BACKUP_PREFIX, ''), '%Y-%m-%d').date() < cutoff
+            s for s in filter_backup_sheets(all_sheet_titles, "daily")
+            if datetime.strptime(s.replace(BACKUP_PREFIX, ''), '%Y-%m-%d').date() < cutoff
         ]
         if target_daily:
             st.warning(f"삭제 대상: {len(target_daily)}개 시트 ({', '.join(target_daily)})")
@@ -349,10 +326,7 @@ st.info("백업 시트 간 컨테이너 데이터를 이동합니다. 선적완�
 spreadsheet_move = connect_to_gsheet()
 if spreadsheet_move:
     all_sheets_move = [s.title for s in spreadsheet_move.worksheets()]
-    daily_sheets_move = sorted(
-        [s for s in all_sheets_move if s.startswith(BACKUP_PREFIX) and len(s) == len(BACKUP_PREFIX) + 10],
-        reverse=True
-    )
+    daily_sheets_move = filter_backup_sheets(all_sheets_move, "daily")
 
     if not daily_sheets_move:
         st.warning("이동할 수 있는 일별 백업 시트가 없습니다.")

@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
-import re
 import streamlit.components.v1 as components
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
@@ -19,15 +18,17 @@ def load_config():
 if "printer_ip" not in st.session_state:
     st.session_state["printer_ip"] = load_config().get("printer_ip", "")
 from utils import (
-    SHEET_HEADERS,
-    MAIN_SHEET_NAME,
     load_data_from_gsheet,
     add_row_to_gsheet,
     update_row_in_gsheet,
     backup_data_to_new_sheet,
-    connect_to_gsheet,
     log_change,
-    delete_row_from_gsheet
+    delete_rows_by_container_nos,
+    apply_sidebar_style,
+    render_app_title,
+    DESTINATIONS,
+    make_zpl,
+    is_valid_container_no
 )
 
 st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar_state="expanded")
@@ -43,29 +44,20 @@ def generate_qrcode(data: str) -> bytes:
     fp.seek(0)
     return fp.getvalue()
 
-def make_zpl(container_no, copies=2, dpi=203):
-    """QR코드 ZPL 생성 (90mm x 60mm 기준), ^PQ로 매수 지정"""
-    width = 720 if dpi == 203 else 1080
-    height = 480 if dpi == 203 else 720
-    return (
-        "^XA"
-        f"^PW{width}"
-        f"^LL{height}"
-        "^FO260,40"
-        "^BQN,2,8"
-        f"^FDQA,{container_no}^FS"
-        f"^PQ{copies}"
-        "^XZ"
-    )
-
 def send_zpl_to_printer(printer_ip, zpl_code, result_key):
-    """브라우저(스마트폰)가 직접 ZT411로 ZPL을 전송 (사내 로컬 네트워크 전용)"""
+    """브라우저(스마트폰)가 직접 ZT411로 ZPL을 전송 (사내 로컬 네트워크 전용)
+
+    주의: 프린터의 9100 포트는 HTTP/CORS를 지원하지 않으므로 fetch는 'no-cors'로
+    보낼 수밖에 없고, 그 응답 본문은 읽을 수 없다. 따라서 .then()이 실행돼도
+    '프린터가 실제로 출력했다'는 보장은 아니며 '네트워크로 신호를 내보냈다' 수준이다.
+    실제 출력 여부는 라벨이 나오는지 눈으로 확인해야 한다. (5초 내 무응답=연결 실패로 간주)
+    """
     zpl_escaped = zpl_code.replace("`", "\\`")
     components.html(f"""
     <style>body{{margin:0;padding:0;}}</style>
     <div style="font-family:sans-serif;font-size:14px;background:#E8F0FE;padding:6px 10px;border-radius:6px;">
         <div style="color:#555;">🖨️ 전송 대상: {printer_ip}</div>
-        <div id="print-status-{result_key}" style="color:#888;margin-top:4px;">🔄 프린터 연결 확인 중...</div>
+        <div id="print-status-{result_key}" style="color:#888;margin-top:4px;">🔄 프린터로 신호 전송 중...</div>
     </div>
     <script>
     (function() {{
@@ -81,7 +73,8 @@ def send_zpl_to_printer(printer_ip, zpl_code, result_key):
         }})
         .then(function() {{
             clearTimeout(timeoutId);
-            statusEl.innerHTML = '<span style="color:#28A745;">✅ 출력 요청을 프린터로 전송했습니다.</span>';
+            statusEl.innerHTML = '<span style="color:#28A745;">📤 출력 신호를 보냈습니다.</span>'
+                + '<span style="color:#888;"> 라벨이 나오는지 확인하세요.</span>';
         }})
         .catch(function(err) {{
             clearTimeout(timeoutId);
@@ -101,32 +94,12 @@ if st.session_state.get("submission_success", False):
     clear_form_inputs()
     st.session_state.submission_success = False
 
-st.markdown(
-    """
-    <style>
-    [data-testid="stSidebar"] { width: 150px !important; }
-    [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
-    [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
-    [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] div,
-    [data-testid="stSidebar"] span, [data-testid="stSidebar"] button { font-size: 22px !important; font-weight: bold !important; }
-    @media (max-width: 768px) {
-        [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
-        [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
-    }
-    [data-testid="stForm"] label, [data-testid="stForm"] p { font-size: 15px !important; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+apply_sidebar_style('[data-testid="stForm"] label, [data-testid="stForm"] p { font-size: 15px !important; }')
 
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
 
-st.markdown("""
-    <div style="margin-top: -3rem;">
-        <h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>
-    </div>
-""", unsafe_allow_html=True)
+render_app_title()
 
 st.markdown("#### 🔳 바코드 생성 및 출력")
 with st.container(border=True):
@@ -269,7 +242,9 @@ else:
                 else:
                     st.session_state.container_list[i]['완료일시'] = None
 
-                update_row_in_gsheet(i, st.session_state.container_list[i])
+                ok, msg = update_row_in_gsheet(st.session_state.container_list[i])
+                if not ok:
+                    st.session_state["form_error_message"] = f"상태 변경 실패: {msg}"
                 st.rerun()
 
 if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
@@ -289,11 +264,14 @@ if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
 
             with st.spinner('메인 시트를 정리하는 중...'):
                 try:
-                    indices_to_delete = sorted([i for i, item in completed_items_with_indices], reverse=True)
+                    container_nos_to_delete = [
+                        item.get('컨테이너 번호') for _, item in completed_items_with_indices
+                    ]
+                    del_success, del_result = delete_rows_by_container_nos(container_nos_to_delete)
+                    if not del_success:
+                        raise Exception(del_result)
 
-                    for index in indices_to_delete:
-                        container_no_to_delete = st.session_state.container_list[index].get('컨테이너 번호')
-                        delete_row_from_gsheet(index, container_no_to_delete)
+                    for index in sorted([i for i, _ in completed_items_with_indices], reverse=True):
                         st.session_state.container_list.pop(index)
 
                     log_message = f"데이터 백업: {len(completed_data)}개 백업 완료 후 메인 시트에서 삭제."
@@ -312,9 +290,8 @@ st.divider()
 
 st.markdown("#### 📝 신규 컨테이너 등록")
 with st.form(key="new_container_form"):
-    destinations = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '타이닌', '기타']
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
-    destination = st.radio("2. 출고처", options=destinations, horizontal=True, key="form_destination")
+    destination = st.radio("2. 출고처", options=DESTINATIONS, horizontal=True, key="form_destination")
     feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
     seal_no = st.text_input("4. 씰 번호", key="form_seal_no")
 
@@ -333,10 +310,9 @@ with st.form(key="new_container_form"):
         st.session_state["form_success_message"] = ""
         st.session_state["form_error_message"] = ""
 
-        pattern = re.compile(r'^[A-Z]{4}\d{7}$')
         if not container_no or not seal_no:
             st.session_state["form_error_message"] = "컨테이너 번호와 씰 번호를 모두 입력해주세요."
-        elif not pattern.match(container_no):
+        elif not is_valid_container_no(container_no):
             st.session_state["form_error_message"] = "컨테이너 번호 형식이 올바르지 않습니다."
         elif any(c.get('컨테이너 번호') == container_no for c in st.session_state.container_list):
             st.session_state["form_error_message"] = f"이미 등록된 컨테이너 번호입니다: {container_no}"

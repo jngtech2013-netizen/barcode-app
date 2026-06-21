@@ -1,31 +1,12 @@
 import streamlit as st
 import pandas as pd
-from utils import connect_to_gsheet, LOG_SHEET_NAME
+from utils import connect_to_gsheet, LOG_SHEET_NAME, apply_sidebar_style, render_app_title
 
 st.set_page_config(page_title="이력", layout="wide", initial_sidebar_state="expanded")
 
-st.markdown(
-    """
-    <style>
-    [data-testid="stSidebar"] { width: 150px !important; }
-    [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
-    [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
-    [data-testid="stSidebar"] label, [data-testid="stSidebar"] p, [data-testid="stSidebar"] div,
-    [data-testid="stSidebar"] span, [data-testid="stSidebar"] button { font-size: 22px !important; font-weight: bold !important; }
-    @media (max-width: 768px) {
-        [data-testid="stSidebar"] * { font-size: 22px !important; font-weight: bold !important; }
-        [data-testid="stSidebar"] a { font-size: 22px !important; font-weight: bold !important; }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+apply_sidebar_style()
 
-st.markdown("""
-    <div style="margin-top: -3rem;">
-        <h3 style='text-align: center; margin-bottom: 25px;'>🚢 컨테이너 관리 시스템</h3>
-    </div>
-""", unsafe_allow_html=True)
+render_app_title()
 
 st.markdown("#### 📋 변경 이력 조회")
 
