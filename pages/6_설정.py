@@ -28,6 +28,20 @@ def confirm_delete_destination(name, current_list):
         st.rerun()
 
 
+def add_destination_cb():
+    # 콜백 안에서는 위젯 키(new_dest_input)를 비울 수 있어, 추가 후 입력창이 초기화된다.
+    name = st.session_state.get("new_dest_input", "").strip()
+    current = get_destinations()
+    if not name:
+        st.session_state["dest_add_msg"] = ("warning", "출고처명을 입력하세요.")
+    elif name in current:
+        st.session_state["dest_add_msg"] = ("warning", f"이미 존재하는 출고처입니다: {name}")
+    else:
+        save_destinations(current + [name])
+        st.session_state["new_dest_input"] = ""
+        st.session_state["dest_add_msg"] = ("success", f"'{name}' 출고처를 추가했습니다.")
+
+
 if "printer_ip" not in st.session_state:
     st.session_state["printer_ip"] = load_config().get("printer_ip", DEFAULT_PRINTER_IP)
 
@@ -74,6 +88,9 @@ st.markdown("##### 📍 출고처 관리")
 _dest_msg = st.session_state.pop("dest_delete_msg", None)
 if _dest_msg:
     st.success(_dest_msg)
+_add_msg = st.session_state.pop("dest_add_msg", None)
+if _add_msg:
+    getattr(st, _add_msg[0])(_add_msg[1])
 
 with st.container(border=True):
     destinations = get_destinations()
@@ -82,7 +99,7 @@ with st.container(border=True):
     # --- 추가 ---
     col_add, col_add_btn = st.columns([4, 1], vertical_alignment="bottom")
     with col_add:
-        new_dest_input = st.text_input(
+        st.text_input(
             "출고처 추가",
             key="new_dest_input",
             placeholder="추가할 출고처명 입력",
@@ -90,16 +107,7 @@ with st.container(border=True):
         )
     with col_add_btn:
         st.markdown('<div id="add-dest-marker" style="display:none"></div>', unsafe_allow_html=True)
-        if st.button("➕ 추가", use_container_width=True):
-            name = new_dest_input.strip()
-            if not name:
-                st.warning("출고처명을 입력하세요.")
-            elif name in destinations:
-                st.warning(f"이미 존재하는 출고처입니다: {name}")
-            else:
-                save_destinations(destinations + [name])
-                st.success(f"'{name}' 출고처를 추가했습니다.")
-                st.rerun()
+        st.button("➕ 추가", use_container_width=True, on_click=add_destination_cb)
 
     # --- 삭제 ---
     # 직전에 선택돼 있던 출고처가 삭제되어 목록에 없으면 selectbox 오류가 나므로 보정
