@@ -29,7 +29,30 @@ if 'container_list' not in st.session_state:
 
 render_app_title()
 
+
+@st.dialog("컨테이너 삭제 확인")
+def confirm_delete_dialog(container_no):
+    st.warning(f"'{container_no}' 컨테이너를 영구적으로 삭제합니다. 이 작업은 되돌릴 수 없습니다.")
+    c1, c2 = st.columns(2)
+    if c1.button("🗑️ 삭제", use_container_width=True, type="primary"):
+        ok, msg = delete_row_from_gsheet(container_no)
+        if ok:
+            st.session_state.container_list = [
+                c for c in st.session_state.container_list if c.get('컨테이너 번호') != container_no
+            ]
+            st.session_state["delete_result_msg"] = ("success", f"'{container_no}' 컨테이너 정보가 삭제되었습니다.")
+        else:
+            st.session_state["delete_result_msg"] = ("error", f"삭제 실패: {msg}")
+        st.rerun()
+    if c2.button("취소", use_container_width=True):
+        st.rerun()
+
+
 st.markdown("#### ✏️ 데이터 수정 및 삭제")
+
+_del_result = st.session_state.pop("delete_result_msg", None)
+if _del_result:
+    getattr(st, _del_result[0])(_del_result[1])
 
 if st.session_state.container_list:
     container_numbers_for_edit = [c.get('컨테이너 번호', '') for c in st.session_state.container_list]
@@ -59,6 +82,16 @@ if st.session_state.container_list:
             current_status_idx = status_options.index(current_status)
             new_status = st.radio("상태 변경", options=status_options, index=current_status_idx, horizontal=True)
 
+            st.markdown("""
+            <style>
+            .element-container:has(#save-btn-marker) + .element-container button {
+                background-color: #28A745 !important;
+                border-color: #28A745 !important;
+                color: white !important;
+            }
+            </style>
+            <div id="save-btn-marker" style="display:none"></div>
+            """, unsafe_allow_html=True)
             if st.form_submit_button("💾 수정사항 저장", use_container_width=True):
                 updated_data = selected_data.copy()
                 updated_data.update({
@@ -84,15 +117,18 @@ if st.session_state.container_list:
                 else:
                     st.error(f"수정 실패: {msg}")
 
-        st.error("주의: 아래 버튼은 데이터를 영구적으로 삭제합니다.")
+        st.markdown("""
+        <style>
+        .element-container:has(#delete-btn-marker) + .element-container button {
+            background-color: #FF4B4B !important;
+            border-color: #FF4B4B !important;
+            color: white !important;
+        }
+        </style>
+        <div id="delete-btn-marker" style="display:none"></div>
+        """, unsafe_allow_html=True)
         if st.button("🗑️ 이 컨테이너 삭제", use_container_width=True):
-            ok, msg = delete_row_from_gsheet(selected_for_edit)
-            if ok:
-                st.session_state.container_list.pop(selected_idx)
-                st.success(f"'{selected_for_edit}' 컨테이너 정보가 삭제되었습니다.")
-                st.rerun()
-            else:
-                st.error(f"삭제 실패: {msg}")
+            confirm_delete_dialog(selected_for_edit)
 else:
     st.info("현재 데이터가 없습니다.")
 
