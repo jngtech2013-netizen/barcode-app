@@ -105,36 +105,120 @@ render_app_title()
 
 st.markdown("#### 🔳 바코드 생성 및 출력")
 with st.container(border=True):
-    shippable_containers = [c for c in st.session_state.container_list if c.get('상태') == '선적중' and c.get('컨테이너 번호')]
+    printer_ip = st.session_state.get("printer_ip", "")
 
-    if not shippable_containers:
-        st.info("바코드를 생성할 수 있는 '선적중' 상태의 컨테이너가 없습니다.")
+    # --- 데이터 백업 (맨 위) ---
+    if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
+        completed_items_with_indices = [
+            (i, item) for i, item in enumerate(st.session_state.container_list) if item.get('상태') == '선적완료'
+        ]
+        if not completed_items_with_indices:
+            st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
+        else:
+            completed_data = [item for _, item in completed_items_with_indices]
+            with st.spinner('데이터를 백업하는 중...'):
+                success, error_msg = backup_data_to_new_sheet(completed_data)
+            if success:
+                st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 일별/월별 백업했습니다!")
+                with st.spinner('메인 시트를 정리하는 중...'):
+                    try:
+                        container_nos_to_delete = [
+                            item.get('컨테이너 번호') for _, item in completed_items_with_indices
+                        ]
+                        del_success, del_result = delete_rows_by_container_nos(container_nos_to_delete)
+                        if not del_success:
+                            raise Exception(del_result)
+                        for index in sorted([i for i, _ in completed_items_with_indices], reverse=True):
+                            st.session_state.container_list.pop(index)
+                        log_change(f"데이터 백업: {len(completed_data)}개 백업 완료 후 메인 시트에서 삭제.")
+                        st.success("메인 시트 정리가 완료되었습니다.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"메인 시트 정리 중 오류가 발생했습니다: {e}")
+                        st.warning("데이터 백업은 완료되었으나, 메인 시트 정리에 실패했습니다. 잠시 후 다시 시도하거나 수동으로 정리해주세요.")
+            else:
+                st.error(f"백업 중 오류 발생: {error_msg}")
+
+    # --- 선적중 / 선적완료 카드 ---
+    completed_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적완료'])
+    pending_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적중'])
+    st.markdown(
+        f"""
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
+        <style>
+        .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
+        .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
+        .metric-label {{ font-size: 1rem; color: #555555; }}
+        .red-value {{ color: #FF4B4B; }}
+        .green-value {{ color: #28A745; }}
+        </style>
+        <div class="row">
+            <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending_count}</div><div class="metric-label">선적중</div></div></div>
+            <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed_count}</div><div class="metric-label">선적완료</div></div></div>
+        </div>
+        """, unsafe_allow_html=True
+    )
+
+    if not st.session_state.container_list:
+        st.info("등록된 컨테이너가 없습니다.")
     else:
-        printer_ip = st.session_state.get("printer_ip", "")
+        df = pd.DataFrame(st.session_state.container_list)
+        df['선적완료'] = df['상태'].apply(lambda x: x == '선적완료')
+        df.insert(0, '출력선택', False)
 
-        # --- 컨테이너 테이블 ---
-        df = pd.DataFrame([{
-            "선택": False,
-            "컨테이너 번호": c.get("컨테이너 번호", ""),
-            "출고처": c.get("출고처", ""),
-            "피트수": c.get("피트수", ""),
-            "씰번호": c.get("씰 번호", ""),
-        } for c in shippable_containers])
+        display_df = df.copy()
+        if '등록일시' in display_df.columns:
+            display_df['등록일시'] = pd.to_datetime(display_df['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
+        if '완료일시' in display_df.columns:
+            display_df['완료일시'] = pd.to_datetime(display_df['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
+        display_df.fillna('', inplace=True)
 
-        edited = st.data_editor(
-            df,
+        column_order = ['출력선택', '컨테이너 번호', '출고처', '피트수', '씰 번호', '등록일시', '완료일시', '선적완료']
+
+        edited_df = st.data_editor(
+            display_df,
+            column_order=column_order,
             use_container_width=True,
             hide_index=True,
-            key="container_table",
-            disabled=["컨테이너 번호", "출고처", "피트수", "씰번호"],
+            key="merged_editor",
             column_config={
-                "선택": st.column_config.CheckboxColumn("선택", default=False, width="small"),
-            },
+                "출력선택": st.column_config.CheckboxColumn("출력선택", default=False, width="small", help="선적완료 항목은 출력 대상에서 제외됩니다."),
+                "선적완료": st.column_config.CheckboxColumn("선적완료", width="small"),
+                "컨테이너 번호": st.column_config.TextColumn(disabled=True),
+                "출고처": st.column_config.TextColumn(disabled=True),
+                "피트수": st.column_config.TextColumn(disabled=True),
+                "씰 번호": st.column_config.TextColumn(disabled=True),
+                "등록일시": st.column_config.TextColumn(disabled=True),
+                "완료일시": st.column_config.TextColumn(disabled=True),
+            }
         )
 
-        selected_cnos = edited[edited["선택"] == True]["컨테이너 번호"].tolist()
+        # 선적완료 체크 토글 → 상태/완료일시 갱신 후 저장
+        if not df['선적완료'].equals(edited_df['선적완료']):
+            for i, (original_bool, edited_bool) in enumerate(zip(df['선적완료'], edited_df['선적완료'])):
+                if original_bool != edited_bool:
+                    st.session_state.container_list[i]['상태'] = "선적완료" if edited_bool else "선적중"
+                    if edited_bool:
+                        st.session_state.container_list[i]['완료일시'] = pd.to_datetime(get_korea_now().replace(tzinfo=None))
+                    else:
+                        st.session_state.container_list[i]['완료일시'] = None
+                    ok, msg = update_row_in_gsheet(st.session_state.container_list[i])
+                    if not ok:
+                        st.session_state["form_error_message"] = f"상태 변경 실패: {msg}"
+                    st.rerun()
 
-        cno_options = ["미리보기"] + [c.get("컨테이너 번호", "") for c in shippable_containers]
+        # 출력 대상: 선적중이면서 출력선택된 행만 (선적완료 행은 제외)
+        selected_cnos = [
+            row['컨테이너 번호'] for _, row in edited_df.iterrows()
+            if row['출력선택'] and not row['선적완료']
+        ]
+
+        # 미리보기 옵션은 선적중 컨테이너만
+        shippable_cnos = [
+            c.get('컨테이너 번호', '') for c in st.session_state.container_list
+            if c.get('상태') == '선적중' and c.get('컨테이너 번호')
+        ]
+        cno_options = ["미리보기"] + shippable_cnos
         preview_sel = st.selectbox("미리보기", cno_options, label_visibility="collapsed")
         preview_cno = None if preview_sel == "미리보기" else preview_sel
 
@@ -168,123 +252,6 @@ with st.container(border=True):
                 for i, cno in enumerate(selected_cnos):
                     zpl_code = make_zpl(cno, copies=2)
                     send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}")
-
-st.divider()
-
-col_header, col_button = st.columns([0.8, 0.2])
-with col_header:
-    st.markdown("#### 📋 컨테이너 현황")
-with col_button:
-    if st.button("🔄 데이터 새로고침", use_container_width=True):
-        st.session_state.container_list = load_data_from_gsheet()
-        st.rerun()
-
-completed_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적완료'])
-pending_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적중'])
-
-st.markdown(
-    f"""
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
-    <style>
-    .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
-    .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
-    .metric-label {{ font-size: 1rem; color: #555555; }}
-    .red-value {{ color: #FF4B4B; }}
-    .green-value {{ color: #28A745; }}
-    </style>
-    <div class="row">
-        <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending_count}</div><div class="metric-label">선적중</div></div></div>
-        <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed_count}</div><div class="metric-label">선적완료</div></div></div>
-    </div>
-    """, unsafe_allow_html=True
-)
-
-if not st.session_state.container_list:
-    st.info("등록된 컨테이너가 없습니다.")
-else:
-    df = pd.DataFrame(st.session_state.container_list)
-    df['선적완료'] = df['상태'].apply(lambda x: True if x == '선적완료' else False)
-
-    display_df = df.copy()
-    if '등록일시' in display_df.columns:
-        display_df['등록일시'] = pd.to_datetime(display_df['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
-    if '완료일시' in display_df.columns:
-        display_df['완료일시'] = pd.to_datetime(display_df['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
-    display_df.fillna('', inplace=True)
-
-    column_order = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '등록일시', '완료일시', '선적완료']
-
-    edited_df = st.data_editor(
-        display_df,
-        column_order=column_order,
-        use_container_width=True,
-        hide_index=True,
-        key="data_editor_final",
-        column_config={
-            "선적완료": st.column_config.CheckboxColumn("선적완료", width="small"),
-            "컨테이너 번호": st.column_config.TextColumn(disabled=True),
-            "출고처": st.column_config.TextColumn(disabled=True),
-            "피트수": st.column_config.TextColumn(disabled=True),
-            "씰 번호": st.column_config.TextColumn(disabled=True),
-            "등록일시": st.column_config.TextColumn(disabled=True),
-            "완료일시": st.column_config.TextColumn(disabled=True),
-        }
-    )
-
-    if not df['선적완료'].equals(edited_df['선적완료']):
-        for i, (original_bool, edited_bool) in enumerate(zip(df['선적완료'], edited_df['선적완료'])):
-            if original_bool != edited_bool:
-                st.session_state.container_list[i]['상태'] = "선적완료" if edited_bool else "선적중"
-                if edited_bool:
-                    aware_completion_time = get_korea_now()
-                    naive_completion_time = aware_completion_time.replace(tzinfo=None)
-                    st.session_state.container_list[i]['완료일시'] = pd.to_datetime(naive_completion_time)
-                else:
-                    st.session_state.container_list[i]['완료일시'] = None
-
-                ok, msg = update_row_in_gsheet(st.session_state.container_list[i])
-                if not ok:
-                    st.session_state["form_error_message"] = f"상태 변경 실패: {msg}"
-                st.rerun()
-
-if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
-    completed_items_with_indices = [
-        (i, item) for i, item in enumerate(st.session_state.container_list) if item.get('상태') == '선적완료'
-    ]
-
-    if not completed_items_with_indices:
-        st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
-    else:
-        completed_data = [item for i, item in completed_items_with_indices]
-        with st.spinner('데이터를 백업하는 중...'):
-            success, error_msg = backup_data_to_new_sheet(completed_data)
-
-        if success:
-            st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 일별/월별 백업했습니다!")
-
-            with st.spinner('메인 시트를 정리하는 중...'):
-                try:
-                    container_nos_to_delete = [
-                        item.get('컨테이너 번호') for _, item in completed_items_with_indices
-                    ]
-                    del_success, del_result = delete_rows_by_container_nos(container_nos_to_delete)
-                    if not del_success:
-                        raise Exception(del_result)
-
-                    for index in sorted([i for i, _ in completed_items_with_indices], reverse=True):
-                        st.session_state.container_list.pop(index)
-
-                    log_message = f"데이터 백업: {len(completed_data)}개 백업 완료 후 메인 시트에서 삭제."
-                    log_change(log_message)
-
-                    st.success("메인 시트 정리가 완료되었습니다.")
-                    st.rerun()
-
-                except Exception as e:
-                    st.error(f"메인 시트 정리 중 오류가 발생했습니다: {e}")
-                    st.warning("데이터 백업은 완료되었으나, 메인 시트 정리에 실패했습니다. 잠시 후 '데이터 새로고침'을 누르고 다시 시도하거나, 수동으로 정리해주세요.")
-        else:
-            st.error(f"백업 중 오류 발생: {error_msg}")
 
 st.divider()
 
