@@ -96,7 +96,7 @@ if 'container_list' not in st.session_state:
 
 render_app_title()
 
-st.markdown("#### 🔳 바코드 생성 및 출력")
+st.markdown("#### 📋 컨테이너 현황")
 with st.container(border=True):
     printer_ip = st.session_state.get("printer_ip", "")
 
