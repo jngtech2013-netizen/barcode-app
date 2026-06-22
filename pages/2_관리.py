@@ -89,45 +89,46 @@ if st.session_state.container_list:
                 border-color: #28A745 !important;
                 color: white !important;
             }
+            .element-container:has(#delete-btn-marker) + .element-container button {
+                background-color: #FF4B4B !important;
+                border-color: #FF4B4B !important;
+                color: white !important;
+            }
             </style>
             <div id="save-btn-marker" style="display:none"></div>
             """, unsafe_allow_html=True)
-            if st.form_submit_button("💾 수정사항 저장", use_container_width=True):
-                updated_data = selected_data.copy()
-                updated_data.update({
-                    '출고처': new_dest,
-                    '피트수': new_feet,
-                    '씰 번호': str(new_seal),
-                    '상태': new_status,
-                })
+            save_clicked = st.form_submit_button("💾 수정사항 저장", use_container_width=True)
 
-                if new_status == '선적완료':
-                    if current_status == '선적중':
-                        aware_time = datetime.now(timezone(timedelta(hours=9)))
-                        naive_time = aware_time.replace(tzinfo=None)
-                        updated_data['완료일시'] = pd.to_datetime(naive_time)
-                else:
-                    updated_data['완료일시'] = None
+            st.caption("⚠️ 아래 버튼은 데이터를 영구적으로 삭제합니다. 삭제 시 복구할 수 없습니다.")
+            st.markdown('<div id="delete-btn-marker" style="display:none"></div>', unsafe_allow_html=True)
+            delete_clicked = st.form_submit_button("🗑️ 이 컨테이너 삭제", use_container_width=True)
 
-                ok, msg = update_row_in_gsheet(updated_data)
-                if ok:
-                    st.session_state.container_list[selected_idx] = updated_data
-                    st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
-                    st.rerun()
-                else:
-                    st.error(f"수정 실패: {msg}")
+        if save_clicked:
+            updated_data = selected_data.copy()
+            updated_data.update({
+                '출고처': new_dest,
+                '피트수': new_feet,
+                '씰 번호': str(new_seal),
+                '상태': new_status,
+            })
 
-        st.markdown("""
-        <style>
-        .element-container:has(#delete-btn-marker) + .element-container button {
-            background-color: #FF4B4B !important;
-            border-color: #FF4B4B !important;
-            color: white !important;
-        }
-        </style>
-        <div id="delete-btn-marker" style="display:none"></div>
-        """, unsafe_allow_html=True)
-        if st.button("🗑️ 이 컨테이너 삭제", use_container_width=True):
+            if new_status == '선적완료':
+                if current_status == '선적중':
+                    aware_time = datetime.now(timezone(timedelta(hours=9)))
+                    naive_time = aware_time.replace(tzinfo=None)
+                    updated_data['완료일시'] = pd.to_datetime(naive_time)
+            else:
+                updated_data['완료일시'] = None
+
+            ok, msg = update_row_in_gsheet(updated_data)
+            if ok:
+                st.session_state.container_list[selected_idx] = updated_data
+                st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
+                st.rerun()
+            else:
+                st.error(f"수정 실패: {msg}")
+
+        if delete_clicked:
             confirm_delete_dialog(selected_for_edit)
 else:
     st.info("현재 데이터가 없습니다.")
