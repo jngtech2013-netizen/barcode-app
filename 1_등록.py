@@ -100,38 +100,6 @@ st.markdown("#### 📋 컨테이너 현황")
 with st.container(border=True):
     printer_ip = st.session_state.get("printer_ip", "")
 
-    # --- 데이터 백업 (맨 위) ---
-    if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
-        completed_items_with_indices = [
-            (i, item) for i, item in enumerate(st.session_state.container_list) if item.get('상태') == '선적완료'
-        ]
-        if not completed_items_with_indices:
-            st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
-        else:
-            completed_data = [item for _, item in completed_items_with_indices]
-            with st.spinner('데이터를 백업하는 중...'):
-                success, error_msg = backup_data_to_new_sheet(completed_data)
-            if success:
-                st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 일별/월별 백업했습니다!")
-                with st.spinner('메인 시트를 정리하는 중...'):
-                    try:
-                        container_nos_to_delete = [
-                            item.get('컨테이너 번호') for _, item in completed_items_with_indices
-                        ]
-                        del_success, del_result = delete_rows_by_container_nos(container_nos_to_delete)
-                        if not del_success:
-                            raise Exception(del_result)
-                        for index in sorted([i for i, _ in completed_items_with_indices], reverse=True):
-                            st.session_state.container_list.pop(index)
-                        log_change(f"데이터 백업: {len(completed_data)}개 백업 완료 후 메인 시트에서 삭제.")
-                        st.success("메인 시트 정리가 완료되었습니다.")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"메인 시트 정리 중 오류가 발생했습니다: {e}")
-                        st.warning("데이터 백업은 완료되었으나, 메인 시트 정리에 실패했습니다. 잠시 후 다시 시도하거나 수동으로 정리해주세요.")
-            else:
-                st.error(f"백업 중 오류 발생: {error_msg}")
-
     # --- 선적중 / 선적완료 카드 ---
     completed_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적완료'])
     pending_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적중'])
@@ -205,6 +173,38 @@ with st.container(border=True):
             row['컨테이너 번호'] for _, row in edited_df.iterrows()
             if row['출력선택'] and not row['선적완료']
         ]
+
+        # --- 데이터 백업 (미리보기 위) ---
+        if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
+            completed_items_with_indices = [
+                (i, item) for i, item in enumerate(st.session_state.container_list) if item.get('상태') == '선적완료'
+            ]
+            if not completed_items_with_indices:
+                st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
+            else:
+                completed_data = [item for _, item in completed_items_with_indices]
+                with st.spinner('데이터를 백업하는 중...'):
+                    success, error_msg = backup_data_to_new_sheet(completed_data)
+                if success:
+                    st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 일별/월별 백업했습니다!")
+                    with st.spinner('메인 시트를 정리하는 중...'):
+                        try:
+                            container_nos_to_delete = [
+                                item.get('컨테이너 번호') for _, item in completed_items_with_indices
+                            ]
+                            del_success, del_result = delete_rows_by_container_nos(container_nos_to_delete)
+                            if not del_success:
+                                raise Exception(del_result)
+                            for index in sorted([i for i, _ in completed_items_with_indices], reverse=True):
+                                st.session_state.container_list.pop(index)
+                            log_change(f"데이터 백업: {len(completed_data)}개 백업 완료 후 메인 시트에서 삭제.")
+                            st.success("메인 시트 정리가 완료되었습니다.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"메인 시트 정리 중 오류가 발생했습니다: {e}")
+                            st.warning("데이터 백업은 완료되었으나, 메인 시트 정리에 실패했습니다. 잠시 후 다시 시도하거나 수동으로 정리해주세요.")
+                else:
+                    st.error(f"백업 중 오류 발생: {error_msg}")
 
         # 미리보기 옵션은 선적중 컨테이너만
         shippable_cnos = [
