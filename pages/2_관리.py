@@ -17,7 +17,8 @@ from utils import (
     get_destinations,
     apply_sidebar_style,
     render_app_title,
-    filter_backup_sheets
+    filter_backup_sheets,
+    button_marker
 )
 
 st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
@@ -34,18 +35,22 @@ render_app_title()
 def confirm_delete_dialog(container_no):
     st.warning(f"'{container_no}' 컨테이너를 영구적으로 삭제합니다. 이 작업은 되돌릴 수 없습니다.")
     c1, c2 = st.columns(2)
-    if c1.button("🗑️ 삭제", use_container_width=True, type="primary"):
-        ok, msg = delete_row_from_gsheet(container_no)
-        if ok:
-            st.session_state.container_list = [
-                c for c in st.session_state.container_list if c.get('컨테이너 번호') != container_no
-            ]
-            st.session_state["delete_result_msg"] = ("success", f"'{container_no}' 컨테이너 정보가 삭제되었습니다.")
-        else:
-            st.session_state["delete_result_msg"] = ("error", f"삭제 실패: {msg}")
-        st.rerun()
-    if c2.button("취소", use_container_width=True):
-        st.rerun()
+    with c1:
+        button_marker("danger")
+        if st.button("🗑️ 삭제", use_container_width=True):
+            ok, msg = delete_row_from_gsheet(container_no)
+            if ok:
+                st.session_state.container_list = [
+                    c for c in st.session_state.container_list if c.get('컨테이너 번호') != container_no
+                ]
+                st.session_state["delete_result_msg"] = ("success", f"'{container_no}' 컨테이너 정보가 삭제되었습니다.")
+            else:
+                st.session_state["delete_result_msg"] = ("error", f"삭제 실패: {msg}")
+            st.rerun()
+    with c2:
+        button_marker("neutral")
+        if st.button("취소", use_container_width=True):
+            st.rerun()
 
 
 st.markdown("#### ✏️ 데이터 수정 및 삭제")
@@ -86,21 +91,7 @@ if st.session_state.container_list:
             current_status_idx = status_options.index(current_status)
             new_status = st.radio("상태 변경", options=status_options, index=current_status_idx, horizontal=True)
 
-            st.markdown("""
-            <style>
-            .element-container:has(#save-btn-marker) + .element-container button {
-                background-color: #28A745 !important;
-                border-color: #28A745 !important;
-                color: white !important;
-            }
-            .element-container:has(#delete-btn-marker) + .element-container button {
-                background-color: #FF4B4B !important;
-                border-color: #FF4B4B !important;
-                color: white !important;
-            }
-            </style>
-            <div id="save-btn-marker" style="display:none"></div>
-            """, unsafe_allow_html=True)
+            button_marker("primary")
             save_clicked = st.form_submit_button("💾 수정사항 저장", use_container_width=True)
 
             st.markdown("""
@@ -108,7 +99,7 @@ if st.session_state.container_list:
                 ⚠️ 아래 버튼은 데이터를 영구적으로 삭제합니다. 삭제 시 복구할 수 없습니다.
             </div>
             """, unsafe_allow_html=True)
-            st.markdown('<div id="delete-btn-marker" style="display:none"></div>', unsafe_allow_html=True)
+            button_marker("danger")
             delete_clicked = st.form_submit_button("🗑️ 이 컨테이너 삭제", use_container_width=True)
 
         if save_clicked:
@@ -243,7 +234,8 @@ if spreadsheet:
                         selected_rows = edited_df[edited_df['선택']]
 
                         if not selected_rows.empty:
-                            if st.button(f"선택된 {len(selected_rows)}개 컨테이너 복구하기", use_container_width=True, type="primary"):
+                            button_marker("success")
+                            if st.button(f"선택된 {len(selected_rows)}개 컨테이너 복구하기", use_container_width=True):
                                 rows_to_add = []
                                 for index, row in selected_rows.iterrows():
                                     row_to_add = {k: v for k, v in row.to_dict().items() if k in SHEET_HEADERS}
@@ -273,6 +265,7 @@ if spreadsheet:
                         st.markdown("##### 시트 전체 복구 (현재 목록에 없는 데이터만)")
                         st.warning("주의: 이 작업은 위 테이블에 보이는 모든 컨테이너를 한 번에 추가합니다.")
 
+                        button_marker("success")
                         if st.button(f"'{selected_backup_sheet}' 시트의 모든 데이터 추가하기", use_container_width=True):
                             rows_to_add = []
                             for index, row in recoverable_df.iterrows():
@@ -324,7 +317,8 @@ with st.container(border=True):
         else:
             st.success("삭제할 오래된 일별 백업 시트가 없습니다.")
 
-    if st.button("🗑️ 3개월 이상 일별 백업 시트 삭제", use_container_width=True, type="primary"):
+    button_marker("danger")
+    if st.button("🗑️ 3개월 이상 일별 백업 시트 삭제", use_container_width=True):
         with st.spinner("오래된 일별 백업 시트를 삭제하는 중..."):
             success, result = cleanup_old_daily_sheets(months=3)
         if success:
@@ -355,6 +349,7 @@ with st.container(border=True):
         except Exception:
             st.warning("로그 시트 행 수를 불러올 수 없습니다.")
 
+    button_marker("neutral")
     if st.button("📦 로그 아카이브 실행", use_container_width=True):
         with st.spinner("로그를 아카이브하는 중..."):
             success, result = archive_log_sheet(keep_rows=200)
@@ -441,7 +436,8 @@ if spreadsheet_move:
                             st.markdown(f"**이동 요약:** `{source_sheet}` → `{target_daily_name}` / {len(selected_containers)}개 컨테이너" +
                                         (" / 완료일시 수정" if update_done_time else ""))
 
-                            if st.button("📁 선택한 컨테이너 이동", use_container_width=True, type="primary"):
+                            button_marker("primary")
+                            if st.button("📁 선택한 컨테이너 이동", use_container_width=True):
                                 with st.spinner("데이터를 이동하는 중..."):
                                     success, result = move_containers_between_backup_sheets(
                                         container_nos=selected_containers,

@@ -59,6 +59,45 @@ def apply_sidebar_style(extra_css: str = ""):
         """,
         unsafe_allow_html=True,
     )
+    apply_button_styles()
+
+def apply_button_styles():
+    """모던·세만틱 버튼 색상(호버 포함)을 정의한다.
+    버튼 바로 앞에 button_marker(kind)로 마커를 두면 해당 색이 적용된다.
+    kind: 'primary'(블루) | 'success'(에메랄드) | 'danger'(레드) | 'neutral'(아웃라인)
+    """
+    st.markdown("""
+    <style>
+    .element-container:has(.btn-primary-mk) + .element-container button {
+        background-color:#2563EB !important; border-color:#2563EB !important; color:#fff !important;
+    }
+    .element-container:has(.btn-primary-mk) + .element-container button:hover {
+        background-color:#1D4ED8 !important; border-color:#1D4ED8 !important;
+    }
+    .element-container:has(.btn-success-mk) + .element-container button {
+        background-color:#059669 !important; border-color:#059669 !important; color:#fff !important;
+    }
+    .element-container:has(.btn-success-mk) + .element-container button:hover {
+        background-color:#047857 !important; border-color:#047857 !important;
+    }
+    .element-container:has(.btn-danger-mk) + .element-container button {
+        background-color:#DC2626 !important; border-color:#DC2626 !important; color:#fff !important;
+    }
+    .element-container:has(.btn-danger-mk) + .element-container button:hover {
+        background-color:#B91C1C !important; border-color:#B91C1C !important;
+    }
+    .element-container:has(.btn-neutral-mk) + .element-container button {
+        background-color:#fff !important; border-color:#CBD5E1 !important; color:#475569 !important;
+    }
+    .element-container:has(.btn-neutral-mk) + .element-container button:hover {
+        border-color:#94A3B8 !important; color:#1E293B !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+def button_marker(kind: str):
+    """바로 다음에 오는 버튼에 색상을 입히는 마커. kind: primary|success|danger|neutral."""
+    st.markdown(f'<div class="btn-{kind}-mk" style="display:none"></div>', unsafe_allow_html=True)
 
 def render_app_title():
     """모든 페이지 공통 상단 타이틀."""

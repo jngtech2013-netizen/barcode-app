@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from utils import connect_to_gsheet, LOG_SHEET_NAME, apply_sidebar_style, render_app_title
+from utils import connect_to_gsheet, LOG_SHEET_NAME, apply_sidebar_style, render_app_title, button_marker
 
 st.set_page_config(page_title="이력", layout="wide", initial_sidebar_state="expanded")
 
@@ -12,6 +12,7 @@ st.markdown("#### 📋 변경 이력 조회")
 
 col_refresh = st.columns([0.8, 0.2])
 with col_refresh[1]:
+    button_marker("neutral")
     if st.button("🔄 새로고침", use_container_width=True):
         st.rerun()
 
@@ -149,6 +150,7 @@ else:
 
     # CSV 다운로드
     csv = display_log.to_csv(index=False).encode('utf-8-sig')
+    button_marker("neutral")
     st.download_button(
         label="📥 이력 CSV 다운로드",
         data=csv,

@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from utils import load_data_from_gsheet, connect_to_gsheet, apply_sidebar_style, render_app_title, filter_backup_sheets
+from utils import load_data_from_gsheet, connect_to_gsheet, apply_sidebar_style, render_app_title, filter_backup_sheets, button_marker
 
 st.set_page_config(page_title="통계 대시보드", layout="wide", initial_sidebar_state="expanded")
 
@@ -15,6 +15,7 @@ st.markdown("#### 📊 통계 대시보드")
 
 col_refresh = st.columns([0.8, 0.2])
 with col_refresh[1]:
+    button_marker("neutral")
     if st.button("🔄 데이터 새로고침", use_container_width=True):
         st.session_state.container_list = load_data_from_gsheet()
         st.rerun()

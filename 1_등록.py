@@ -19,7 +19,8 @@ from utils import (
     make_zpl,
     is_valid_container_no,
     DEFAULT_PRINTER_IP,
-    load_config
+    load_config,
+    button_marker
 )
 
 if "printer_ip" not in st.session_state:
@@ -175,7 +176,8 @@ with st.container(border=True):
         ]
 
         # --- 데이터 백업 (미리보기 위) ---
-        if st.button("🚀 데이터 백업", use_container_width=True, type="primary"):
+        button_marker("primary")
+        if st.button("🚀 데이터 백업", use_container_width=True):
             completed_items_with_indices = [
                 (i, item) for i, item in enumerate(st.session_state.container_list) if item.get('상태') == '선적완료'
             ]
@@ -228,17 +230,8 @@ with st.container(border=True):
 
         btn_label = f"🖨️ {len(selected_cnos)}개 출력 (각 2장)" if selected_cnos else "🖨️ 출력"
         if selected_cnos:
-            st.markdown("""
-            <style>
-            .element-container:has(#print-btn-marker) + .element-container button {
-                background-color: #0068C9 !important;
-                border-color: #0068C9 !important;
-                color: white !important;
-            }
-            </style>
-            <div id="print-btn-marker" style="display:none"></div>
-            """, unsafe_allow_html=True)
-        if st.button(btn_label, use_container_width=True, type="secondary", key="print_barcode_btn", disabled=not selected_cnos):
+            button_marker("primary")
+        if st.button(btn_label, use_container_width=True, key="print_barcode_btn", disabled=not selected_cnos):
             if not printer_ip:
                 st.warning("프린터 IP를 먼저 설정 페이지에서 입력해주세요.")
             else:
@@ -259,16 +252,7 @@ with st.form(key="new_container_form"):
     feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
     seal_no = st.text_input("4. 씰 번호", key="form_seal_no")
 
-    st.markdown("""
-    <style>
-    .element-container:has(#register-btn-marker) + .element-container button {
-        background-color: #28A745 !important;
-        border-color: #28A745 !important;
-        color: white !important;
-    }
-    </style>
-    <div id="register-btn-marker" style="display:none"></div>
-    """, unsafe_allow_html=True)
+    button_marker("success")
     submitted = st.form_submit_button("➕ 등록", use_container_width=True)
     if submitted:
         st.session_state["form_success_message"] = ""
