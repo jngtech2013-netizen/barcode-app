@@ -92,7 +92,6 @@ ft20 = int(df_done[df_done['피트수'] == 20]['피트수'].sum())
 
 st.markdown(
     f"""
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
     <style>
     .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
     .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
@@ -100,9 +99,9 @@ st.markdown(
     .green-value {{ color: #28A745; }}
     .blue-value {{ color: #1a73e8; }}
     </style>
-    <div class="row">
-        <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed:,}</div><div class="metric-label">선적완료 건수</div></div></div>
-        <div class="col"><div class="metric-card"><div class="metric-value blue-value">{total_ft:,}</div><div class="metric-label">전체 피트수</div></div></div>
+    <div style="display:flex; gap:12px;">
+        <div style="flex:1"><div class="metric-card"><div class="metric-value green-value">{completed:,}</div><div class="metric-label">선적완료 건수</div></div></div>
+        <div style="flex:1"><div class="metric-card"><div class="metric-value blue-value">{total_ft:,}</div><div class="metric-label">전체 피트수</div></div></div>
     </div>
     """, unsafe_allow_html=True
 )

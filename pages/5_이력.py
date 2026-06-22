@@ -92,7 +92,6 @@ del_count = len(filtered_log[filtered_log['내용'].str.contains('데이터 삭�
 
 st.markdown(
     f"""
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
     <style>
     .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
     .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
@@ -102,11 +101,11 @@ st.markdown(
     .orange-value {{ color: #FF8C00; }}
     .red-value {{ color: #FF4B4B; }}
     </style>
-    <div class="row">
-        <div class="col"><div class="metric-card"><div class="metric-value blue-value">{total_logs:,}</div><div class="metric-label">전체 이력</div></div></div>
-        <div class="col"><div class="metric-card"><div class="metric-value green-value">{reg_count:,}</div><div class="metric-label">신규 등록</div></div></div>
-        <div class="col"><div class="metric-card"><div class="metric-value orange-value">{mod_count:,}</div><div class="metric-label">수정</div></div></div>
-        <div class="col"><div class="metric-card"><div class="metric-value red-value">{del_count:,}</div><div class="metric-label">삭제</div></div></div>
+    <div style="display:flex; gap:12px;">
+        <div style="flex:1"><div class="metric-card"><div class="metric-value blue-value">{total_logs:,}</div><div class="metric-label">전체 이력</div></div></div>
+        <div style="flex:1"><div class="metric-card"><div class="metric-value green-value">{reg_count:,}</div><div class="metric-label">신규 등록</div></div></div>
+        <div style="flex:1"><div class="metric-card"><div class="metric-value orange-value">{mod_count:,}</div><div class="metric-label">수정</div></div></div>
+        <div style="flex:1"><div class="metric-card"><div class="metric-value red-value">{del_count:,}</div><div class="metric-label">삭제</div></div></div>
     </div>
     """, unsafe_allow_html=True
 )

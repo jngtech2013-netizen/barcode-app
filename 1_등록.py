@@ -106,7 +106,6 @@ with st.container(border=True):
     pending_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적중'])
     st.markdown(
         f"""
-        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css" integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm" crossorigin="anonymous">
         <style>
         .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
         .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
@@ -114,9 +113,9 @@ with st.container(border=True):
         .red-value {{ color: #FF4B4B; }}
         .green-value {{ color: #28A745; }}
         </style>
-        <div class="row">
-            <div class="col"><div class="metric-card"><div class="metric-value red-value">{pending_count}</div><div class="metric-label">선적중</div></div></div>
-            <div class="col"><div class="metric-card"><div class="metric-value green-value">{completed_count}</div><div class="metric-label">선적완료</div></div></div>
+        <div style="display:flex; gap:12px;">
+            <div style="flex:1"><div class="metric-card"><div class="metric-value red-value">{pending_count}</div><div class="metric-label">선적중</div></div></div>
+            <div style="flex:1"><div class="metric-card"><div class="metric-value green-value">{completed_count}</div><div class="metric-label">선적완료</div></div></div>
         </div>
         """, unsafe_allow_html=True
     )
