@@ -99,7 +99,11 @@ if st.session_state.container_list:
             """, unsafe_allow_html=True)
             save_clicked = st.form_submit_button("💾 수정사항 저장", use_container_width=True)
 
-            st.caption("⚠️ 아래 버튼은 데이터를 영구적으로 삭제합니다. 삭제 시 복구할 수 없습니다.")
+            st.markdown("""
+            <div style="background-color:#FCE4EC; color:#AD1457; padding:8px 12px; border-radius:6px; font-size:14px; margin-bottom:6px;">
+                ⚠️ 아래 버튼은 데이터를 영구적으로 삭제합니다. 삭제 시 복구할 수 없습니다.
+            </div>
+            """, unsafe_allow_html=True)
             st.markdown('<div id="delete-btn-marker" style="display:none"></div>', unsafe_allow_html=True)
             delete_clicked = st.form_submit_button("🗑️ 이 컨테이너 삭제", use_container_width=True)
 
