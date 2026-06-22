@@ -69,22 +69,22 @@ def apply_button_styles():
     st.markdown("""
     <style>
     .element-container:has(.btn-primary-mk) + .element-container button {
-        background-color:#2563EB !important; border-color:#2563EB !important; color:#fff !important;
+        background-color:#4F46E5 !important; border-color:#4F46E5 !important; color:#fff !important;
     }
     .element-container:has(.btn-primary-mk) + .element-container button:hover {
-        background-color:#1D4ED8 !important; border-color:#1D4ED8 !important;
+        background-color:#4338CA !important; border-color:#4338CA !important;
     }
     .element-container:has(.btn-success-mk) + .element-container button {
-        background-color:#059669 !important; border-color:#059669 !important; color:#fff !important;
+        background-color:#10B981 !important; border-color:#10B981 !important; color:#fff !important;
     }
     .element-container:has(.btn-success-mk) + .element-container button:hover {
-        background-color:#047857 !important; border-color:#047857 !important;
+        background-color:#059669 !important; border-color:#059669 !important;
     }
     .element-container:has(.btn-danger-mk) + .element-container button {
-        background-color:#DC2626 !important; border-color:#DC2626 !important; color:#fff !important;
+        background-color:#E11D48 !important; border-color:#E11D48 !important; color:#fff !important;
     }
     .element-container:has(.btn-danger-mk) + .element-container button:hover {
-        background-color:#B91C1C !important; border-color:#B91C1C !important;
+        background-color:#BE123C !important; border-color:#BE123C !important;
     }
     .element-container:has(.btn-neutral-mk) + .element-container button {
         background-color:#fff !important; border-color:#CBD5E1 !important; color:#475569 !important;
