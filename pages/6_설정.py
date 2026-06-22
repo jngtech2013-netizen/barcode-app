@@ -15,10 +15,38 @@ apply_sidebar_style()
 
 render_app_title()
 
+
+@st.dialog("출고처 삭제 확인")
+def confirm_delete_destination(name, current_list):
+    st.warning(f"'{name}' 출고처를 삭제하시겠습니까?")
+    c1, c2 = st.columns(2)
+    if c1.button("🗑️ 삭제", use_container_width=True, type="primary"):
+        save_destinations([d for d in current_list if d != name])
+        st.session_state["dest_delete_msg"] = f"'{name}' 출고처를 삭제했습니다."
+        st.rerun()
+    if c2.button("취소", use_container_width=True):
+        st.rerun()
+
+
 if "printer_ip" not in st.session_state:
     st.session_state["printer_ip"] = load_config().get("printer_ip", DEFAULT_PRINTER_IP)
 
 st.markdown("#### ⚙️ 설정")
+
+# --- 버튼 색상 (마커-CSS): 저장=파랑, 추가=녹색, 삭제=빨강 ---
+st.markdown("""
+<style>
+.element-container:has(#save-ip-marker) + .element-container button {
+    background-color:#0068C9 !important; border-color:#0068C9 !important; color:white !important;
+}
+.element-container:has(#add-dest-marker) + .element-container button {
+    background-color:#28A745 !important; border-color:#28A745 !important; color:white !important;
+}
+.element-container:has(#del-dest-marker) + .element-container button {
+    background-color:#FF4B4B !important; border-color:#FF4B4B !important; color:white !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 st.markdown("##### 🖨️ 프린터 IP")
 with st.container(border=True):
@@ -31,6 +59,7 @@ with st.container(border=True):
             label_visibility="collapsed",
         )
     with col_save:
+        st.markdown('<div id="save-ip-marker" style="display:none"></div>', unsafe_allow_html=True)
         if st.button("저장", use_container_width=True):
             ip = printer_ip_input.strip()
             st.session_state["printer_ip"] = ip
@@ -41,6 +70,11 @@ with st.container(border=True):
         st.caption(f"현재 IP: {st.session_state['printer_ip']}")
 
 st.markdown("##### 📍 출고처 관리")
+
+_dest_msg = st.session_state.pop("dest_delete_msg", None)
+if _dest_msg:
+    st.success(_dest_msg)
+
 with st.container(border=True):
     destinations = get_destinations()
     st.caption("현재 출고처: " + ", ".join(destinations))
@@ -55,6 +89,7 @@ with st.container(border=True):
             label_visibility="collapsed",
         )
     with col_add_btn:
+        st.markdown('<div id="add-dest-marker" style="display:none"></div>', unsafe_allow_html=True)
         if st.button("➕ 추가", use_container_width=True):
             name = new_dest_input.strip()
             if not name:
@@ -79,10 +114,9 @@ with st.container(border=True):
             label_visibility="collapsed",
         )
     with col_del_btn:
+        st.markdown('<div id="del-dest-marker" style="display:none"></div>', unsafe_allow_html=True)
         if st.button("🗑️ 삭제", use_container_width=True):
             if len(destinations) <= 1:
                 st.warning("최소 1개의 출고처는 남아 있어야 합니다.")
             else:
-                save_destinations([d for d in destinations if d != dest_to_delete])
-                st.success(f"'{dest_to_delete}' 출고처를 삭제했습니다.")
-                st.rerun()
+                confirm_delete_destination(dest_to_delete, destinations)
