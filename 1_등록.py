@@ -2,13 +2,9 @@ import streamlit as st
 import pandas as pd
 import qrcode
 import base64
-import json
-from pathlib import Path
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
 import streamlit.components.v1 as components
-
-CONFIG_PATH = Path(__file__).parent / "config.json"
 
 from utils import (
     load_data_from_gsheet,
@@ -19,16 +15,12 @@ from utils import (
     delete_rows_by_container_nos,
     apply_sidebar_style,
     render_app_title,
-    DESTINATIONS,
+    get_destinations,
     make_zpl,
     is_valid_container_no,
-    DEFAULT_PRINTER_IP
+    DEFAULT_PRINTER_IP,
+    load_config
 )
-
-def load_config():
-    if CONFIG_PATH.exists():
-        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    return {}
 
 if "printer_ip" not in st.session_state:
     st.session_state["printer_ip"] = load_config().get("printer_ip", DEFAULT_PRINTER_IP)
@@ -87,9 +79,10 @@ def send_zpl_to_printer(printer_ip, zpl_code, result_key):
     """, height=65)
 
 def clear_form_inputs():
+    dests = get_destinations()
     st.session_state["form_container_no"] = ""
     st.session_state["form_seal_no"] = ""
-    st.session_state["form_destination"] = "베트남"
+    st.session_state["form_destination"] = dests[0] if dests else ""
     st.session_state["form_feet"] = "40"
 
 if st.session_state.get("submission_success", False):
@@ -257,8 +250,12 @@ st.divider()
 
 st.markdown("#### 📝 신규 컨테이너 등록")
 with st.form(key="new_container_form"):
+    destinations = get_destinations()
+    # 설정에서 삭제되어 세션에 남은 출고처가 현재 목록에 없으면 첫 항목으로 보정
+    if destinations and st.session_state.get("form_destination") not in destinations:
+        st.session_state["form_destination"] = destinations[0]
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
-    destination = st.radio("2. 출고처", options=DESTINATIONS, horizontal=True, key="form_destination")
+    destination = st.radio("2. 출고처", options=destinations, horizontal=True, key="form_destination")
     feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
     seal_no = st.text_input("4. 씰 번호", key="form_seal_no")
 

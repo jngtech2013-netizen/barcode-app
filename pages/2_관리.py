@@ -14,7 +14,7 @@ from utils import (
     log_change,
     connect_to_gsheet,
     BACKUP_PREFIX,
-    DESTINATIONS,
+    get_destinations,
     apply_sidebar_style,
     render_app_title,
     filter_backup_sheets
@@ -70,8 +70,12 @@ if st.session_state.container_list:
 
         with st.form(key=f"edit_form_{selected_for_edit}"):
             st.write(f"**'{selected_for_edit}' 정보 수정**")
-            dest_options = DESTINATIONS
-            current_dest_idx = dest_options.index(selected_data.get('출고처', '베트남'))
+            dest_options = get_destinations()
+            current_dest = selected_data.get('출고처', '')
+            # 설정에서 삭제된 출고처라도 기존 값이 보이도록 목록 앞에 추가
+            if current_dest and current_dest not in dest_options:
+                dest_options = [current_dest] + dest_options
+            current_dest_idx = dest_options.index(current_dest) if current_dest in dest_options else 0
             new_dest = st.radio("출고처 수정", options=dest_options, index=current_dest_idx, horizontal=True)
             feet_options = ['40', '20']
             current_feet_idx = feet_options.index(str(selected_data.get('피트수', '40')))

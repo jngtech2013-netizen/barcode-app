@@ -1,6 +1,8 @@
 import streamlit as st
 from datetime import datetime, timezone, timedelta
 import re
+import json
+from pathlib import Path
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
@@ -11,8 +13,31 @@ SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', 
 LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
 BACKUP_PREFIX = "백업_"
-DESTINATIONS = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '타이닌', '기타']
+DEFAULT_DESTINATIONS = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '타이닌', '기타']
 DEFAULT_PRINTER_IP = "192.168.0.99"
+
+# --- 로컬 설정(config.json) 입출력 (공용) ---
+CONFIG_PATH = Path(__file__).parent / "config.json"
+
+def load_config():
+    if CONFIG_PATH.exists():
+        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    return {}
+
+def save_config(data: dict):
+    cfg = load_config()
+    cfg.update(data)
+    CONFIG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def get_destinations():
+    """출고처 목록을 config.json에서 읽는다. 미설정 시 기본값 사본을 반환(원본 상수 보호)."""
+    dests = load_config().get("destinations")
+    if isinstance(dests, list) and dests:
+        return list(dests)
+    return list(DEFAULT_DESTINATIONS)
+
+def save_destinations(destinations):
+    save_config({"destinations": list(destinations)})
 
 # --- 공용 UI 헬퍼 ---
 def apply_sidebar_style(extra_css: str = ""):
