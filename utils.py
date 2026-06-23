@@ -142,13 +142,15 @@ def make_zpl(container_no, copies=2, dpi=203):
     qr_mag = 8
     qr_size = 21 * qr_mag
     gap = 40   # QR ↔ 텍스트 세로 여백
+    # 프린터 인쇄 원점이 라벨 좌측 끝과 어긋난 경우 보정값(+면 오른쪽으로 이동)
+    x_off = 20 if dpi == 203 else 30
     # QR(상단) + gap + 텍스트(하단) 블록을 세로 중앙 정렬
     block = qr_size + gap + font_h
     block_top_y = (ll - block) // 2
     qr_y = block_top_y
     text_y = block_top_y + qr_size + gap
     # QR은 가로 중앙 정렬, 텍스트는 ^FB로 라벨 전체폭 기준 자동 중앙 정렬
-    qr_x = (pw - qr_size) // 2
+    qr_x = (pw - qr_size) // 2 + x_off
     return (
         "^XA"
         f"^PW{pw}"
@@ -156,7 +158,7 @@ def make_zpl(container_no, copies=2, dpi=203):
         f"^FO{qr_x},{qr_y}"
         f"^BQN,2,{qr_mag}"
         f"^FDQA,{container_no}^FS"
-        f"^FO0,{text_y}"
+        f"^FO{x_off},{text_y}"
         f"^A0N,{font_h},{font_w}"
         f"^FB{pw},1,0,C"
         f"^FD{container_no}^FS"
