@@ -141,7 +141,7 @@ def make_zpl(container_no, copies=2, dpi=203):
     # 컨테이너 번호는 11자(영문4+숫자7) → QR version1(21모듈), 배율 8 → 168 dots
     qr_mag = 8
     qr_size = 21 * qr_mag
-    gap = 15
+    gap = 40   # QR ↔ 텍스트 세로 여백
     # QR(상단) + gap + 텍스트(하단) 블록을 세로 중앙 정렬
     block = qr_size + gap + font_h
     block_top_y = (ll - block) // 2
