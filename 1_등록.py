@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import qrcode
 import base64
-import time
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
 import streamlit.components.v1 as components
@@ -49,19 +48,14 @@ def send_zpl_to_printer(printer_ip, zpl_code, result_key):
     실제 출력 여부는 라벨이 나오는지 눈으로 확인해야 한다. (5초 내 무응답=연결 실패로 간주)
     """
     zpl_escaped = zpl_code.replace("`", "\\`")
-    # 매 전송마다 고유 nonce를 넣어 HTML을 항상 새 내용으로 만든다.
-    # (Streamlit은 components.html 내용이 직전과 동일하면 iframe을 재생성하지 않아
-    #  내부 <script>의 fetch가 재실행되지 않는다 → 같은 라벨 재출력 시 인쇄 누락)
-    nonce = time.time_ns()
     components.html(f"""
     <style>body{{margin:0;padding:0;}}</style>
-    <div data-nonce="{nonce}" style="font-family:sans-serif;font-size:14px;background:#E8F0FE;padding:6px 10px;border-radius:6px;">
+    <div style="font-family:sans-serif;font-size:14px;background:#E8F0FE;padding:6px 10px;border-radius:6px;">
         <div style="color:#555;">🖨️ 전송 대상: {printer_ip}</div>
         <div id="print-status-{result_key}" style="color:#28A745;margin-top:4px;">📤 출력 신호를 보냈습니다. <span style="color:#888;">라벨이 나오는지 확인하세요.</span></div>
     </div>
     <script>
     (function() {{
-        var _n = "{nonce}";  // 매 호출 고유값 — iframe 재실행 보장
         // 포트 9100은 raw TCP라 HTTP 응답이 없음 — fire-and-forget으로 전송
         fetch('http://{printer_ip}:9100', {{
             method: 'POST',
