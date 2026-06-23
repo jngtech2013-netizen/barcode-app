@@ -196,6 +196,20 @@ def ensure_text_format(worksheet, column_name):
     except Exception as e:
         st.warning(f"'{worksheet.title}' 시트의 '{column_name}' 열 서식을 강제하는 중 오류 발생: {e}")
 
+def force_text_seal(value):
+    """씰 번호의 선행 0(예: '0123')이 USER_ENTERED 저장 시 숫자(123)로 해석돼
+    사라지는 것을 막는다. 앞에 작은따옴표를 붙이면 시트가 강제로 텍스트로 저장하고,
+    get_all_values()로 읽을 때는 따옴표가 빠진 원본 문자열('0123')이 반환된다.
+    빈 값/NaN은 빈 문자열로 둔다."""
+    if value is None:
+        return ""
+    s = str(value)
+    if s == "" or s.lower() == "nan":
+        return ""
+    if s.startswith("'"):  # 이미 처리된 값은 중복 적용하지 않음
+        return s
+    return "'" + s
+
 # --- 행 조회 헬퍼 (공용) ---
 def find_row_by_container_no(worksheet, container_no):
     """컨테이너 번호로 시트의 실제 행 번호(1-based)를 찾는다. 없으면 None.
@@ -273,7 +287,11 @@ def add_row_to_gsheet(data):
         if isinstance(data_copy.get('완료일시'), (datetime, pd.Timestamp)):
             data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
 
-        row_to_insert = [data_copy.get(header, "") for header in SHEET_HEADERS]
+        row_to_insert = [
+            force_text_seal(data_copy.get(header, "")) if header == '씰 번호'
+            else data_copy.get(header, "")
+            for header in SHEET_HEADERS
+        ]
         worksheet.append_row(row_to_insert, value_input_option='USER_ENTERED')
         log_change(f"신규 등록: {data_copy.get('컨테이너 번호')}")
         return True, "성공"
@@ -302,7 +320,11 @@ def add_rows_to_gsheet_batch(data_list):
                 data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
             if pd.isna(data_copy.get('완료일시')) or data_copy.get('완료일시') is None:
                 data_copy['완료일시'] = ''
-            rows_to_insert.append([data_copy.get(header, "") for header in SHEET_HEADERS])
+            rows_to_insert.append([
+                force_text_seal(data_copy.get(header, "")) if header == '씰 번호'
+                else data_copy.get(header, "")
+                for header in SHEET_HEADERS
+            ])
             container_nos.append(data_copy.get('컨테이너 번호', ''))
 
         worksheet.append_rows(rows_to_insert, value_input_option='USER_ENTERED')
@@ -333,7 +355,11 @@ def update_row_in_gsheet(data):
         elif isinstance(data_copy.get('완료일시'), (datetime, pd.Timestamp)):
             data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
 
-        row_to_update = [data_copy.get(header, "") for header in SHEET_HEADERS]
+        row_to_update = [
+            force_text_seal(data_copy.get(header, "")) if header == '씰 번호'
+            else data_copy.get(header, "")
+            for header in SHEET_HEADERS
+        ]
         worksheet.update(f'A{row_num}:G{row_num}', [row_to_update], value_input_option='USER_ENTERED')
         log_change(f"데이터 수정: {container_no}")
         return True, "성공"
@@ -475,7 +501,7 @@ def backup_data_to_new_sheet(container_data):
         if '완료일시' in df_new.columns:
             df_new['완료일시'] = pd.to_datetime(df_new['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M:%S').fillna('')
         if '씰 번호' in df_new.columns:
-            df_new['씰 번호'] = df_new['씰 번호'].astype(str)
+            df_new['씰 번호'] = df_new['씰 번호'].apply(force_text_seal)
         for header in SHEET_HEADERS:
             if header not in df_new.columns:
                 df_new[header] = ""
@@ -492,6 +518,8 @@ def backup_data_to_new_sheet(container_data):
             existing_values = backup_sheet.get_all_values()
             if len(existing_values) > 1:
                 df_existing = pd.DataFrame(existing_values[1:], columns=existing_values[0], dtype=str)
+                if '씰 번호' in df_existing.columns:
+                    df_existing['씰 번호'] = df_existing['씰 번호'].apply(force_text_seal)
                 df_combined = pd.concat([df_existing, df_new])
                 df_final = df_combined.drop_duplicates(subset=['컨테이너 번호'], keep='last')
                 backup_sheet.clear()
@@ -567,12 +595,16 @@ def move_containers_between_backup_sheets(container_nos, source_sheet_name, targ
 
         col_idx = headers.index('컨테이너 번호')
         completion_col_idx = headers.index('완료일시') if '완료일시' in headers else None
+        seal_col_idx = headers.index('씰 번호') if '씰 번호' in headers else None
 
         rows_to_move = []
         rows_to_delete = []
         for i, row in enumerate(source_values[1:]):
             if len(row) > col_idx and row[col_idx] in container_nos_set:
                 row_data = list(row)
+                # 선행 0 보존을 위해 씰 번호를 강제 텍스트로 (USER_ENTERED 재기록 대비)
+                if seal_col_idx is not None and seal_col_idx < len(row_data):
+                    row_data[seal_col_idx] = force_text_seal(row_data[seal_col_idx])
                 # 완료일시 수정 옵션
                 if update_completion_date and completion_col_idx is not None:
                     row_data[completion_col_idx] = f"{target_date_str} 00:00:00"
