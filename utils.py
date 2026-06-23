@@ -138,25 +138,27 @@ def make_zpl(container_no, copies=2, dpi=203):
     ll = 480 if dpi == 203 else 720    # 라벨 세로 (60mm)
     font_h = 50 if dpi == 203 else 75
     font_w = 35 if dpi == 203 else 52
-    qr_size = 200   # module_size=8, QR version2: 25×8=200 dots
+    # 컨테이너 번호는 11자(영문4+숫자7) → QR version1(21모듈), 배율 8 → 168 dots
+    qr_mag = 8
+    qr_size = 21 * qr_mag
     gap = 15
     # QR(상단) + gap + 텍스트(하단) 블록을 세로 중앙 정렬
     block = qr_size + gap + font_h
     block_top_y = (ll - block) // 2
     qr_y = block_top_y
     text_y = block_top_y + qr_size + gap
-    # 각 요소를 가로 중앙 정렬
+    # QR은 가로 중앙 정렬, 텍스트는 ^FB로 라벨 전체폭 기준 자동 중앙 정렬
     qr_x = (pw - qr_size) // 2
-    text_x = (pw - len(container_no) * font_w) // 2
     return (
         "^XA"
         f"^PW{pw}"
         f"^LL{ll}"
         f"^FO{qr_x},{qr_y}"
-        "^BQN,2,8"
+        f"^BQN,2,{qr_mag}"
         f"^FDQA,{container_no}^FS"
-        f"^FO{text_x},{text_y}"
+        f"^FO0,{text_y}"
         f"^A0N,{font_h},{font_w}"
+        f"^FB{pw},1,0,C"
         f"^FD{container_no}^FS"
         f"^PQ{copies}"
         "^XZ"
