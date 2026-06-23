@@ -130,23 +130,24 @@ def filter_backup_sheets(sheet_titles, kind="daily"):
 def make_zpl(container_no, copies=2, dpi=203):
     """QR코드 + 컨테이너 번호 텍스트 ZPL (90mm × 60mm 기준)
 
-    실제 출력 방향: ZPL x축 → 라벨 세로(위아래), ZPL y축 → 라벨 가로(좌우)
-    QR(상단) + 텍스트(하단) 블록을 라벨 세로/가로 모두 중앙 정렬
+    ZPL 표준 좌표: x = 가로(PW, 좌→우), y = 세로(LL, 위→아래)
+    레이아웃: QR(상단) + 텍스트(하단), 두 요소 모두 가로 중앙 정렬,
+    QR+텍스트 블록을 세로 중앙 정렬
     """
-    pw = 720 if dpi == 203 else 1080   # 라벨 세로 (x축 범위)
-    ll = 480 if dpi == 203 else 720    # 라벨 가로 (y축 범위)
+    pw = 720 if dpi == 203 else 1080   # 라벨 가로 (90mm)
+    ll = 480 if dpi == 203 else 720    # 라벨 세로 (60mm)
     font_h = 50 if dpi == 203 else 75
     font_w = 35 if dpi == 203 else 52
     qr_size = 200   # module_size=8, QR version2: 25×8=200 dots
     gap = 15
-    # x역방향(높은 x = 시각적 상단): QR(상단)+gap+텍스트(하단) 블록 세로 중앙 정렬
+    # QR(상단) + gap + 텍스트(하단) 블록을 세로 중앙 정렬
     block = qr_size + gap + font_h
-    block_top_x = pw // 2 + block // 2  # 블록 최상단 x (시각적 최상단 = 가장 높은 x)
-    qr_x = block_top_x - qr_size        # QR: 블록 상단부터 차지
-    text_x = qr_x - gap - font_h        # 텍스트: QR 아래 (낮은 x = 시각적 하단)
-    # 가로(ll) 기준 QR/텍스트 각각 중앙 정렬
-    qr_y = (ll - qr_size) // 2
-    text_y = (ll - len(container_no) * font_w) // 2
+    block_top_y = (ll - block) // 2
+    qr_y = block_top_y
+    text_y = block_top_y + qr_size + gap
+    # 각 요소를 가로 중앙 정렬
+    qr_x = (pw - qr_size) // 2
+    text_x = (pw - len(container_no) * font_w) // 2
     return (
         "^XA"
         f"^PW{pw}"
