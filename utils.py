@@ -128,19 +128,29 @@ def filter_backup_sheets(sheet_titles, kind="daily"):
     )
 
 def make_zpl(container_no, copies=2, dpi=203):
-    """QR코드 + 컨테이너 번호 텍스트 ZPL 생성 (90mm x 60mm 기준), ^PQ로 매수 지정."""
-    width = 720 if dpi == 203 else 1080
-    height = 480 if dpi == 203 else 720
-    font_h = 45 if dpi == 203 else 68
+    """QR코드 + 컨테이너 번호 텍스트 ZPL (90mm × 60mm 기준)
+
+    실제 출력 방향: ZPL x축 → 라벨 세로(위아래), ZPL y축 → 라벨 가로(좌우)
+    QR(상단) + 텍스트(하단) 블록을 라벨 세로/가로 모두 중앙 정렬
+    """
+    pw = 720 if dpi == 203 else 1080   # 라벨 세로 (x축 범위)
+    ll = 480 if dpi == 203 else 720    # 라벨 가로 (y축 범위)
+    font_h = 50 if dpi == 203 else 75
     font_w = 35 if dpi == 203 else 52
-    # 컨테이너 번호 11자 고정 → 좌표 직접 계산으로 중앙 정렬
-    text_x = (width - len(container_no) * font_w) // 2
-    text_y = 314 if dpi == 203 else 471
+    qr_size = 200   # module_size=8, QR version2: 25×8=200 dots
+    gap = 8
+    # QR + gap + 텍스트 블록을 세로(pw) 기준 중앙 정렬
+    block = qr_size + gap + font_h
+    qr_x = (pw - block) // 2
+    text_x = qr_x + qr_size + gap
+    # 가로(ll) 기준 QR/텍스트 각각 중앙 정렬
+    qr_y = (ll - qr_size) // 2
+    text_y = (ll - len(container_no) * font_w) // 2
     return (
         "^XA"
-        f"^PW{width}"
-        f"^LL{height}"
-        "^FO260,40"
+        f"^PW{pw}"
+        f"^LL{ll}"
+        f"^FO{qr_x},{qr_y}"
         "^BQN,2,8"
         f"^FDQA,{container_no}^FS"
         f"^FO{text_x},{text_y}"
