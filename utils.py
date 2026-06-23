@@ -131,10 +131,11 @@ def make_zpl(container_no, copies=2, dpi=203):
     """QR코드 + 컨테이너 번호 텍스트 ZPL 생성 (90mm x 60mm 기준), ^PQ로 매수 지정."""
     width = 720 if dpi == 203 else 1080
     height = 480 if dpi == 203 else 720
-    # QR: module_size=8, 11자 alphanumeric → version2(25모듈) + quiet zone(4*2) = 33모듈 * 8 = 264dots
-    # 텍스트: QR 하단(40+264=304) 아래 10dot 여백, 전체 너비 기준 중앙 정렬
-    text_y = 314 if dpi == 203 else 471
     font_h = 45 if dpi == 203 else 68
+    font_w = 35 if dpi == 203 else 52
+    # 컨테이너 번호 11자 고정 → 좌표 직접 계산으로 중앙 정렬
+    text_x = (width - len(container_no) * font_w) // 2
+    text_y = 314 if dpi == 203 else 471
     return (
         "^XA"
         f"^PW{width}"
@@ -142,9 +143,8 @@ def make_zpl(container_no, copies=2, dpi=203):
         "^FO260,40"
         "^BQN,2,8"
         f"^FDQA,{container_no}^FS"
-        f"^FO0,{text_y}"
-        f"^A0N,{font_h},{font_h}"
-        f"^FB{width},1,0,C,0"
+        f"^FO{text_x},{text_y}"
+        f"^A0N,{font_h},{font_w}"
         f"^FD{container_no}^FS"
         f"^PQ{copies}"
         "^XZ"

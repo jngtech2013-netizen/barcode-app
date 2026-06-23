@@ -52,35 +52,16 @@ def send_zpl_to_printer(printer_ip, zpl_code, result_key):
     <style>body{{margin:0;padding:0;}}</style>
     <div style="font-family:sans-serif;font-size:14px;background:#E8F0FE;padding:6px 10px;border-radius:6px;">
         <div style="color:#555;">🖨️ 전송 대상: {printer_ip}</div>
-        <div id="print-status-{result_key}" style="color:#888;margin-top:4px;">🔄 프린터로 신호 전송 중...</div>
+        <div id="print-status-{result_key}" style="color:#28A745;margin-top:4px;">📤 출력 신호를 보냈습니다. <span style="color:#888;">라벨이 나오는지 확인하세요.</span></div>
     </div>
     <script>
     (function() {{
-        var statusEl = document.getElementById('print-status-{result_key}');
-        var done = false;
-        var SUCCESS_MSG = '<span style="color:#28A745;">📤 출력 신호를 보냈습니다.</span>'
-            + '<span style="color:#888;"> 라벨이 나오는지 확인하세요.</span>';
-
-        var timeoutId = setTimeout(function() {{
-            if (!done) {{
-                done = true;
-                statusEl.innerHTML = '<span style="color:#FF4B4B;">❌ 프린터에 연결할 수 없습니다. IP를 확인하세요.</span>';
-            }}
-        }}, 5000);
-
+        // 포트 9100은 raw TCP라 HTTP 응답이 없음 — fire-and-forget으로 전송
         fetch('http://{printer_ip}:9100', {{
             method: 'POST',
             body: `{zpl_escaped}`,
             mode: 'no-cors'
-        }})
-        .then(function() {{
-            if (!done) {{ done = true; clearTimeout(timeoutId); statusEl.innerHTML = SUCCESS_MSG; }}
-        }})
-        .catch(function() {{
-            // 포트 9100은 raw TCP라 HTTP 응답이 없어 항상 catch로 빠지나,
-            // TCP 연결이 성립했다면 ZPL 데이터는 이미 프린터에 전달된 상태.
-            if (!done) {{ done = true; clearTimeout(timeoutId); statusEl.innerHTML = SUCCESS_MSG; }}
-        }});
+        }}).catch(function() {{}});
     }})();
     </script>
     """, height=65)
