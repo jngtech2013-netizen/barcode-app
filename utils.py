@@ -138,11 +138,12 @@ def make_zpl(container_no, copies=2, dpi=203):
     font_h = 50 if dpi == 203 else 75
     font_w = 35 if dpi == 203 else 52
     qr_size = 200   # module_size=8, QR version2: 25×8=200 dots
-    gap = 8
-    # QR + gap + 텍스트 블록을 세로(pw) 기준 중앙 정렬
+    gap = 15
+    # x역방향(높은 x = 시각적 상단): QR(상단)+gap+텍스트(하단) 블록 세로 중앙 정렬
     block = qr_size + gap + font_h
-    qr_x = (pw - block) // 2
-    text_x = qr_x + qr_size + gap
+    block_top_x = pw // 2 + block // 2  # 블록 최상단 x (시각적 최상단 = 가장 높은 x)
+    qr_x = block_top_x - qr_size        # QR: 블록 상단부터 차지
+    text_x = qr_x - gap - font_h        # 텍스트: QR 아래 (낮은 x = 시각적 하단)
     # 가로(ll) 기준 QR/텍스트 각각 중앙 정렬
     qr_y = (ll - qr_size) // 2
     text_y = (ll - len(container_no) * font_w) // 2
