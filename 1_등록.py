@@ -11,6 +11,8 @@ from utils import (
     add_row_to_gsheet,
     update_row_in_gsheet,
     backup_data_to_new_sheet,
+    delete_from_backup_sheets,
+    BACKUP_PREFIX,
     log_change,
     delete_rows_by_container_nos,
     apply_sidebar_style,
@@ -76,14 +78,16 @@ def clear_form_inputs():
     st.session_state["form_destination"] = dests[0] if dests else ""
     st.session_state["form_feet"] = "40"
 
-def complete_and_backup_container(container_no):
+def complete_and_backup_container(container_no, record_undo=True):
     """컨테이너를 선적완료 처리해 일별/월별 백업으로 옮기고 메인 시트·세션에서 제거한다.
-    (선적완료 = 자동 백업+제거. 데이터 백업 버튼을 대체한다.)"""
+    (선적완료 = 자동 백업+제거. 데이터 백업 버튼을 대체한다.)
+    record_undo=True면 '방금 선적완료 되돌리기'용 스냅샷을 저장한다."""
     idx = next((i for i, c in enumerate(st.session_state.container_list)
                 if c.get('컨테이너 번호') == container_no), None)
     if idx is None:
         return False, "컨테이너를 찾을 수 없습니다."
-    item = st.session_state.container_list[idx].copy()
+    original = st.session_state.container_list[idx].copy()  # 선적중 원본(되돌리기용)
+    item = original.copy()
     item['상태'] = '선적완료'
     item['완료일시'] = pd.to_datetime(get_korea_now().replace(tzinfo=None))
     with st.spinner(f"'{container_no}' 선적완료 백업 중..."):
@@ -94,7 +98,44 @@ def complete_and_backup_container(container_no):
         if not dok:
             return False, dres
     st.session_state.container_list.pop(idx)
+    if record_undo:
+        today_str = get_korea_now().date().isoformat()
+        st.session_state['last_completed'] = {
+            'item': original,
+            'backup_sheet': f"{BACKUP_PREFIX}{today_str}",
+        }
     log_change(f"선적완료 자동 백업: {container_no} (위치 {item.get('위치')})")
+    return True, None
+
+def undo_last_completed():
+    """방금 선적완료한 컨테이너를 백업에서 빼내 다시 선적중 상태로 되돌린다."""
+    snap = st.session_state.get('last_completed')
+    if not snap:
+        return False, "되돌릴 선적완료 항목이 없습니다."
+    original = snap['item']
+    cno = original.get('컨테이너 번호')
+    pos = str(original.get('위치') or '').strip()
+    if any(c.get('컨테이너 번호') == cno for c in st.session_state.container_list):
+        st.session_state.pop('last_completed', None)
+        return False, "이미 목록에 있어 되돌릴 수 없습니다."
+    # 원래 위치가 다른 선적중 컨테이너에 점유됐으면 막는다.
+    occupied = {
+        str(c.get('위치') or '').strip()
+        for c in st.session_state.container_list if c.get('상태') == '선적중'
+    }
+    if pos in occupied:
+        return False, f"위치 {pos}이(가) 이미 사용 중입니다. 해당 위치를 비운 뒤 다시 시도하세요."
+    restore = original.copy()
+    restore['상태'] = '선적중'
+    restore['완료일시'] = None
+    with st.spinner(f"'{cno}' 되돌리는 중..."):
+        ok, msg = add_row_to_gsheet(restore)
+        if not ok:
+            return False, msg
+        delete_from_backup_sheets([cno], snap['backup_sheet'])  # 백업 중복 제거(베스트에포트)
+    st.session_state.container_list.append(restore)
+    st.session_state.pop('last_completed', None)
+    log_change(f"선적완료 되돌리기: {cno} (위치 {pos})")
     return True, None
 
 def register_new_container(new_container):
@@ -185,7 +226,7 @@ def confirm_slot_takeover():
     with c1:
         button_marker("primary")
         if st.button("선적완료 후 등록", use_container_width=True):
-            ok, err = complete_and_backup_container(occ_no)
+            ok, err = complete_and_backup_container(occ_no, record_undo=False)
             if not ok:
                 st.error(f"기존 컨테이너 처리 실패: {err}")
                 return
@@ -274,8 +315,8 @@ with st.container(border=True):
             "선적완료": st.column_config.CheckboxColumn("선적완료", width="small", help="체크하면 해당 컨테이너를 자동 백업하고 목록에서 제거합니다."),
             "컨테이너 번호": {**st.column_config.TextColumn(disabled=True), "alignment": "center"},
             "출고처": st.column_config.TextColumn(disabled=True),
-            "피트수": st.column_config.TextColumn(disabled=True),
-            "씰 번호": st.column_config.TextColumn(disabled=True),
+            "피트수": {**st.column_config.TextColumn(disabled=True), "alignment": "center"},
+            "씰 번호": {**st.column_config.TextColumn(disabled=True), "alignment": "center"},
             "등록일시": st.column_config.TextColumn(disabled=True),
         }
     )
@@ -313,6 +354,19 @@ with st.container(border=True):
         row['컨테이너 번호'] for _, row in edited_df.iterrows()
         if row['출력선택'] and row.get('컨테이너 번호')
     ]
+
+    # 방금 선적완료한 컨테이너 되돌리기 (백업에서 다시 선적중으로 복원)
+    last_snap = st.session_state.get('last_completed')
+    undo_label = (f"↩️ 방금 선적완료 되돌리기 ({last_snap['item'].get('컨테이너 번호')})"
+                  if last_snap else "↩️ 되돌리기 (최근 선적완료 없음)")
+    if st.button(undo_label, use_container_width=True, disabled=not last_snap, key="undo_complete_btn"):
+        _undo_cno = last_snap['item'].get('컨테이너 번호')
+        ok, err = undo_last_completed()
+        if ok:
+            st.session_state["form_success_message"] = f"'{_undo_cno}' 선적완료를 되돌렸습니다."
+        else:
+            st.session_state["form_error_message"] = f"되돌리기 실패: {err}"
+        st.rerun()
 
     # 미리보기 옵션은 선적중 컨테이너만
     shippable_cnos = [
