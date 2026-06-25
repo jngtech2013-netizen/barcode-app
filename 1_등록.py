@@ -336,7 +336,7 @@ with st.container(border=True):
         column_config={
             "출력선택": st.column_config.CheckboxColumn("🖨️", default=False, width=50, help="해당 위치의 컨테이너를 출력 대상으로 선택합니다."),
             # TextColumn에 alignment 공개 인자가 없어, 반환 dict에 직접 'center'를 주입해 가운데 정렬한다.
-            "위치": {**st.column_config.TextColumn("위치", width=40, disabled=True), "alignment": "center"},
+            "위치": {**st.column_config.TextColumn("위치", width=35, disabled=True), "alignment": "center"},
             "수정": st.column_config.CheckboxColumn("✏️", width="small", help="체크하면 해당 컨테이너 수정 팝업이 열립니다."),
             "선적완료": st.column_config.CheckboxColumn("선적완료", width="small", help="체크하면 해당 컨테이너를 자동 백업하고 목록에서 제거합니다."),
             "컨테이너 번호": {**st.column_config.TextColumn(disabled=True), "alignment": "center"},
