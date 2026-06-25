@@ -176,7 +176,7 @@ with st.container(border=True):
         display_df.fillna('', inplace=True)
         display_df['수정'] = False
 
-        column_order = ['출력선택', '컨테이너 번호', '수정', '출고처', '피트수', '씰 번호', '등록일시', '완료일시', '선적완료']
+        column_order = ['출력선택', '컨테이너 번호', '출고처', '피트수', '씰 번호', '등록일시', '완료일시', '선적완료', '수정']
 
         # ✏️ 체크 후 팝업을 닫으면 체크가 남아 재오픈되는 것을 막기 위해 키를 바꿔 초기화
         editor_key = f"merged_editor_{st.session_state.get('editor_rev', 0)}"
