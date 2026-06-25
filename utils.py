@@ -2,7 +2,6 @@ import streamlit as st
 from datetime import datetime, timezone, timedelta
 import re
 import json
-from pathlib import Path
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
@@ -16,21 +15,71 @@ BACKUP_PREFIX = "백업_"
 DEFAULT_DESTINATIONS = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '타이닌', '기타']
 DEFAULT_PRINTER_IP = "192.168.0.99"
 
-# --- 로컬 설정(config.json) 입출력 (공용) ---
-CONFIG_PATH = Path(__file__).parent / "config.json"
+# --- 설정 입출력 (공용) ---
+# Streamlit Cloud는 재부팅 시 컨테이너를 새로 만들어 로컬 파일(config.json)이 사라진다.
+# 따라서 출고처/프린터IP 등 설정은 Google Sheets의 '설정' 시트에 영구 저장한다.
+CONFIG_SHEET_NAME = "설정"
+_CONFIG_CACHE_KEY = "_app_config_cache"
+
+def _read_config_from_sheet():
+    """'설정' 시트를 읽어 dict로 반환. 시트/연결이 없으면 빈 dict."""
+    spreadsheet = connect_to_gsheet()
+    if spreadsheet is None:
+        return {}
+    try:
+        ws = spreadsheet.worksheet(CONFIG_SHEET_NAME)
+    except gspread.exceptions.WorksheetNotFound:
+        return {}
+    except Exception:
+        return {}
+    try:
+        values = ws.get_all_values()
+        cfg = {}
+        for row in values[1:]:  # 1행은 헤더(키, 값)
+            if not row or not row[0].strip():
+                continue
+            key = row[0].strip()
+            raw = row[1] if len(row) > 1 else ""
+            try:
+                cfg[key] = json.loads(raw)  # 값은 JSON 문자열로 저장됨(리스트/문자열 공통 처리)
+            except (json.JSONDecodeError, TypeError):
+                cfg[key] = raw
+        return cfg
+    except Exception:
+        return {}
 
 def load_config():
-    if CONFIG_PATH.exists():
-        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    return {}
+    """앱 설정을 '설정' 시트에서 읽는다. 매 rerun마다 시트를 읽지 않도록 세션 단위로 캐시한다."""
+    cached = st.session_state.get(_CONFIG_CACHE_KEY)
+    if cached is not None:
+        return dict(cached)
+    cfg = _read_config_from_sheet()
+    st.session_state[_CONFIG_CACHE_KEY] = dict(cfg)
+    return dict(cfg)
 
 def save_config(data: dict):
-    cfg = load_config()
+    """설정을 시트의 기존 값과 병합해 '설정' 시트에 저장한다. 시트가 없으면 생성."""
+    spreadsheet = connect_to_gsheet()
+    if spreadsheet is None:
+        st.error("Google Sheets에 연결되지 않아 설정을 저장하지 못했습니다.")
+        return
+    cfg = _read_config_from_sheet()
     cfg.update(data)
-    CONFIG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        try:
+            ws = spreadsheet.worksheet(CONFIG_SHEET_NAME)
+        except gspread.exceptions.WorksheetNotFound:
+            ws = spreadsheet.add_worksheet(title=CONFIG_SHEET_NAME, rows=50, cols=2)
+        rows = [["키", "값"]] + [[k, json.dumps(v, ensure_ascii=False)] for k, v in cfg.items()]
+        ws.clear()
+        # JSON 문자열을 시트가 재해석하지 않도록 RAW로 기록
+        ws.update('A1', rows, value_input_option='RAW')
+        st.session_state[_CONFIG_CACHE_KEY] = dict(cfg)  # 캐시 즉시 갱신
+    except Exception as e:
+        st.error(f"설정 저장 실패: {e}")
 
 def get_destinations():
-    """출고처 목록을 config.json에서 읽는다. 미설정 시 기본값 사본을 반환(원본 상수 보호)."""
+    """출고처 목록을 '설정' 시트에서 읽는다. 미설정 시 기본값 사본을 반환(원본 상수 보호)."""
     dests = load_config().get("destinations")
     if isinstance(dests, list) and dests:
         return list(dests)
