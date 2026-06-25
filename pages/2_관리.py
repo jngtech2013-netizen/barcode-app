@@ -129,10 +129,9 @@ if st.session_state.container_list:
         with st.form(key=f"edit_form_{selected_for_edit}"):
             st.write(f"**'{selected_for_edit}' 정보 수정**")
             _positions = [str(i) for i in range(1, 10)]
-            pos_options = ['미지정'] + _positions
             cur_pos = str(selected_data.get('위치') or '').strip()
-            cur_pos_idx = pos_options.index(cur_pos) if cur_pos in _positions else 0
-            new_position = st.radio("위치 수정", options=pos_options, index=cur_pos_idx, horizontal=True)
+            cur_pos_idx = _positions.index(cur_pos) if cur_pos in _positions else 0
+            new_position = st.radio("위치 수정", options=_positions, index=cur_pos_idx, horizontal=True)
             dest_options = get_destinations()
             current_dest = selected_data.get('출고처', '')
             # 설정에서 삭제된 출고처라도 기존 값이 보이도록 목록 앞에 추가
@@ -161,7 +160,7 @@ if st.session_state.container_list:
             delete_clicked = st.form_submit_button("🗑️ 이 컨테이너 삭제", use_container_width=True)
 
         if save_clicked:
-            new_pos_val = '' if new_position == '미지정' else new_position
+            new_pos_val = new_position
             # 선적중으로 둘 경우, 다른 선적중 컨테이너가 점유한 위치로는 옮길 수 없다.
             occupied = {
                 str(c.get('위치') or '').strip()
