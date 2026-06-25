@@ -340,7 +340,7 @@ with st.container(border=True):
             "수정": st.column_config.CheckboxColumn("✏️", width="small", help="체크하면 해당 컨테이너 수정 팝업이 열립니다."),
             "선적완료": st.column_config.CheckboxColumn("선적완료", width="small", help="체크하면 해당 컨테이너를 자동 백업하고 목록에서 제거합니다."),
             "컨테이너 번호": {**st.column_config.TextColumn(disabled=True), "alignment": "center"},
-            "출고처": st.column_config.TextColumn(disabled=True),
+            "출고처": st.column_config.TextColumn(disabled=True, width=100),
             "피트수": {**st.column_config.TextColumn(disabled=True), "alignment": "center"},
             "씰 번호": {**st.column_config.TextColumn(disabled=True), "alignment": "center"},
             "등록일시": st.column_config.TextColumn(disabled=True),
