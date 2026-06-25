@@ -489,6 +489,71 @@ def delete_from_backup_sheets(container_nos, source_sheet_name):
         return False, str(e)
 
 
+def update_row_in_backup_sheets(data, source_sheet_name):
+    """백업 시트에서 특정 컨테이너 행을 수정한다.
+
+    복구 화면에서 ✏️ 수정으로 변경한 내용을 원본 백업 시트(일별+월별)에 반영한다.
+    source_sheet_name: 복구 중인 시트명 (예: 백업_2025-04-25 또는 백업_2025-04)
+    대상 시트 결정 규칙은 delete_from_backup_sheets와 동일하다.
+    """
+    spreadsheet = connect_to_gsheet()
+    if spreadsheet is None:
+        return False, "Google Sheets에 연결되지 않았습니다."
+    try:
+        container_no = data.get('컨테이너 번호')
+        if not container_no:
+            return False, "컨테이너 번호가 없습니다."
+
+        # 복구한 시트명에서 날짜 추출 후 관련 시트 목록 결정
+        date_part = source_sheet_name.replace(BACKUP_PREFIX, '')  # 예: 2025-04-25 or 2025-04
+        if len(date_part) == 10:
+            month_part = date_part[:7]
+            target_sheets = [
+                f"{BACKUP_PREFIX}{date_part}",   # 백업_2025-04-25
+                f"{BACKUP_PREFIX}{month_part}",  # 백업_2025-04
+            ]
+        elif len(date_part) == 7:
+            target_sheets = [f"{BACKUP_PREFIX}{date_part}"]  # 백업_2025-04
+        else:
+            return False, f"시트명 형식을 인식할 수 없습니다: {source_sheet_name}"
+
+        # 저장용 값 정규화 (update_row_in_gsheet와 동일 규칙)
+        data_copy = data.copy()
+        if isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
+            data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')
+        if data_copy.get('완료일시') is None or pd.isna(data_copy.get('완료일시')):
+            data_copy['완료일시'] = ''
+        elif isinstance(data_copy.get('완료일시'), (datetime, pd.Timestamp)):
+            data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
+
+        row_to_update = [
+            force_text_seal(data_copy.get(header, "")) if header == '씰 번호'
+            else data_copy.get(header, "")
+            for header in SHEET_HEADERS
+        ]
+
+        all_sheet_titles = [s.title for s in spreadsheet.worksheets()]
+        updated_count = 0
+        for sheet_name in target_sheets:
+            if sheet_name not in all_sheet_titles:
+                continue
+            ws = spreadsheet.worksheet(sheet_name)
+            ensure_text_format(ws, '씰 번호')
+            row_num = find_row_by_container_no(ws, container_no)
+            if row_num is None:
+                continue
+            ws.update(f'A{row_num}:G{row_num}', [row_to_update], value_input_option='USER_ENTERED')
+            updated_count += 1
+
+        if updated_count == 0:
+            return False, f"'{container_no}'를 백업 시트에서 찾을 수 없습니다."
+
+        log_change(f"백업 데이터 수정: {container_no} ({', '.join(target_sheets)})")
+        return True, updated_count
+    except Exception as e:
+        return False, str(e)
+
+
 def backup_data_to_new_sheet(container_data):
     spreadsheet = connect_to_gsheet()
     if spreadsheet is None:

@@ -6,6 +6,7 @@ from utils import (
     load_data_from_gsheet,
     add_rows_to_gsheet_batch,
     update_row_in_gsheet,
+    update_row_in_backup_sheets,
     delete_row_from_gsheet,
     delete_from_backup_sheets,
     cleanup_old_daily_sheets,
@@ -51,6 +52,58 @@ def confirm_delete_dialog(container_no):
         button_marker("neutral")
         if st.button("취소", use_container_width=True):
             st.rerun()
+
+
+@st.dialog("✏️ 복구 컨테이너 정보 수정")
+def edit_recovery_container_dialog(row_data, source_sheet_name):
+    """복구 테이블의 ✏️ 칸을 체크했을 때 뜨는 수정 팝업.
+    출고처/피트수/씰번호/상태를 고쳐 원본 백업 시트(일별+월별)에 바로 반영한다."""
+    container_no = row_data.get('컨테이너 번호')
+    st.markdown(f"**{container_no}**")
+    st.caption(f"백업 시트: {source_sheet_name}")
+
+    dest_options = get_destinations()
+    current_dest = row_data.get('출고처', '') if pd.notna(row_data.get('출고처')) else ''
+    if current_dest and current_dest not in dest_options:
+        dest_options = [current_dest] + dest_options
+    new_dest = st.radio("출고처", options=dest_options,
+                        index=dest_options.index(current_dest) if current_dest in dest_options else 0,
+                        horizontal=True)
+
+    feet_options = ['40', '20']
+    cur_feet = str(row_data.get('피트수', '40'))
+    new_feet = st.radio("피트수", options=feet_options,
+                        index=feet_options.index(cur_feet) if cur_feet in feet_options else 0,
+                        horizontal=True)
+
+    seal_val = row_data.get('씰 번호')
+    seal_default = '' if seal_val is None or (isinstance(seal_val, float) and pd.isna(seal_val)) else str(seal_val)
+    new_seal = st.text_input("씰 번호", value=seal_default)
+
+    status_options = ['선적중', '선적완료']
+    cur_status = row_data.get('상태', '선적중') or '선적중'
+    new_status = st.radio("상태", options=status_options,
+                          index=status_options.index(cur_status) if cur_status in status_options else 0,
+                          horizontal=True)
+
+    button_marker("primary")
+    if st.button("💾 저장", use_container_width=True):
+        updated = dict(row_data)
+        updated.update({'출고처': new_dest, '피트수': new_feet, '씰 번호': str(new_seal), '상태': new_status})
+        # 상태에 따른 완료일시 처리 (선적완료로 바뀌고 완료일시가 없으면 현재 시각 기록)
+        if new_status == '선적완료':
+            if cur_status != '선적완료' or not str(updated.get('완료일시') or '').strip():
+                kst_now = datetime.now(timezone(timedelta(hours=9))).replace(tzinfo=None)
+                updated['완료일시'] = kst_now.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            updated['완료일시'] = ''
+        with st.spinner('백업 시트에 수정사항을 저장하는 중...'):
+            ok, msg = update_row_in_backup_sheets(updated, source_sheet_name)
+        if ok:
+            st.session_state["recovery_edit_msg"] = ("success", f"'{container_no}' 정보가 백업 시트에 수정되었습니다.")
+            st.rerun()
+        else:
+            st.error(f"수정 실패: {msg}")
 
 
 st.markdown("#### ✏️ 데이터 수정 및 삭제")
@@ -204,19 +257,26 @@ if spreadsheet:
                     else:
                         st.markdown("---")
                         st.markdown("##### 개별 컨테이너 선택 복구")
-                        st.write("아래 테이블에서 복구할 컨테이너를 선택하세요.")
+                        st.write("아래 테이블에서 복구할 컨테이너를 선택하세요. ✏️ 칸을 체크하면 복구 전 정보를 수정할 수 있습니다.")
+
+                        _re_msg = st.session_state.pop("recovery_edit_msg", None)
+                        if _re_msg:
+                            getattr(st, _re_msg[0])(_re_msg[1])
 
                         recoverable_df.insert(0, '선택', False)
                         recoverable_df.insert(1, 'No.', range(1, len(recoverable_df) + 1))
+                        recoverable_df['수정'] = False
 
-                        display_order = ['선택', 'No.'] + [h for h in SHEET_HEADERS if h in recoverable_df.columns and h != 'No.']
+                        display_order = ['선택', 'No.'] + [h for h in SHEET_HEADERS if h in recoverable_df.columns and h != 'No.'] + ['수정']
 
+                        # ✏️ 체크 후 팝업을 닫으면 체크가 남아 재오픈되는 것을 막기 위해 키를 회전해 초기화
+                        recovery_editor_key = f"recovery_editor_{selected_backup_sheet}_{st.session_state.get('recovery_editor_rev', 0)}"
                         edited_df = st.data_editor(
                             recoverable_df,
                             column_order=display_order,
                             use_container_width=True,
                             hide_index=True,
-                            key=f"recovery_editor_{selected_backup_sheet}",
+                            key=recovery_editor_key,
                             column_config={
                                 "선택": st.column_config.CheckboxColumn(),
                                 "No.": st.column_config.NumberColumn(disabled=True),
@@ -227,8 +287,24 @@ if spreadsheet:
                                 "상태": st.column_config.TextColumn(disabled=True),
                                 "등록일시": st.column_config.TextColumn(disabled=True),
                                 "완료일시": st.column_config.TextColumn(disabled=True),
+                                "수정": st.column_config.CheckboxColumn("✏️", width="small", help="체크하면 해당 컨테이너 수정 팝업이 열립니다."),
                             }
                         )
+
+                        # ✏️ 수정 체크 감지 → 에디터 키를 회전해 표를 초기화한 뒤 수정 팝업을 연다.
+                        newly_checked_edit = [
+                            row for _, row in edited_df.iterrows()
+                            if row.get('수정') and row.get('컨테이너 번호')
+                        ]
+                        if newly_checked_edit:
+                            st.session_state['recovery_editor_rev'] = st.session_state.get('recovery_editor_rev', 0) + 1
+                            st.session_state['recovery_pending_edit'] = (newly_checked_edit[0].to_dict(), selected_backup_sheet)
+                            st.rerun()
+
+                        # 초기화된 표가 그려진 다음 런에서 팝업을 연다.
+                        if st.session_state.get('recovery_pending_edit'):
+                            _pe_row, _pe_sheet = st.session_state.pop('recovery_pending_edit')
+                            edit_recovery_container_dialog(_pe_row, _pe_sheet)
 
                         selected_rows = edited_df[edited_df['선택']]
 
