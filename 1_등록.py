@@ -216,25 +216,6 @@ with st.container(border=True):
         if pos in POSITIONS and pos not in slot_map:
             slot_map[pos] = c
 
-    # --- 사용 중 / 빈 자리 카드 ---
-    used_count = len(slot_map)
-    empty_count = max(0, 9 - used_count)
-    st.markdown(
-        f"""
-        <style>
-        .metric-card {{ padding: 1rem; border: 1px solid #DCDCDC; border-radius: 10px; text-align: center; margin-bottom: 10px; }}
-        .metric-value {{ font-size: 2.5rem; font-weight: bold; }}
-        .metric-label {{ font-size: 1rem; color: #555555; }}
-        .red-value {{ color: #FF4B4B; }}
-        .green-value {{ color: #28A745; }}
-        </style>
-        <div style="display:flex; gap:12px;">
-            <div style="flex:1"><div class="metric-card"><div class="metric-value red-value">{used_count}</div><div class="metric-label">사용 중</div></div></div>
-            <div style="flex:1"><div class="metric-card"><div class="metric-value green-value">{empty_count}</div><div class="metric-label">빈 자리</div></div></div>
-        </div>
-        """, unsafe_allow_html=True
-    )
-
     def _fmt_dt(v):
         t = pd.to_datetime(v, errors='coerce')
         return t.strftime('%Y-%m-%d %H:%M') if pd.notna(t) else ''
