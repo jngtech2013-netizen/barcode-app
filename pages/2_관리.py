@@ -30,18 +30,6 @@ if 'container_list' not in st.session_state:
 
 render_app_title()
 
-LOCATION_OPTIONS = ['1', '2', '3', '4', '5', '6', '7']
-
-def container_slot(c):
-    """컨테이너의 위치(1~7) 슬롯 문자열 반환, 없으면 None."""
-    v = c.get('위치')
-    if v is None or (isinstance(v, float) and pd.isna(v)):
-        return None
-    s = str(v).strip()
-    if s.endswith('.0'):
-        s = s[:-2]
-    return s if s in LOCATION_OPTIONS else None
-
 
 @st.dialog("컨테이너 삭제 확인")
 def confirm_delete_dialog(container_no):
@@ -102,10 +90,6 @@ if st.session_state.container_list:
             current_status = selected_data.get('상태', '선적중')
             current_status_idx = status_options.index(current_status)
             new_status = st.radio("상태 변경", options=status_options, index=current_status_idx, horizontal=True)
-            loc_options = ['없음'] + LOCATION_OPTIONS
-            current_loc = container_slot(selected_data) or '없음'
-            new_location = st.radio("위치 변경", options=loc_options, index=loc_options.index(current_loc), horizontal=True,
-                                    help="'없음'은 등록 페이지 현황판에서 숨겨집니다(관리 페이지에만 표시).")
 
             button_marker("primary")
             save_clicked = st.form_submit_button("💾 수정사항 저장", use_container_width=True)
@@ -135,27 +119,13 @@ if st.session_state.container_list:
             else:
                 updated_data['완료일시'] = None
 
-            # 위치 변경 검증: 다른 컨테이너가 이미 쓰는 슬롯이면 차단
-            target_loc = '' if new_location == '없음' else new_location
-            conflict = None
-            if target_loc:
-                conflict = next(
-                    (c for c in st.session_state.container_list
-                     if c.get('컨테이너 번호') != selected_for_edit and container_slot(c) == target_loc),
-                    None
-                )
-
-            if conflict:
-                st.error(f"위치 {target_loc}번은 이미 '{conflict.get('컨테이너 번호')}'가 사용 중입니다. 다른 위치를 선택하세요.")
+            ok, msg = update_row_in_gsheet(updated_data)
+            if ok:
+                st.session_state.container_list[selected_idx] = updated_data
+                st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
+                st.rerun()
             else:
-                updated_data['위치'] = target_loc
-                ok, msg = update_row_in_gsheet(updated_data)
-                if ok:
-                    st.session_state.container_list[selected_idx] = updated_data
-                    st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
-                    st.rerun()
-                else:
-                    st.error(f"수정 실패: {msg}")
+                st.error(f"수정 실패: {msg}")
 
         if delete_clicked:
             confirm_delete_dialog(selected_for_edit)
@@ -270,7 +240,6 @@ if spreadsheet:
                                     row_to_add = {k: v for k, v in row.to_dict().items() if k in SHEET_HEADERS}
                                     row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시'), errors='coerce')
                                     row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'), errors='coerce')
-                                    row_to_add['위치'] = ''  # 복원 시 위치 비움 → 등록 페이지에서 숨김, 관리 페이지에만 표시
                                     rows_to_add.append(row_to_add)
 
                                 # 메인 시트에 일괄 복구
@@ -302,7 +271,6 @@ if spreadsheet:
                                 row_to_add = {k: v for k, v in row.to_dict().items() if k in SHEET_HEADERS}
                                 row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시'), errors='coerce')
                                 row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'), errors='coerce')
-                                row_to_add['위치'] = ''  # 복원 시 위치 비움 → 등록 페이지에서 숨김, 관리 페이지에만 표시
                                 rows_to_add.append(row_to_add)
 
                             # 메인 시트에 일괄 복구
