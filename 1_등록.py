@@ -73,60 +73,6 @@ def clear_form_inputs():
     st.session_state["form_destination"] = dests[0] if dests else ""
     st.session_state["form_feet"] = "40"
 
-@st.dialog("✏️ 컨테이너 정보 수정")
-def edit_container_dialog(container_no):
-    """등록 페이지에서 컨테이너 번호를 눌렀을 때 뜨는 수정 팝업.
-    페이지 이동 없이 출고처/피트수/씰번호/상태를 바로 수정한다."""
-    idx = next((i for i, c in enumerate(st.session_state.container_list)
-                if c.get('컨테이너 번호') == container_no), None)
-    if idx is None:
-        st.error("컨테이너를 찾을 수 없습니다. 새로고침 후 다시 시도해주세요.")
-        return
-    data = st.session_state.container_list[idx]
-    st.markdown(f"**{container_no}**")
-
-    dest_options = get_destinations()
-    current_dest = data.get('출고처', '') if pd.notna(data.get('출고처')) else ''
-    if current_dest and current_dest not in dest_options:
-        dest_options = [current_dest] + dest_options
-    new_dest = st.radio("출고처", options=dest_options,
-                        index=dest_options.index(current_dest) if current_dest in dest_options else 0,
-                        horizontal=True)
-
-    feet_options = ['40', '20']
-    cur_feet = str(data.get('피트수', '40'))
-    new_feet = st.radio("피트수", options=feet_options,
-                        index=feet_options.index(cur_feet) if cur_feet in feet_options else 0,
-                        horizontal=True)
-
-    seal_val = data.get('씰 번호')
-    seal_default = '' if seal_val is None or (isinstance(seal_val, float) and pd.isna(seal_val)) else str(seal_val)
-    new_seal = st.text_input("씰 번호", value=seal_default)
-
-    status_options = ['선적중', '선적완료']
-    cur_status = data.get('상태', '선적중')
-    new_status = st.radio("상태", options=status_options,
-                          index=status_options.index(cur_status) if cur_status in status_options else 0,
-                          horizontal=True)
-
-    button_marker("primary")
-    if st.button("💾 저장", use_container_width=True):
-        updated = data.copy()
-        updated.update({'출고처': new_dest, '피트수': new_feet, '씰 번호': str(new_seal), '상태': new_status})
-        if new_status == '선적완료':
-            if cur_status == '선적중':
-                updated['완료일시'] = pd.to_datetime(get_korea_now().replace(tzinfo=None))
-        else:
-            updated['완료일시'] = None
-        with st.spinner('수정사항을 저장하는 중...'):
-            ok, msg = update_row_in_gsheet(updated)
-        if ok:
-            st.session_state.container_list[idx] = updated
-            st.session_state["form_success_message"] = f"'{container_no}' 정보가 수정되었습니다."
-            st.rerun()
-        else:
-            st.error(f"수정 실패: {msg}")
-
 if st.session_state.get("submission_success", False):
     clear_form_inputs()
     st.session_state.submission_success = False
@@ -214,16 +160,6 @@ with st.container(border=True):
             row['컨테이너 번호'] for _, row in edited_df.iterrows()
             if row['출력선택'] and not row['선적완료']
         ]
-
-        # --- 컨테이너 번호 클릭 → 수정 팝업 (페이지 이동 없이 바로 수정) ---
-        st.caption("✏️ 정보를 수정하려면 아래 컨테이너 번호를 클릭하세요.")
-        edit_cnos = [c.get('컨테이너 번호', '') for c in st.session_state.container_list if c.get('컨테이너 번호')]
-        n_per_row = 4
-        for r in range(0, len(edit_cnos), n_per_row):
-            cols = st.columns(n_per_row)
-            for col, cno in zip(cols, edit_cnos[r:r + n_per_row]):
-                if col.button(cno, key=f"edit_btn_{cno}", use_container_width=True):
-                    edit_container_dialog(cno)
 
         # --- 데이터 백업 (미리보기 위) ---
         button_marker("primary")
