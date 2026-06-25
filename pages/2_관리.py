@@ -280,6 +280,19 @@ if st.session_state.container_list:
             confirm_delete_dialog(selected_for_edit)
 else:
     st.info("현재 데이터가 없습니다.")
+    # 목록이 비어도(마지막 항목을 선적완료한 직후) 되돌리기는 가능하게 한다.
+    _empty_snap = st.session_state.get('mgmt_last_completed')
+    if _empty_snap:
+        button_marker("neutral")
+        if st.button(f"↩️ 방금 선적완료 되돌리기 ({_empty_snap['item'].get('컨테이너 번호')})",
+                     use_container_width=True, key="mgmt_undo_btn_empty"):
+            _undo_cno = _empty_snap['item'].get('컨테이너 번호')
+            ok, err = mgmt_undo_last_completed()
+            if ok:
+                st.session_state["mgmt_action_msg"] = ("success", f"'{_undo_cno}' 선적완료를 되돌렸습니다.")
+                st.rerun()
+            else:
+                st.error(f"되돌리기 실패: {err}")
 
 st.divider()
 st.markdown("#### ⬆️ 데이터 복구")
