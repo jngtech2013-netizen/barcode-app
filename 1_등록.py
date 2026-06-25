@@ -199,14 +199,21 @@ with st.container(border=True):
             }
         )
 
-        # ✏️ 수정 체크 → 해당 컨테이너 수정 팝업 열기 (다음 렌더에서 체크 초기화)
-        rows_to_edit = [
+        # ✏️ 수정 체크 감지 → 키를 회전해 표를 즉시 새로 그린 뒤(체크 해제) 팝업을 연다.
+        # 팝업 닫힘이 rerun을 일으키지 않는 환경에서도, 표를 미리 초기화해두면
+        # 닫은 뒤 다른 행을 눌러도 그 클릭이 정상 처리된다.
+        newly_checked = [
             row['컨테이너 번호'] for _, row in edited_df.iterrows()
             if row.get('수정') and row['컨테이너 번호']
         ]
-        if rows_to_edit:
+        if newly_checked:
             st.session_state['editor_rev'] = st.session_state.get('editor_rev', 0) + 1
-            edit_container_dialog(rows_to_edit[0])
+            st.session_state['pending_edit'] = newly_checked[0]
+            st.rerun()
+
+        # 초기화된 표가 그려진 다음 런에서 팝업을 연다.
+        if st.session_state.get('pending_edit'):
+            edit_container_dialog(st.session_state.pop('pending_edit'))
 
         # 선적완료 체크 토글 → 상태/완료일시 갱신 후 저장
         if not df['선적완료'].equals(edited_df['선적완료']):
