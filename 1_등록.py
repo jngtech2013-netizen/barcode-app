@@ -69,6 +69,7 @@ def send_zpl_to_printer(printer_ip, zpl_code, result_key):
     """, height=65)
 
 POSITIONS = [str(i) for i in range(1, 10)]  # 위치 1~9 (창고 슬롯)
+UNDECIDED = '미정'  # 출고처 미지정 표시값 (선적완료/백업 차단 대상)
 
 def clear_form_inputs():
     dests = get_destinations()
@@ -205,7 +206,8 @@ def edit_container_dialog(container_no):
                 ok, msg = update_row_in_gsheet(updated)
             if ok:
                 st.session_state.container_list[idx] = updated
-                st.session_state["form_success_message"] = f"'{container_no}' 정보가 수정되었습니다."
+                # 수정 완료 안내는 현황 표(되돌리기 버튼) 아래에 표시한다.
+                st.session_state["table_action_msg"] = ("success", f"'{container_no}' 정보가 수정되었습니다.")
                 st.rerun()
             else:
                 st.error(f"수정 실패: {msg}")
@@ -280,10 +282,12 @@ with st.container(border=True):
     for pos in POSITIONS:
         c = slot_map.get(pos)
         if c:
+            dest_val = _txt(c.get('출고처'))
             table_rows.append({
                 '출력선택': False, '위치': pos,
                 '컨테이너 번호': _txt(c.get('컨테이너 번호')),
-                '출고처': _txt(c.get('출고처')),
+                # 출고처가 미정이면 셀에서도 눈에 띄게 경고 표시
+                '출고처': (f"⚠️ {UNDECIDED}" if dest_val == UNDECIDED else dest_val),
                 '피트수': _txt(c.get('피트수')),
                 '씰 번호': _seal_str(c.get('씰 번호')),
                 '등록일시': _fmt_dt(c.get('등록일시')),
@@ -294,6 +298,23 @@ with st.container(border=True):
                 '출력선택': False, '위치': pos, '컨테이너 번호': '', '출고처': '',
                 '피트수': '', '씰 번호': '', '등록일시': '', '선적완료': False, '수정': False,
             })
+
+    # 출고처 미정인 슬롯이 있으면 표 위에 빨간 안내 배너를 띄운다.
+    undecided_slots = [
+        pos for pos, c in slot_map.items()
+        if str(c.get('출고처') or '').strip() == UNDECIDED
+    ]
+    if undecided_slots:
+        _slots = ', '.join(sorted(undecided_slots, key=int))
+        st.markdown(
+            f"""
+            <div style="background:#FDE8E8; border:1px solid #F5A3A3; color:#B91C1C;
+                        padding:10px 14px; border-radius:8px; margin-bottom:8px; font-weight:bold;">
+                ⚠️ 출고처가 '미정'인 컨테이너가 있습니다 (위치 {_slots}).
+                출고처를 지정해야 선적완료(백업)할 수 있습니다.
+            </div>
+            """, unsafe_allow_html=True
+        )
 
     display_df = pd.DataFrame(table_rows)
     column_order = ['출력선택', '위치', '컨테이너 번호', '출고처', '피트수', '씰 번호', '등록일시', '선적완료', '수정']
@@ -342,11 +363,18 @@ with st.container(border=True):
     ]
     if to_complete:
         cno = to_complete[0]
-        ok, err = complete_and_backup_container(cno)
-        if ok:
-            st.session_state["form_success_message"] = f"'{cno}' 선적완료 — 백업 후 목록에서 제거했습니다."
+        target = next((c for c in st.session_state.container_list if c.get('컨테이너 번호') == cno), None)
+        if target and str(target.get('출고처') or '').strip() == UNDECIDED:
+            # 출고처 미정이면 백업 차단
+            st.session_state["table_action_msg"] = (
+                "error", f"'{cno}'의 출고처가 '{UNDECIDED}'입니다. 출고처를 먼저 지정해야 선적완료(백업)됩니다."
+            )
         else:
-            st.session_state["form_error_message"] = f"선적완료 처리 실패: {err}"
+            ok, err = complete_and_backup_container(cno)
+            if ok:
+                st.session_state["table_action_msg"] = ("success", f"'{cno}' 선적완료 — 백업 후 목록에서 제거했습니다.")
+            else:
+                st.session_state["table_action_msg"] = ("error", f"선적완료 처리 실패: {err}")
         st.rerun()
 
     # 출력 대상: 컨테이너가 있는 슬롯 중 출력선택된 것
@@ -363,10 +391,15 @@ with st.container(border=True):
         _undo_cno = last_snap['item'].get('컨테이너 번호')
         ok, err = undo_last_completed()
         if ok:
-            st.session_state["form_success_message"] = f"'{_undo_cno}' 선적완료를 되돌렸습니다."
+            st.session_state["table_action_msg"] = ("success", f"'{_undo_cno}' 선적완료를 되돌렸습니다.")
         else:
-            st.session_state["form_error_message"] = f"되돌리기 실패: {err}"
+            st.session_state["table_action_msg"] = ("error", f"되돌리기 실패: {err}")
         st.rerun()
+
+    # 현황 표 관련 안내(수정 완료/선적완료/되돌리기 등)는 되돌리기 버튼 바로 아래에 표시한다.
+    _tbl_msg = st.session_state.pop("table_action_msg", None)
+    if _tbl_msg:
+        getattr(st, _tbl_msg[0])(_tbl_msg[1])
 
     # 미리보기 옵션은 선적중 컨테이너만
     shippable_cnos = [
@@ -404,15 +437,17 @@ st.divider()
 st.markdown("#### 📝 신규 컨테이너 등록")
 with st.container(border=True):
     destinations = get_destinations()
-    # 설정에서 삭제되어 세션에 남은 출고처가 현재 목록에 없으면 첫 항목으로 보정
-    if destinations and st.session_state.get("form_destination") not in destinations:
-        st.session_state["form_destination"] = destinations[0]
+    # '미정'(출고처 미지정)을 항상 선택할 수 있도록 옵션 앞에 추가
+    dest_options = destinations if UNDECIDED in destinations else [UNDECIDED] + destinations
+    # 설정에서 삭제되어 세션에 남은 출고처가 현재 옵션에 없으면 첫 실제 출고처로 보정
+    if dest_options and st.session_state.get("form_destination") not in dest_options:
+        st.session_state["form_destination"] = destinations[0] if destinations else UNDECIDED
     st.session_state.setdefault("form_position", "1")
     st.session_state.setdefault("form_seal_no", "")
 
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
     position = st.radio("2. 위치", options=POSITIONS, horizontal=True, key="form_position")
-    destination = st.radio("3. 출고처", options=destinations, horizontal=True, key="form_destination")
+    destination = st.radio("3. 출고처", options=dest_options, horizontal=True, key="form_destination")
     feet = st.radio("4. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
     seal_no = st.text_input("5. 씰 번호 (선택)", key="form_seal_no")
 
