@@ -201,6 +201,13 @@ if st.session_state.container_list:
             button_marker("primary")
             save_clicked = st.form_submit_button("💾 수정사항 저장", use_container_width=True)
 
+            # 방금 선적완료(백업)한 컨테이너 되돌리기 — 수정사항 저장 바로 아래
+            _mgmt_snap = st.session_state.get('mgmt_last_completed')
+            _mgmt_undo_label = (f"↩️ 방금 선적완료 되돌리기 ({_mgmt_snap['item'].get('컨테이너 번호')})"
+                                if _mgmt_snap else "↩️ 되돌리기 (최근 선적완료 없음)")
+            button_marker("neutral")
+            undo_clicked = st.form_submit_button(_mgmt_undo_label, use_container_width=True, disabled=not _mgmt_snap)
+
             st.markdown("""
             <div style="background-color:#FCE4EC; color:#AD1457; padding:8px 12px; border-radius:6px; font-size:14px; margin-bottom:6px;">
                 ⚠️ 아래 버튼은 데이터를 영구적으로 삭제합니다. 삭제 시 복구할 수 없습니다.
@@ -260,23 +267,19 @@ if st.session_state.container_list:
                     else:
                         st.error(f"수정 실패: {msg}")
 
+        if undo_clicked:
+            _undo_cno = st.session_state.get('mgmt_last_completed', {}).get('item', {}).get('컨테이너 번호')
+            ok, err = mgmt_undo_last_completed()
+            if ok:
+                st.session_state["mgmt_action_msg"] = ("success", f"'{_undo_cno}' 선적완료를 되돌렸습니다.")
+                st.rerun()
+            else:
+                st.error(f"되돌리기 실패: {err}")
+
         if delete_clicked:
             confirm_delete_dialog(selected_for_edit)
 else:
     st.info("현재 데이터가 없습니다.")
-
-# 방금 선적완료(백업)한 컨테이너 되돌리기 — 수정사항 저장 아래에 배치
-_mgmt_snap = st.session_state.get('mgmt_last_completed')
-_mgmt_undo_label = (f"↩️ 방금 선적완료 되돌리기 ({_mgmt_snap['item'].get('컨테이너 번호')})"
-                    if _mgmt_snap else "↩️ 되돌리기 (최근 선적완료 없음)")
-if st.button(_mgmt_undo_label, use_container_width=True, disabled=not _mgmt_snap, key="mgmt_undo_btn"):
-    _undo_cno = _mgmt_snap['item'].get('컨테이너 번호')
-    ok, err = mgmt_undo_last_completed()
-    if ok:
-        st.session_state["mgmt_action_msg"] = ("success", f"'{_undo_cno}' 선적완료를 되돌렸습니다.")
-        st.rerun()
-    else:
-        st.error(f"되돌리기 실패: {err}")
 
 st.divider()
 st.markdown("#### ⬆️ 데이터 복구")
