@@ -171,6 +171,8 @@ if st.session_state.container_list:
             }
             if new_status == '선적중' and new_pos_val and new_pos_val in occupied:
                 st.error(f"위치 {new_pos_val}은(는) 이미 사용 중입니다. 다른 위치를 선택하세요.")
+            elif new_status == '선적완료' and str(new_dest or '').strip() == '미정':
+                st.error("출고처가 '미정'인 컨테이너는 선적완료(백업)할 수 없습니다. 출고처를 먼저 지정하세요.")
             else:
                 updated_data = selected_data.copy()
                 updated_data.update({
