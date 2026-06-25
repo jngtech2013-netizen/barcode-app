@@ -278,7 +278,7 @@ with st.container(border=True):
         key=editor_key,
         column_config={
             "출력선택": st.column_config.CheckboxColumn("출력선택", default=False, width="small", help="해당 위치의 컨테이너를 출력 대상으로 선택합니다."),
-            "위치": st.column_config.TextColumn("위치", width="small", disabled=True),
+            "위치": st.column_config.TextColumn("위치", width=50, disabled=True),
             "수정": st.column_config.CheckboxColumn("✏️", width="small", help="체크하면 해당 컨테이너 수정 팝업이 열립니다."),
             "선적완료": st.column_config.CheckboxColumn("선적완료", width="small", help="체크하면 해당 컨테이너를 자동 백업하고 목록에서 제거합니다."),
             "컨테이너 번호": st.column_config.TextColumn(disabled=True),
