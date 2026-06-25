@@ -205,23 +205,16 @@ st.markdown("#### 📋 컨테이너 현황")
 with st.container(border=True):
     printer_ip = st.session_state.get("printer_ip", "")
 
-    # --- 위치(1~9) 슬롯 매핑: 각 위치의 선적중 컨테이너 (선적완료는 자동 백업돼 목록에 없음) ---
-    # 위치값이 없는 레거시 데이터/중복 위치는 빈 슬롯에 표시용으로 채워 사라지지 않게 한다.
+    # --- 위치(1~9) 슬롯 매핑: 위치가 지정된 선적중 컨테이너만 슬롯에 표시 ---
+    # 복구/레거시 등 위치값이 없는 컨테이너는 등록 슬롯에 들어오지 않으며,
+    # 관리(수정) 페이지에서만 다룬다.
     slot_map = {}
-    overflow = []
     for c in st.session_state.container_list:
         if c.get('상태') != '선적중':
             continue
         pos = str(c.get('위치') or '').strip()
         if pos in POSITIONS and pos not in slot_map:
             slot_map[pos] = c
-        else:
-            overflow.append(c)
-    for c in overflow:
-        for pos in POSITIONS:
-            if pos not in slot_map:
-                slot_map[pos] = c
-                break  # 9칸이 다 차면 표시에서 제외(정상 운영에선 발생하지 않음)
 
     # --- 사용 중 / 빈 자리 카드 ---
     used_count = len(slot_map)
@@ -281,7 +274,7 @@ with st.container(border=True):
         column_order=column_order,
         use_container_width=True,
         hide_index=True,
-        height=387,  # 9개 행이 스크롤 없이 보이도록
+        height=(len(POSITIONS) + 1) * 35 + 3,  # 정확히 9개 행만 스크롤 없이 보이도록 (헤더 1 + 9행)
         key=editor_key,
         column_config={
             "출력선택": st.column_config.CheckboxColumn("출력선택", default=False, width="small", help="해당 위치의 컨테이너를 출력 대상으로 선택합니다."),

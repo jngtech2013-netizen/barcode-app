@@ -121,6 +121,9 @@ if st.session_state.container_list:
     if selected_data:
         registration_time = selected_data.get('등록일시')
         completion_time = selected_data.get('완료일시')
+        position_val = selected_data.get('위치')
+        if position_val is not None and pd.notna(position_val) and str(position_val).strip():
+            st.info(f"위치: {position_val}")
         if registration_time and pd.notna(registration_time):
             st.info(f"등록일시: {pd.to_datetime(registration_time).strftime('%Y-%m-%d %H:%M')}")
         if completion_time and pd.notna(completion_time):
@@ -316,6 +319,7 @@ if spreadsheet:
                                     row_to_add = {k: v for k, v in row.to_dict().items() if k in SHEET_HEADERS}
                                     row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시'), errors='coerce')
                                     row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'), errors='coerce')
+                                    row_to_add['위치'] = ''  # 복구 데이터는 등록 페이지 슬롯에 들어가지 않게 위치를 비운다
                                     rows_to_add.append(row_to_add)
 
                                 # 메인 시트에 일괄 복구
@@ -347,6 +351,7 @@ if spreadsheet:
                                 row_to_add = {k: v for k, v in row.to_dict().items() if k in SHEET_HEADERS}
                                 row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시'), errors='coerce')
                                 row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'), errors='coerce')
+                                row_to_add['위치'] = ''  # 복구 데이터는 등록 페이지 슬롯에 들어가지 않게 위치를 비운다
                                 rows_to_add.append(row_to_add)
 
                             # 메인 시트에 일괄 복구
