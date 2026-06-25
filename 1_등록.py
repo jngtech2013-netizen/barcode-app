@@ -242,6 +242,19 @@ def confirm_slot_takeover():
             st.session_state.pop("pending_slot_occupant", None)
             st.rerun()
 
+
+@st.dialog("⚠️ 출고처 미정")
+def undecided_block_dialog(container_no):
+    """출고처가 미정인 컨테이너의 선적완료(백업)를 막고 안내하는 팝업."""
+    st.warning(
+        f"**{container_no}** 의 출고처가 '{UNDECIDED}'입니다.\n\n"
+        f"출고처를 먼저 지정해야 선적완료(백업)할 수 있습니다.\n"
+        f"표의 ✏️ 칸을 체크해 출고처를 변경하세요."
+    )
+    button_marker("primary")
+    if st.button("확인", use_container_width=True):
+        st.rerun()
+
 if st.session_state.get("submission_success", False):
     clear_form_inputs()
     st.session_state.submission_success = False
@@ -348,10 +361,9 @@ with st.container(border=True):
         cno = to_complete[0]
         target = next((c for c in st.session_state.container_list if c.get('컨테이너 번호') == cno), None)
         if target and str(target.get('출고처') or '').strip() == UNDECIDED:
-            # 출고처 미정이면 백업 차단
-            st.session_state["table_action_msg"] = (
-                "error", f"'{cno}'의 출고처가 '{UNDECIDED}'입니다. 출고처를 먼저 지정해야 선적완료(백업)됩니다."
-            )
+            # 출고처 미정이면 백업 차단 → 팝업으로 안내 (체크는 키 회전으로 초기화)
+            st.session_state['editor_rev'] = st.session_state.get('editor_rev', 0) + 1
+            st.session_state['undecided_block'] = cno
         else:
             ok, err = complete_and_backup_container(cno)
             if ok:
@@ -359,6 +371,10 @@ with st.container(border=True):
             else:
                 st.session_state["table_action_msg"] = ("error", f"선적완료 처리 실패: {err}")
         st.rerun()
+
+    # 출고처 미정으로 선적완료가 차단된 경우 팝업 안내
+    if st.session_state.get('undecided_block'):
+        undecided_block_dialog(st.session_state.pop('undecided_block'))
 
     # 출력 대상: 컨테이너가 있는 슬롯 중 출력선택된 것
     selected_cnos = [
