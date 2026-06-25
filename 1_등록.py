@@ -73,6 +73,60 @@ def clear_form_inputs():
     st.session_state["form_destination"] = dests[0] if dests else ""
     st.session_state["form_feet"] = "40"
 
+@st.dialog("✏️ 컨테이너 정보 수정")
+def edit_container_dialog(container_no):
+    """현황 표의 ✏️ 칸을 체크했을 때 뜨는 수정 팝업.
+    페이지 이동 없이 출고처/피트수/씰번호/상태를 바로 수정한다."""
+    idx = next((i for i, c in enumerate(st.session_state.container_list)
+                if c.get('컨테이너 번호') == container_no), None)
+    if idx is None:
+        st.error("컨테이너를 찾을 수 없습니다. 새로고침 후 다시 시도해주세요.")
+        return
+    data = st.session_state.container_list[idx]
+    st.markdown(f"**{container_no}**")
+
+    dest_options = get_destinations()
+    current_dest = data.get('출고처', '') if pd.notna(data.get('출고처')) else ''
+    if current_dest and current_dest not in dest_options:
+        dest_options = [current_dest] + dest_options
+    new_dest = st.radio("출고처", options=dest_options,
+                        index=dest_options.index(current_dest) if current_dest in dest_options else 0,
+                        horizontal=True)
+
+    feet_options = ['40', '20']
+    cur_feet = str(data.get('피트수', '40'))
+    new_feet = st.radio("피트수", options=feet_options,
+                        index=feet_options.index(cur_feet) if cur_feet in feet_options else 0,
+                        horizontal=True)
+
+    seal_val = data.get('씰 번호')
+    seal_default = '' if seal_val is None or (isinstance(seal_val, float) and pd.isna(seal_val)) else str(seal_val)
+    new_seal = st.text_input("씰 번호", value=seal_default)
+
+    status_options = ['선적중', '선적완료']
+    cur_status = data.get('상태', '선적중')
+    new_status = st.radio("상태", options=status_options,
+                          index=status_options.index(cur_status) if cur_status in status_options else 0,
+                          horizontal=True)
+
+    button_marker("primary")
+    if st.button("💾 저장", use_container_width=True):
+        updated = data.copy()
+        updated.update({'출고처': new_dest, '피트수': new_feet, '씰 번호': str(new_seal), '상태': new_status})
+        if new_status == '선적완료':
+            if cur_status == '선적중':
+                updated['완료일시'] = pd.to_datetime(get_korea_now().replace(tzinfo=None))
+        else:
+            updated['완료일시'] = None
+        with st.spinner('수정사항을 저장하는 중...'):
+            ok, msg = update_row_in_gsheet(updated)
+        if ok:
+            st.session_state.container_list[idx] = updated
+            st.session_state["form_success_message"] = f"'{container_no}' 정보가 수정되었습니다."
+            st.rerun()
+        else:
+            st.error(f"수정 실패: {msg}")
+
 if st.session_state.get("submission_success", False):
     clear_form_inputs()
     st.session_state.submission_success = False
@@ -120,17 +174,21 @@ with st.container(border=True):
         if '완료일시' in display_df.columns:
             display_df['완료일시'] = pd.to_datetime(display_df['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
         display_df.fillna('', inplace=True)
+        display_df['수정'] = False
 
-        column_order = ['출력선택', '컨테이너 번호', '출고처', '피트수', '씰 번호', '등록일시', '완료일시', '선적완료']
+        column_order = ['출력선택', '컨테이너 번호', '수정', '출고처', '피트수', '씰 번호', '등록일시', '완료일시', '선적완료']
 
+        # ✏️ 체크 후 팝업을 닫으면 체크가 남아 재오픈되는 것을 막기 위해 키를 바꿔 초기화
+        editor_key = f"merged_editor_{st.session_state.get('editor_rev', 0)}"
         edited_df = st.data_editor(
             display_df,
             column_order=column_order,
             use_container_width=True,
             hide_index=True,
-            key="merged_editor",
+            key=editor_key,
             column_config={
                 "출력선택": st.column_config.CheckboxColumn("출력선택", default=False, width="small", help="선적완료 항목은 출력 대상에서 제외됩니다."),
+                "수정": st.column_config.CheckboxColumn("✏️", width="small", help="체크하면 해당 컨테이너 수정 팝업이 열립니다."),
                 "선적완료": st.column_config.CheckboxColumn("선적완료", width="small"),
                 "컨테이너 번호": st.column_config.TextColumn(disabled=True),
                 "출고처": st.column_config.TextColumn(disabled=True),
@@ -140,6 +198,15 @@ with st.container(border=True):
                 "완료일시": st.column_config.TextColumn(disabled=True),
             }
         )
+
+        # ✏️ 수정 체크 → 해당 컨테이너 수정 팝업 열기 (다음 렌더에서 체크 초기화)
+        rows_to_edit = [
+            row['컨테이너 번호'] for _, row in edited_df.iterrows()
+            if row.get('수정') and row['컨테이너 번호']
+        ]
+        if rows_to_edit:
+            st.session_state['editor_rev'] = st.session_state.get('editor_rev', 0) + 1
+            edit_container_dialog(rows_to_edit[0])
 
         # 선적완료 체크 토글 → 상태/완료일시 갱신 후 저장
         if not df['선적완료'].equals(edited_df['선적완료']):
