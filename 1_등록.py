@@ -72,13 +72,9 @@ def clear_form_inputs():
     dests = get_destinations()
     st.session_state["form_container_no"] = ""
     st.session_state["form_position"] = "1"
-    st.session_state["form_seal_no"] = "1"  # 씰 번호 기본값 = 위치
+    st.session_state["form_seal_no"] = ""  # 씰 번호 기본값은 공백(선택 입력)
     st.session_state["form_destination"] = dests[0] if dests else ""
     st.session_state["form_feet"] = "40"
-
-def on_position_change():
-    # 위치를 바꾸면 씰 번호 기본값도 같은 값으로 자동 채운다.
-    st.session_state["form_seal_no"] = st.session_state["form_position"]
 
 def complete_and_backup_container(container_no):
     """컨테이너를 선적완료 처리해 일별/월별 백업으로 옮기고 메인 시트·세션에서 제거한다.
@@ -118,8 +114,8 @@ def register_new_container(new_container):
 @st.dialog("✏️ 컨테이너 정보 수정")
 def edit_container_dialog(container_no):
     """현황 표의 ✏️ 칸을 체크했을 때 뜨는 수정 팝업.
-    출고처/피트수/씰번호를 바로 수정한다. (위치는 등록 시에만 지정 — 여기선 표시만,
-    선적완료는 표의 '선적완료' 체크로 처리하므로 상태는 다루지 않는다.)"""
+    위치/출고처/피트수/씰번호를 바로 수정한다.
+    (선적완료는 표의 '선적완료' 체크로 처리하므로 상태는 다루지 않는다.)"""
     idx = next((i for i, c in enumerate(st.session_state.container_list)
                 if c.get('컨테이너 번호') == container_no), None)
     if idx is None:
@@ -127,7 +123,10 @@ def edit_container_dialog(container_no):
         return
     data = st.session_state.container_list[idx]
     st.markdown(f"**{container_no}**")
-    st.caption(f"위치: {data.get('위치') or '-'}")
+
+    cur_pos = str(data.get('위치') or '').strip()
+    pos_index = POSITIONS.index(cur_pos) if cur_pos in POSITIONS else 0
+    new_pos = st.radio("위치", options=POSITIONS, index=pos_index, horizontal=True)
 
     dest_options = get_destinations()
     current_dest = data.get('출고처', '') if pd.notna(data.get('출고처')) else ''
@@ -149,16 +148,26 @@ def edit_container_dialog(container_no):
 
     button_marker("primary")
     if st.button("💾 저장", use_container_width=True):
-        updated = data.copy()
-        updated.update({'출고처': new_dest, '피트수': new_feet, '씰 번호': str(new_seal)})
-        with st.spinner('수정사항을 저장하는 중...'):
-            ok, msg = update_row_in_gsheet(updated)
-        if ok:
-            st.session_state.container_list[idx] = updated
-            st.session_state["form_success_message"] = f"'{container_no}' 정보가 수정되었습니다."
-            st.rerun()
+        # 다른 선적중 컨테이너가 이미 점유한 위치로는 옮길 수 없다.
+        occupied = {
+            str(c.get('위치') or '').strip()
+            for c in st.session_state.container_list
+            if c.get('상태') == '선적중' and c.get('컨테이너 번호') != container_no
+        }
+        if new_pos in occupied:
+            st.error(f"위치 {new_pos}은(는) 이미 사용 중입니다. 다른 위치를 선택하세요.")
         else:
-            st.error(f"수정 실패: {msg}")
+            updated = data.copy()
+            updated.update({'출고처': new_dest, '피트수': new_feet,
+                            '씰 번호': str(new_seal), '위치': new_pos})
+            with st.spinner('수정사항을 저장하는 중...'):
+                ok, msg = update_row_in_gsheet(updated)
+            if ok:
+                st.session_state.container_list[idx] = updated
+                st.session_state["form_success_message"] = f"'{container_no}' 정보가 수정되었습니다."
+                st.rerun()
+            else:
+                st.error(f"수정 실패: {msg}")
 
 
 @st.dialog("⚠️ 위치 사용 중")
@@ -263,7 +272,7 @@ with st.container(border=True):
             "위치": {**st.column_config.TextColumn("위치", width=40, disabled=True), "alignment": "center"},
             "수정": st.column_config.CheckboxColumn("✏️", width="small", help="체크하면 해당 컨테이너 수정 팝업이 열립니다."),
             "선적완료": st.column_config.CheckboxColumn("선적완료", width="small", help="체크하면 해당 컨테이너를 자동 백업하고 목록에서 제거합니다."),
-            "컨테이너 번호": st.column_config.TextColumn(disabled=True),
+            "컨테이너 번호": {**st.column_config.TextColumn(disabled=True), "alignment": "center"},
             "출고처": st.column_config.TextColumn(disabled=True),
             "피트수": st.column_config.TextColumn(disabled=True),
             "씰 번호": st.column_config.TextColumn(disabled=True),
@@ -339,21 +348,19 @@ with st.container(border=True):
 st.divider()
 
 st.markdown("#### 📝 신규 컨테이너 등록")
-# 위치 변경 시 씰 번호가 즉시 따라오도록 st.form 대신 일반 위젯으로 구성한다.
 with st.container(border=True):
     destinations = get_destinations()
     # 설정에서 삭제되어 세션에 남은 출고처가 현재 목록에 없으면 첫 항목으로 보정
     if destinations and st.session_state.get("form_destination") not in destinations:
         st.session_state["form_destination"] = destinations[0]
     st.session_state.setdefault("form_position", "1")
-    st.session_state.setdefault("form_seal_no", st.session_state["form_position"])
+    st.session_state.setdefault("form_seal_no", "")
 
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
-    position = st.radio("2. 위치", options=POSITIONS, horizontal=True,
-                        key="form_position", on_change=on_position_change)
+    position = st.radio("2. 위치", options=POSITIONS, horizontal=True, key="form_position")
     destination = st.radio("3. 출고처", options=destinations, horizontal=True, key="form_destination")
     feet = st.radio("4. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
-    seal_no = st.text_input("5. 씰 번호", key="form_seal_no")
+    seal_no = st.text_input("5. 씰 번호 (선택)", key="form_seal_no")
 
     button_marker("success")
     submitted = st.button("➕ 등록", use_container_width=True, key="register_btn")
@@ -361,8 +368,8 @@ with st.container(border=True):
         st.session_state["form_success_message"] = ""
         st.session_state["form_error_message"] = ""
 
-        if not container_no or not seal_no:
-            st.session_state["form_error_message"] = "컨테이너 번호와 씰 번호를 모두 입력해주세요."
+        if not container_no:
+            st.session_state["form_error_message"] = "컨테이너 번호를 입력해주세요."
         elif not is_valid_container_no(container_no):
             st.session_state["form_error_message"] = "컨테이너 번호 형식이 올바르지 않습니다."
         elif any(c.get('컨테이너 번호') == container_no for c in st.session_state.container_list):

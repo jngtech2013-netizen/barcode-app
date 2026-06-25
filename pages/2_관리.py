@@ -121,9 +121,6 @@ if st.session_state.container_list:
     if selected_data:
         registration_time = selected_data.get('등록일시')
         completion_time = selected_data.get('완료일시')
-        position_val = selected_data.get('위치')
-        if position_val is not None and pd.notna(position_val) and str(position_val).strip():
-            st.info(f"위치: {position_val}")
         if registration_time and pd.notna(registration_time):
             st.info(f"등록일시: {pd.to_datetime(registration_time).strftime('%Y-%m-%d %H:%M')}")
         if completion_time and pd.notna(completion_time):
@@ -131,6 +128,11 @@ if st.session_state.container_list:
 
         with st.form(key=f"edit_form_{selected_for_edit}"):
             st.write(f"**'{selected_for_edit}' 정보 수정**")
+            _positions = [str(i) for i in range(1, 10)]
+            pos_options = ['미지정'] + _positions
+            cur_pos = str(selected_data.get('위치') or '').strip()
+            cur_pos_idx = pos_options.index(cur_pos) if cur_pos in _positions else 0
+            new_position = st.radio("위치 수정", options=pos_options, index=cur_pos_idx, horizontal=True)
             dest_options = get_destinations()
             current_dest = selected_data.get('출고처', '')
             # 설정에서 삭제된 출고처라도 기존 값이 보이도록 목록 앞에 추가
@@ -159,29 +161,40 @@ if st.session_state.container_list:
             delete_clicked = st.form_submit_button("🗑️ 이 컨테이너 삭제", use_container_width=True)
 
         if save_clicked:
-            updated_data = selected_data.copy()
-            updated_data.update({
-                '출고처': new_dest,
-                '피트수': new_feet,
-                '씰 번호': str(new_seal),
-                '상태': new_status,
-            })
-
-            if new_status == '선적완료':
-                if current_status == '선적중':
-                    aware_time = datetime.now(timezone(timedelta(hours=9)))
-                    naive_time = aware_time.replace(tzinfo=None)
-                    updated_data['완료일시'] = pd.to_datetime(naive_time)
+            new_pos_val = '' if new_position == '미지정' else new_position
+            # 선적중으로 둘 경우, 다른 선적중 컨테이너가 점유한 위치로는 옮길 수 없다.
+            occupied = {
+                str(c.get('위치') or '').strip()
+                for c in st.session_state.container_list
+                if c.get('상태') == '선적중' and c.get('컨테이너 번호') != selected_for_edit
+            }
+            if new_status == '선적중' and new_pos_val and new_pos_val in occupied:
+                st.error(f"위치 {new_pos_val}은(는) 이미 사용 중입니다. 다른 위치를 선택하세요.")
             else:
-                updated_data['완료일시'] = None
+                updated_data = selected_data.copy()
+                updated_data.update({
+                    '위치': new_pos_val,
+                    '출고처': new_dest,
+                    '피트수': new_feet,
+                    '씰 번호': str(new_seal),
+                    '상태': new_status,
+                })
 
-            ok, msg = update_row_in_gsheet(updated_data)
-            if ok:
-                st.session_state.container_list[selected_idx] = updated_data
-                st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
-                st.rerun()
-            else:
-                st.error(f"수정 실패: {msg}")
+                if new_status == '선적완료':
+                    if current_status == '선적중':
+                        aware_time = datetime.now(timezone(timedelta(hours=9)))
+                        naive_time = aware_time.replace(tzinfo=None)
+                        updated_data['완료일시'] = pd.to_datetime(naive_time)
+                else:
+                    updated_data['완료일시'] = None
+
+                ok, msg = update_row_in_gsheet(updated_data)
+                if ok:
+                    st.session_state.container_list[selected_idx] = updated_data
+                    st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
+                    st.rerun()
+                else:
+                    st.error(f"수정 실패: {msg}")
 
         if delete_clicked:
             confirm_delete_dialog(selected_for_edit)
