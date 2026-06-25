@@ -228,6 +228,15 @@ def confirm_slot_takeover():
     with c1:
         button_marker("primary")
         if st.button("선적완료 후 등록", use_container_width=True):
+            # 기존(점유) 컨테이너 출고처가 미정이면 선적완료(백업)할 수 없으므로 차단한다.
+            occupant = next((c for c in st.session_state.container_list
+                             if c.get('컨테이너 번호') == occ_no), None)
+            if occupant and str(occupant.get('출고처') or '').strip() == UNDECIDED:
+                st.error(
+                    f"기존 컨테이너 '{occ_no}'의 출고처가 '{UNDECIDED}'입니다.\n"
+                    f"먼저 출고처를 지정해야 선적완료(백업)하고 등록할 수 있습니다."
+                )
+                return
             ok, err = complete_and_backup_container(occ_no, record_undo=False)
             if not ok:
                 st.error(f"기존 컨테이너 처리 실패: {err}")
