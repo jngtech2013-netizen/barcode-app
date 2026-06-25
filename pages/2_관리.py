@@ -7,6 +7,8 @@ from utils import (
     add_rows_to_gsheet_batch,
     update_row_in_gsheet,
     update_row_in_backup_sheets,
+    backup_data_to_new_sheet,
+    delete_rows_by_container_nos,
     delete_row_from_gsheet,
     delete_from_backup_sheets,
     cleanup_old_daily_sheets,
@@ -180,20 +182,29 @@ if st.session_state.container_list:
                 })
 
                 if new_status == '선적완료':
-                    if current_status == '선적중':
+                    # 선적완료로 저장하면 일별/월별 백업 후 메인 시트·목록에서 제거 (등록 페이지와 동일)
+                    if current_status == '선적중' or not pd.notna(selected_data.get('완료일시')):
                         aware_time = datetime.now(timezone(timedelta(hours=9)))
-                        naive_time = aware_time.replace(tzinfo=None)
-                        updated_data['완료일시'] = pd.to_datetime(naive_time)
+                        updated_data['완료일시'] = pd.to_datetime(aware_time.replace(tzinfo=None))
+                    with st.spinner('선적완료 백업 처리 중...'):
+                        bok, berr = backup_data_to_new_sheet([updated_data])
+                        dok, dres = delete_rows_by_container_nos([selected_for_edit]) if bok else (False, berr)
+                    if bok and dok:
+                        st.session_state.container_list.pop(selected_idx)
+                        log_change(f"관리 페이지 선적완료 백업: {selected_for_edit}")
+                        st.success(f"'{selected_for_edit}' 선적완료 처리 후 백업했습니다.")
+                        st.rerun()
+                    else:
+                        st.error(f"선적완료 백업 실패: {berr if not bok else dres}")
                 else:
                     updated_data['완료일시'] = None
-
-                ok, msg = update_row_in_gsheet(updated_data)
-                if ok:
-                    st.session_state.container_list[selected_idx] = updated_data
-                    st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
-                    st.rerun()
-                else:
-                    st.error(f"수정 실패: {msg}")
+                    ok, msg = update_row_in_gsheet(updated_data)
+                    if ok:
+                        st.session_state.container_list[selected_idx] = updated_data
+                        st.success(f"'{selected_for_edit}'의 정보가 성공적으로 수정되었습니다.")
+                        st.rerun()
+                    else:
+                        st.error(f"수정 실패: {msg}")
 
         if delete_clicked:
             confirm_delete_dialog(selected_for_edit)
