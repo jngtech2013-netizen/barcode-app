@@ -382,6 +382,11 @@ with st.container(border=True):
         if row['출력선택'] and row.get('컨테이너 번호')
     ]
 
+    # 현황 표 관련 안내(수정 완료/선적완료/되돌리기 등)는 되돌리기 버튼 바로 위에 표시한다.
+    _tbl_msg = st.session_state.pop("table_action_msg", None)
+    if _tbl_msg:
+        getattr(st, _tbl_msg[0])(_tbl_msg[1])
+
     # 방금 선적완료한 컨테이너 되돌리기 (백업에서 다시 선적중으로 복원)
     last_snap = st.session_state.get('last_completed')
     undo_label = (f"↩️ 방금 선적완료 되돌리기 ({last_snap['item'].get('컨테이너 번호')})"
@@ -394,11 +399,6 @@ with st.container(border=True):
         else:
             st.session_state["table_action_msg"] = ("error", f"되돌리기 실패: {err}")
         st.rerun()
-
-    # 현황 표 관련 안내(수정 완료/선적완료/되돌리기 등)는 되돌리기 버튼 바로 아래에 표시한다.
-    _tbl_msg = st.session_state.pop("table_action_msg", None)
-    if _tbl_msg:
-        getattr(st, _tbl_msg[0])(_tbl_msg[1])
 
     # 미리보기 옵션은 선적중 컨테이너만
     shippable_cnos = [
