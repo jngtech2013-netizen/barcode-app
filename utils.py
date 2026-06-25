@@ -8,7 +8,7 @@ from google.oauth2.service_account import Credentials
 
 # --- 상수 정의 (공용) ---
 MAIN_SHEET_NAME = "현재 데이터"
-SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '상태', '등록일시', '완료일시']
+SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '상태', '등록일시', '완료일시', '위치']
 LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
 BACKUP_PREFIX = "백업_"
@@ -245,6 +245,26 @@ def ensure_text_format(worksheet, column_name):
     except Exception as e:
         st.warning(f"'{worksheet.title}' 시트의 '{column_name}' 열 서식을 강제하는 중 오류 발생: {e}")
 
+def _last_col_letter():
+    """SHEET_HEADERS 길이에 맞는 마지막 열 문자(예: 8개 → 'H')."""
+    return chr(ord('A') + len(SHEET_HEADERS) - 1)
+
+def ensure_sheet_headers(worksheet):
+    """시트 1행 헤더가 SHEET_HEADERS와 어긋나면(예: '위치' 열 누락) 헤더 행을 보정한다.
+    기존 데이터(A~G)는 그대로 두고 누락된 뒤쪽 헤더(H='위치')만 채워진다.
+    세션 단위로 한 번만 실행해 불필요한 쓰기 호출을 막는다."""
+    cache_key = f"_headers_ok::{worksheet.title}"
+    if st.session_state.get(cache_key):
+        return
+    try:
+        current = worksheet.row_values(1)
+        if current[:len(SHEET_HEADERS)] != SHEET_HEADERS:
+            worksheet.update(f'A1:{_last_col_letter()}1', [SHEET_HEADERS], value_input_option='RAW')
+        st.session_state[cache_key] = True
+    except Exception:
+        # 헤더 보정 실패는 치명적이지 않으므로 조용히 넘어간다(다음 세션에서 재시도).
+        pass
+
 def force_text_seal(value):
     """씰 번호의 선행 0(예: '0123')이 USER_ENTERED 저장 시 숫자(123)로 해석돼
     사라지는 것을 막는다. 앞에 작은따옴표를 붙이면 시트가 강제로 텍스트로 저장하고,
@@ -294,6 +314,7 @@ def load_data_from_gsheet():
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
         ensure_text_format(worksheet, '씰 번호')
+        ensure_sheet_headers(worksheet)
 
         all_values = worksheet.get_all_values()
         if len(all_values) < 2:
@@ -304,6 +325,9 @@ def load_data_from_gsheet():
 
         df = pd.DataFrame(data, columns=headers, dtype=str)
         df.replace('', pd.NA, inplace=True)
+
+        if '위치' not in df.columns:
+            df['위치'] = pd.NA
 
         if '등록일시' in df.columns:
             df['등록일시'] = pd.to_datetime(df['등록일시'], errors='coerce')
@@ -330,6 +354,7 @@ def add_row_to_gsheet(data):
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
         ensure_text_format(worksheet, '씰 번호')
+        ensure_sheet_headers(worksheet)
         data_copy = data.copy()
         if isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
             data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')
@@ -356,6 +381,7 @@ def add_rows_to_gsheet_batch(data_list):
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
         ensure_text_format(worksheet, '씰 번호')
+        ensure_sheet_headers(worksheet)
 
         rows_to_insert = []
         container_nos = []
@@ -390,6 +416,7 @@ def update_row_in_gsheet(data):
     try:
         worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
         ensure_text_format(worksheet, '씰 번호')
+        ensure_sheet_headers(worksheet)
         container_no = data.get('컨테이너 번호')
         row_num = find_row_by_container_no(worksheet, container_no)
         if row_num is None:
@@ -409,7 +436,7 @@ def update_row_in_gsheet(data):
             else data_copy.get(header, "")
             for header in SHEET_HEADERS
         ]
-        worksheet.update(f'A{row_num}:G{row_num}', [row_to_update], value_input_option='USER_ENTERED')
+        worksheet.update(f'A{row_num}:{_last_col_letter()}{row_num}', [row_to_update], value_input_option='USER_ENTERED')
         log_change(f"데이터 수정: {container_no}")
         return True, "성공"
     except Exception as e:
@@ -588,10 +615,11 @@ def update_row_in_backup_sheets(data, source_sheet_name):
                 continue
             ws = spreadsheet.worksheet(sheet_name)
             ensure_text_format(ws, '씰 번호')
+            ensure_sheet_headers(ws)
             row_num = find_row_by_container_no(ws, container_no)
             if row_num is None:
                 continue
-            ws.update(f'A{row_num}:G{row_num}', [row_to_update], value_input_option='USER_ENTERED')
+            ws.update(f'A{row_num}:{_last_col_letter()}{row_num}', [row_to_update], value_input_option='USER_ENTERED')
             updated_count += 1
 
         if updated_count == 0:
