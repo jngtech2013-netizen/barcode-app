@@ -9,7 +9,6 @@ import streamlit.components.v1 as components
 from utils import (
     load_data_from_gsheet,
     add_row_to_gsheet,
-    update_row_in_gsheet,
     backup_data_to_new_sheet,
     log_change,
     delete_rows_by_container_nos,
@@ -30,6 +29,18 @@ st.set_page_config(page_title="등록 페이지", layout="wide", initial_sidebar
 
 def get_korea_now():
     return datetime.now(timezone(timedelta(hours=9)))
+
+LOCATION_OPTIONS = ['1', '2', '3', '4', '5', '6', '7']
+
+def container_slot(c):
+    """컨테이너의 위치(1~7) 슬롯 문자열 반환, 없으면 None."""
+    v = c.get('위치')
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return None
+    s = str(v).strip()
+    if s.endswith('.0'):
+        s = s[:-2]
+    return s if s in LOCATION_OPTIONS else None
 
 @st.cache_data
 def generate_qrcode(data: str) -> bytes:
@@ -89,8 +100,10 @@ with st.container(border=True):
     printer_ip = st.session_state.get("printer_ip", "")
 
     # --- 선적중 / 선적완료 카드 ---
-    completed_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적완료'])
-    pending_count = len([item for item in st.session_state.container_list if item.get('상태') == '선적중'])
+    # 등록 페이지 지표는 위치 슬롯에 있는 컨테이너만 집계 (복원된 위치 없는 항목 제외)
+    slot_items = [item for item in st.session_state.container_list if container_slot(item)]
+    completed_count = len([item for item in slot_items if item.get('상태') == '선적완료'])
+    pending_count = len([item for item in slot_items if item.get('상태') == '선적중'])
     st.markdown(
         f"""
         <style>
@@ -107,123 +120,139 @@ with st.container(border=True):
         """, unsafe_allow_html=True
     )
 
-    if not st.session_state.container_list:
-        st.info("등록된 컨테이너가 없습니다.")
-    else:
-        df = pd.DataFrame(st.session_state.container_list)
-        df['선적완료'] = df['상태'].apply(lambda x: x == '선적완료')
-        df.insert(0, '출력선택', False)
+    # 위치(1~7) 슬롯 기준으로 컨테이너 매핑 (위치 없는 컨테이너는 등록 페이지에서 숨김)
+    SLOT_NUMBERS = ['1', '2', '3', '4', '5', '6', '7']
 
-        display_df = df.copy()
-        if '등록일시' in display_df.columns:
-            display_df['등록일시'] = pd.to_datetime(display_df['등록일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
-        if '완료일시' in display_df.columns:
-            display_df['완료일시'] = pd.to_datetime(display_df['완료일시'], errors='coerce').dt.strftime('%Y-%m-%d %H:%M')
-        display_df.fillna('', inplace=True)
+    def _slot_of(c):
+        v = c.get('위치')
+        if v is None or (isinstance(v, float) and pd.isna(v)):
+            return None
+        s = str(v).strip()
+        if s.endswith('.0'):
+            s = s[:-2]
+        return s if s in SLOT_NUMBERS else None
 
-        column_order = ['출력선택', '컨테이너 번호', '출고처', '피트수', '씰 번호', '등록일시', '완료일시', '선적완료']
+    def _fmt_dt(v):
+        t = pd.to_datetime(v, errors='coerce')
+        return t.strftime('%Y-%m-%d %H:%M') if pd.notna(t) else ''
 
-        edited_df = st.data_editor(
-            display_df,
-            column_order=column_order,
-            use_container_width=True,
-            hide_index=True,
-            key="merged_editor",
-            column_config={
-                "출력선택": st.column_config.CheckboxColumn("출력선택", default=False, width="small", help="선적완료 항목은 출력 대상에서 제외됩니다."),
-                "선적완료": st.column_config.CheckboxColumn("선적완료", width="small"),
-                "컨테이너 번호": st.column_config.TextColumn(disabled=True),
-                "출고처": st.column_config.TextColumn(disabled=True),
-                "피트수": st.column_config.TextColumn(disabled=True),
-                "씰 번호": st.column_config.TextColumn(disabled=True),
-                "등록일시": st.column_config.TextColumn(disabled=True),
-                "완료일시": st.column_config.TextColumn(disabled=True),
-            }
-        )
+    slot_map = {}
+    for c in st.session_state.container_list:
+        s = _slot_of(c)
+        if s and s not in slot_map:
+            slot_map[s] = c
 
-        # 선적완료 체크 토글 → 상태/완료일시 갱신 후 저장
-        if not df['선적완료'].equals(edited_df['선적완료']):
-            for i, (original_bool, edited_bool) in enumerate(zip(df['선적완료'], edited_df['선적완료'])):
-                if original_bool != edited_bool:
-                    st.session_state.container_list[i]['상태'] = "선적완료" if edited_bool else "선적중"
-                    if edited_bool:
-                        st.session_state.container_list[i]['완료일시'] = pd.to_datetime(get_korea_now().replace(tzinfo=None))
-                    else:
-                        st.session_state.container_list[i]['완료일시'] = None
-                    ok, msg = update_row_in_gsheet(st.session_state.container_list[i])
-                    if not ok:
-                        st.session_state["form_error_message"] = f"상태 변경 실패: {msg}"
-                    st.rerun()
+    rows = []
+    for s in SLOT_NUMBERS:
+        c = slot_map.get(s)
+        if c:
+            rows.append({
+                '위치': s, '출력선택': False,
+                '컨테이너 번호': c.get('컨테이너 번호', ''),
+                '출고처': c.get('출고처', '') if pd.notna(c.get('출고처')) else '',
+                '피트수': c.get('피트수', '') if pd.notna(c.get('피트수')) else '',
+                '씰 번호': c.get('씰 번호', '') if pd.notna(c.get('씰 번호')) else '',
+                '등록일시': _fmt_dt(c.get('등록일시')),
+                '완료일시': _fmt_dt(c.get('완료일시')),
+                '선적완료': False,
+            })
+        else:
+            rows.append({
+                '위치': s, '출력선택': False, '컨테이너 번호': '', '출고처': '',
+                '피트수': '', '씰 번호': '', '등록일시': '', '완료일시': '', '선적완료': False,
+            })
 
-        # 출력 대상: 선적중이면서 출력선택된 행만 (선적완료 행은 제외)
-        selected_cnos = [
-            row['컨테이너 번호'] for _, row in edited_df.iterrows()
-            if row['출력선택'] and not row['선적완료']
-        ]
+    display_df = pd.DataFrame(rows)
+    column_order = ['위치', '출력선택', '컨테이너 번호', '출고처', '피트수', '씰 번호', '등록일시', '완료일시', '선적완료']
 
-        # --- 데이터 백업 (미리보기 위) ---
+    edited_df = st.data_editor(
+        display_df,
+        column_order=column_order,
+        use_container_width=True,
+        hide_index=True,
+        height=300,  # 7행 고정 표시
+        key="merged_editor",
+        column_config={
+            "위치": st.column_config.TextColumn("위치", disabled=True, width="small"),
+            "출력선택": st.column_config.CheckboxColumn("출력선택", default=False, width="small", help="빈 슬롯은 출력 대상에서 제외됩니다."),
+            "선적완료": st.column_config.CheckboxColumn("선적완료", width="small", help="체크 시 즉시 백업되고 슬롯이 비워집니다."),
+            "컨테이너 번호": st.column_config.TextColumn(disabled=True),
+            "출고처": st.column_config.TextColumn(disabled=True),
+            "피트수": st.column_config.TextColumn(disabled=True),
+            "씰 번호": st.column_config.TextColumn(disabled=True),
+            "등록일시": st.column_config.TextColumn(disabled=True),
+            "완료일시": st.column_config.TextColumn(disabled=True),
+        }
+    )
+
+    # 선적완료 체크 → 즉시 백업 + 메인시트에서 삭제(슬롯 비움)
+    to_complete = [
+        row['컨테이너 번호'] for _, row in edited_df.iterrows()
+        if row['컨테이너 번호'] and row['선적완료']
+    ]
+    if to_complete:
+        any_done = False
+        for cno in to_complete:
+            item = next((c for c in st.session_state.container_list if c.get('컨테이너 번호') == cno), None)
+            if not item:
+                continue
+            item = item.copy()
+            item['상태'] = '선적완료'
+            item['완료일시'] = pd.to_datetime(get_korea_now().replace(tzinfo=None))
+            with st.spinner(f"'{cno}' 백업 중..."):
+                ok_b, msg_b = backup_data_to_new_sheet([item])
+            if not ok_b:
+                st.session_state["form_error_message"] = f"'{cno}' 백업 실패: {msg_b}"
+                continue
+            ok_d, msg_d = delete_rows_by_container_nos([cno])
+            if ok_d:
+                st.session_state.container_list = [
+                    c for c in st.session_state.container_list if c.get('컨테이너 번호') != cno
+                ]
+                log_change(f"선적완료 즉시 백업: {cno}")
+                any_done = True
+            else:
+                st.session_state["form_error_message"] = f"'{cno}' 백업됐으나 메인시트 삭제 실패: {msg_d}"
+        if any_done:
+            st.session_state["form_success_message"] = "선적완료 처리 및 백업이 완료되었습니다."
+        st.rerun()
+
+    # 출력 대상: 슬롯에 컨테이너가 있고 출력선택된 행만
+    selected_cnos = [
+        row['컨테이너 번호'] for _, row in edited_df.iterrows()
+        if row['출력선택'] and row['컨테이너 번호']
+    ]
+
+    # 미리보기 옵션은 선적중 컨테이너만
+    shippable_cnos = [
+        c.get('컨테이너 번호', '') for c in st.session_state.container_list
+        if c.get('상태') == '선적중' and c.get('컨테이너 번호') and _slot_of(c)
+    ]
+    cno_options = ["미리보기"] + shippable_cnos
+    preview_sel = st.selectbox("미리보기", cno_options, label_visibility="collapsed")
+    preview_cno = None if preview_sel == "미리보기" else preview_sel
+
+    if preview_cno:
+        qr_bytes = generate_qrcode(preview_cno)
+        b64 = base64.b64encode(qr_bytes).decode()
+        st.markdown(f"""
+        <div style="text-align:center; margin:-10px 0 4px 0;">
+            <img src="data:image/png;base64,{b64}" style="width:200px; max-width:80%; display:block; margin:0 auto;">
+            <div style="font-size:22px; font-weight:bold; margin-top:-12px; letter-spacing:1px;">{preview_cno}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
+
+    btn_label = f"🖨️ {len(selected_cnos)}개 출력 (각 2장)" if selected_cnos else "🖨️ 출력"
+    if selected_cnos:
         button_marker("primary")
-        if st.button("🚀 데이터 백업", use_container_width=True):
-            completed_items_with_indices = [
-                (i, item) for i, item in enumerate(st.session_state.container_list) if item.get('상태') == '선적완료'
-            ]
-            if not completed_items_with_indices:
-                st.info("백업할 '선적완료' 상태의 데이터가 없습니다.")
-            else:
-                completed_data = [item for _, item in completed_items_with_indices]
-                with st.spinner('데이터를 백업하는 중...'):
-                    success, error_msg = backup_data_to_new_sheet(completed_data)
-                if success:
-                    st.success(f"'선적완료'된 {len(completed_data)}개 데이터를 일별/월별 백업했습니다!")
-                    with st.spinner('메인 시트를 정리하는 중...'):
-                        try:
-                            container_nos_to_delete = [
-                                item.get('컨테이너 번호') for _, item in completed_items_with_indices
-                            ]
-                            del_success, del_result = delete_rows_by_container_nos(container_nos_to_delete)
-                            if not del_success:
-                                raise Exception(del_result)
-                            for index in sorted([i for i, _ in completed_items_with_indices], reverse=True):
-                                st.session_state.container_list.pop(index)
-                            log_change(f"데이터 백업: {len(completed_data)}개 백업 완료 후 메인 시트에서 삭제.")
-                            st.success("메인 시트 정리가 완료되었습니다.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"메인 시트 정리 중 오류가 발생했습니다: {e}")
-                            st.warning("데이터 백업은 완료되었으나, 메인 시트 정리에 실패했습니다. 잠시 후 다시 시도하거나 수동으로 정리해주세요.")
-                else:
-                    st.error(f"백업 중 오류 발생: {error_msg}")
-
-        # 미리보기 옵션은 선적중 컨테이너만
-        shippable_cnos = [
-            c.get('컨테이너 번호', '') for c in st.session_state.container_list
-            if c.get('상태') == '선적중' and c.get('컨테이너 번호')
-        ]
-        cno_options = ["미리보기"] + shippable_cnos
-        preview_sel = st.selectbox("미리보기", cno_options, label_visibility="collapsed")
-        preview_cno = None if preview_sel == "미리보기" else preview_sel
-
-        if preview_cno:
-            qr_bytes = generate_qrcode(preview_cno)
-            b64 = base64.b64encode(qr_bytes).decode()
-            st.markdown(f"""
-            <div style="text-align:center; margin:-10px 0 4px 0;">
-                <img src="data:image/png;base64,{b64}" style="width:200px; max-width:80%; display:block; margin:0 auto;">
-                <div style="font-size:22px; font-weight:bold; margin-top:-12px; letter-spacing:1px;">{preview_cno}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
-
-        btn_label = f"🖨️ {len(selected_cnos)}개 출력 (각 2장)" if selected_cnos else "🖨️ 출력"
-        if selected_cnos:
-            button_marker("primary")
-        if st.button(btn_label, use_container_width=True, key="print_barcode_btn", disabled=not selected_cnos):
-            if not printer_ip:
-                st.warning("프린터 IP를 먼저 설정 페이지에서 입력해주세요.")
-            else:
-                for i, cno in enumerate(selected_cnos):
-                    zpl_code = make_zpl(cno, copies=2)
-                    send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}")
+    if st.button(btn_label, use_container_width=True, key="print_barcode_btn", disabled=not selected_cnos):
+        if not printer_ip:
+            st.warning("프린터 IP를 먼저 설정 페이지에서 입력해주세요.")
+        else:
+            for i, cno in enumerate(selected_cnos):
+                zpl_code = make_zpl(cno, copies=2)
+                send_zpl_to_printer(printer_ip, zpl_code, result_key=f"p{i}")
 
 st.divider()
 
@@ -233,10 +262,20 @@ with st.form(key="new_container_form"):
     # 설정에서 삭제되어 세션에 남은 출고처가 현재 목록에 없으면 첫 항목으로 보정
     if destinations and st.session_state.get("form_destination") not in destinations:
         st.session_state["form_destination"] = destinations[0]
+    # 현재 차있는 위치 슬롯 → {위치: 컨테이너번호}
+    occupied_slots = {
+        container_slot(c): c.get('컨테이너 번호')
+        for c in st.session_state.container_list if container_slot(c)
+    }
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
-    destination = st.radio("2. 출고처", options=destinations, horizontal=True, key="form_destination")
-    feet = st.radio("3. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
-    seal_no = st.text_input("4. 씰 번호", key="form_seal_no")
+    location = st.radio(
+        "2. 위치", options=LOCATION_OPTIONS, horizontal=True, key="form_location",
+        format_func=lambda s: f"{s} 🔴" if s in occupied_slots else s,
+        help="🔴 위치는 이미 차있으며, 등록 시 기존 컨테이너가 자동으로 선적완료·백업 처리됩니다."
+    )
+    destination = st.radio("3. 출고처", options=destinations, horizontal=True, key="form_destination")
+    feet = st.radio("4. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
+    seal_no = st.text_input("5. 씰 번호 (선택)", key="form_seal_no")
 
     button_marker("success")
     submitted = st.form_submit_button("➕ 등록", use_container_width=True)
@@ -244,33 +283,57 @@ with st.form(key="new_container_form"):
         st.session_state["form_success_message"] = ""
         st.session_state["form_error_message"] = ""
 
-        if not container_no or not seal_no:
-            st.session_state["form_error_message"] = "컨테이너 번호와 씰 번호를 모두 입력해주세요."
+        if not container_no:
+            st.session_state["form_error_message"] = "컨테이너 번호를 입력해주세요."
         elif not is_valid_container_no(container_no):
             st.session_state["form_error_message"] = "컨테이너 번호 형식이 올바르지 않습니다."
         elif any(c.get('컨테이너 번호') == container_no for c in st.session_state.container_list):
             st.session_state["form_error_message"] = f"이미 등록된 컨테이너 번호입니다: {container_no}"
         else:
-            korea_now = get_korea_now()
-            naive_datetime = korea_now.replace(tzinfo=None)
+            # 선택한 위치에 기존 컨테이너가 있으면 자동 선적완료(백업+메인시트 삭제) 후 슬롯 재사용
+            proceed = True
+            if location in occupied_slots:
+                old_cno = occupied_slots[location]
+                old_item = next((c for c in st.session_state.container_list if c.get('컨테이너 번호') == old_cno), None)
+                if old_item:
+                    old_item = old_item.copy()
+                    old_item['상태'] = '선적완료'
+                    old_item['완료일시'] = pd.to_datetime(get_korea_now().replace(tzinfo=None))
+                    with st.spinner(f"위치 {location}번 기존 컨테이너 '{old_cno}' 선적완료 처리 중..."):
+                        ok_b, msg_b = backup_data_to_new_sheet([old_item])
+                        ok_d, msg_d = delete_rows_by_container_nos([old_cno]) if ok_b else (False, msg_b)
+                    if ok_b and ok_d:
+                        st.session_state.container_list = [
+                            c for c in st.session_state.container_list if c.get('컨테이너 번호') != old_cno
+                        ]
+                        log_change(f"위치 {location}번 재등록: 기존 '{old_cno}' 자동 선적완료/백업")
+                    else:
+                        proceed = False
+                        st.session_state["form_error_message"] = (
+                            f"위치 {location}번 기존 컨테이너 자동 선적완료 실패: {msg_b if not ok_b else msg_d}"
+                        )
 
-            new_container = {
-                '컨테이너 번호': container_no, '출고처': destination, '피트수': feet,
-                '씰 번호': seal_no, '상태': '선적중',
-                '등록일시': pd.to_datetime(naive_datetime),
-                '완료일시': None
-            }
+            if proceed:
+                korea_now = get_korea_now()
+                naive_datetime = korea_now.replace(tzinfo=None)
 
-            with st.spinner('데이터를 저장하는 중...'):
-                success, message = add_row_to_gsheet(new_container)
+                new_container = {
+                    '컨테이너 번호': container_no, '출고처': destination, '피트수': feet,
+                    '씰 번호': seal_no, '상태': '선적중',
+                    '등록일시': pd.to_datetime(naive_datetime),
+                    '완료일시': None, '위치': location
+                }
 
-            if success:
-                st.session_state.container_list.append(new_container)
-                st.session_state.submission_success = True
-                st.session_state.form_success_message = f"컨테이너 '{container_no}'가 성공적으로 등록되었습니다."
-                st.rerun()
-            else:
-                st.session_state["form_error_message"] = f"등록 실패: {message}. 잠시 후 다시 시도해주세요."
+                with st.spinner('데이터를 저장하는 중...'):
+                    success, message = add_row_to_gsheet(new_container)
+
+                if success:
+                    st.session_state.container_list.append(new_container)
+                    st.session_state.submission_success = True
+                    st.session_state.form_success_message = f"컨테이너 '{container_no}'가 위치 {location}번에 등록되었습니다."
+                    st.rerun()
+                else:
+                    st.session_state["form_error_message"] = f"등록 실패: {message}. 잠시 후 다시 시도해주세요."
 
 if st.session_state.get("form_success_message"):
     st.success(st.session_state.get("form_success_message"))

@@ -9,7 +9,7 @@ from google.oauth2.service_account import Credentials
 
 # --- 상수 정의 (공용) ---
 MAIN_SHEET_NAME = "현재 데이터"
-SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '상태', '등록일시', '완료일시']
+SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '상태', '등록일시', '완료일시', '위치']
 LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
 BACKUP_PREFIX = "백업_"
@@ -247,6 +247,10 @@ def load_data_from_gsheet():
         ensure_text_format(worksheet, '씰 번호')
 
         all_values = worksheet.get_all_values()
+        # 기존 시트에 '위치' 헤더가 없으면 맨 끝 열에 자동 추가(1회성, 멱등)
+        if all_values and '위치' not in all_values[0]:
+            worksheet.update_cell(1, len(all_values[0]) + 1, '위치')
+            all_values = worksheet.get_all_values()
         if len(all_values) < 2:
             return []
 
@@ -360,7 +364,8 @@ def update_row_in_gsheet(data):
             else data_copy.get(header, "")
             for header in SHEET_HEADERS
         ]
-        worksheet.update(f'A{row_num}:G{row_num}', [row_to_update], value_input_option='USER_ENTERED')
+        last_col = chr(ord('A') + len(SHEET_HEADERS) - 1)
+        worksheet.update(f'A{row_num}:{last_col}{row_num}', [row_to_update], value_input_option='USER_ENTERED')
         log_change(f"데이터 수정: {container_no}")
         return True, "성공"
     except Exception as e:
