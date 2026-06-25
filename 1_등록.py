@@ -299,23 +299,6 @@ with st.container(border=True):
                 '피트수': '', '씰 번호': '', '등록일시': '', '선적완료': False, '수정': False,
             })
 
-    # 출고처 미정인 슬롯이 있으면 표 위에 빨간 안내 배너를 띄운다.
-    undecided_slots = [
-        pos for pos, c in slot_map.items()
-        if str(c.get('출고처') or '').strip() == UNDECIDED
-    ]
-    if undecided_slots:
-        _slots = ', '.join(sorted(undecided_slots, key=int))
-        st.markdown(
-            f"""
-            <div style="background:#FDE8E8; border:1px solid #F5A3A3; color:#B91C1C;
-                        padding:10px 14px; border-radius:8px; margin-bottom:8px; font-weight:bold;">
-                ⚠️ 출고처가 '미정'인 컨테이너가 있습니다 (위치 {_slots}).
-                출고처를 지정해야 선적완료(백업)할 수 있습니다.
-            </div>
-            """, unsafe_allow_html=True
-        )
-
     display_df = pd.DataFrame(table_rows)
     column_order = ['출력선택', '위치', '컨테이너 번호', '출고처', '피트수', '씰 번호', '등록일시', '선적완료', '수정']
 
