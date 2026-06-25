@@ -4,6 +4,7 @@ from datetime import datetime, timezone, timedelta
 from utils import (
     SHEET_HEADERS,
     load_data_from_gsheet,
+    add_row_to_gsheet,
     add_rows_to_gsheet_batch,
     update_row_in_gsheet,
     update_row_in_backup_sheets,
@@ -54,6 +55,50 @@ def confirm_delete_dialog(container_no):
         button_marker("neutral")
         if st.button("취소", use_container_width=True):
             st.rerun()
+
+
+@st.dialog("⚠️ 출고처 미정")
+def undecided_block_dialog(container_no):
+    """출고처가 미정인 컨테이너의 선적완료(백업)를 막고 안내하는 팝업."""
+    st.warning(
+        f"**{container_no}** 의 출고처가 '미정'입니다.\n\n"
+        f"출고처를 먼저 지정해야 선적완료(백업)할 수 있습니다."
+    )
+    button_marker("primary")
+    if st.button("확인", use_container_width=True):
+        st.rerun()
+
+
+def mgmt_undo_last_completed():
+    """관리 페이지에서 방금 선적완료(백업)한 컨테이너를 백업에서 빼내 다시 선적중으로 되돌린다."""
+    snap = st.session_state.get('mgmt_last_completed')
+    if not snap:
+        return False, "되돌릴 선적완료 항목이 없습니다."
+    item = snap['item']
+    cno = item.get('컨테이너 번호')
+    pos = str(item.get('위치') or '').strip()
+    if any(c.get('컨테이너 번호') == cno for c in st.session_state.container_list):
+        st.session_state.pop('mgmt_last_completed', None)
+        return False, "이미 목록에 있어 되돌릴 수 없습니다."
+    positions = [str(i) for i in range(1, 10)]
+    occupied = {
+        str(c.get('위치') or '').strip()
+        for c in st.session_state.container_list if c.get('상태') == '선적중'
+    }
+    if pos in positions and pos in occupied:
+        return False, f"위치 {pos}이(가) 이미 사용 중입니다. 해당 위치를 비운 뒤 다시 시도하세요."
+    restore = dict(item)
+    restore['상태'] = '선적중'
+    restore['완료일시'] = None
+    with st.spinner(f"'{cno}' 되돌리는 중..."):
+        ok, msg = add_row_to_gsheet(restore)
+        if not ok:
+            return False, msg
+        delete_from_backup_sheets([cno], snap['backup_sheet'])  # 백업 중복 제거(베스트에포트)
+    st.session_state.container_list.append(restore)
+    st.session_state.pop('mgmt_last_completed', None)
+    log_change(f"관리 페이지 선적완료 되돌리기: {cno}")
+    return True, None
 
 
 @st.dialog("✏️ 복구 컨테이너 정보 수정")
@@ -113,6 +158,9 @@ st.markdown("#### ✏️ 데이터 수정 및 삭제")
 _del_result = st.session_state.pop("delete_result_msg", None)
 if _del_result:
     getattr(st, _del_result[0])(_del_result[1])
+_mgmt_msg = st.session_state.pop("mgmt_action_msg", None)
+if _mgmt_msg:
+    getattr(st, _mgmt_msg[0])(_mgmt_msg[1])
 
 if st.session_state.container_list:
     container_numbers_for_edit = [c.get('컨테이너 번호', '') for c in st.session_state.container_list]
@@ -172,7 +220,7 @@ if st.session_state.container_list:
             if new_status == '선적중' and new_pos_val and new_pos_val in occupied:
                 st.error(f"위치 {new_pos_val}은(는) 이미 사용 중입니다. 다른 위치를 선택하세요.")
             elif new_status == '선적완료' and str(new_dest or '').strip() == '미정':
-                st.error("출고처가 '미정'인 컨테이너는 선적완료(백업)할 수 없습니다. 출고처를 먼저 지정하세요.")
+                undecided_block_dialog(selected_for_edit)
             else:
                 updated_data = selected_data.copy()
                 updated_data.update({
@@ -193,8 +241,12 @@ if st.session_state.container_list:
                         dok, dres = delete_rows_by_container_nos([selected_for_edit]) if bok else (False, berr)
                     if bok and dok:
                         st.session_state.container_list.pop(selected_idx)
+                        today_str = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
+                        st.session_state['mgmt_last_completed'] = {
+                            'item': updated_data, 'backup_sheet': f"{BACKUP_PREFIX}{today_str}"
+                        }
                         log_change(f"관리 페이지 선적완료 백업: {selected_for_edit}")
-                        st.success(f"'{selected_for_edit}' 선적완료 처리 후 백업했습니다.")
+                        st.session_state["mgmt_action_msg"] = ("success", f"'{selected_for_edit}' 선적완료 처리 후 백업했습니다.")
                         st.rerun()
                     else:
                         st.error(f"선적완료 백업 실패: {berr if not bok else dres}")
@@ -212,6 +264,19 @@ if st.session_state.container_list:
             confirm_delete_dialog(selected_for_edit)
 else:
     st.info("현재 데이터가 없습니다.")
+
+# 방금 선적완료(백업)한 컨테이너 되돌리기 — 수정사항 저장 아래에 배치
+_mgmt_snap = st.session_state.get('mgmt_last_completed')
+_mgmt_undo_label = (f"↩️ 방금 선적완료 되돌리기 ({_mgmt_snap['item'].get('컨테이너 번호')})"
+                    if _mgmt_snap else "↩️ 되돌리기 (최근 선적완료 없음)")
+if st.button(_mgmt_undo_label, use_container_width=True, disabled=not _mgmt_snap, key="mgmt_undo_btn"):
+    _undo_cno = _mgmt_snap['item'].get('컨테이너 번호')
+    ok, err = mgmt_undo_last_completed()
+    if ok:
+        st.session_state["mgmt_action_msg"] = ("success", f"'{_undo_cno}' 선적완료를 되돌렸습니다.")
+        st.rerun()
+    else:
+        st.error(f"되돌리기 실패: {err}")
 
 st.divider()
 st.markdown("#### ⬆️ 데이터 복구")
