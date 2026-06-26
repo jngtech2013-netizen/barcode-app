@@ -192,7 +192,9 @@ if st.session_state.container_list:
             feet_options = ['40', '20']
             current_feet_idx = feet_options.index(str(selected_data.get('피트수', '40')))
             new_feet = st.radio("피트수 수정", options=feet_options, index=current_feet_idx, horizontal=True)
-            new_seal = st.text_input("씰 번호 수정", value=selected_data.get('씰 번호', ''))
+            _seal_val = selected_data.get('씰 번호')
+            _seal_default = '' if _seal_val is None or (isinstance(_seal_val, float) and pd.isna(_seal_val)) or str(_seal_val).strip().lower() == 'nan' else str(_seal_val)
+            new_seal = st.text_input("씰 번호 수정", value=_seal_default)
             status_options = ['선적중', '선적완료']
             current_status = selected_data.get('상태', '선적중')
             current_status_idx = status_options.index(current_status)
