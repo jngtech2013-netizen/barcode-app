@@ -228,6 +228,14 @@ def connect_to_gsheet():
         st.error(f"Google Sheets 연결에 실패했습니다: {e}")
         return None
 
+@st.cache_resource
+def get_stable_worksheet(title):
+    """삭제·이름변경되지 않는 고정 시트(현재 데이터/업데이트 로그)의 워크시트 객체를 캐시한다.
+    spreadsheet.worksheet(title)은 호출마다 시트 목록을 다시 읽어 Sheets 읽기 요청을
+    유발하므로, 자주 쓰는 고정 시트는 캐시해 반복 조회를 없앤다.
+    연결/조회 실패 시 예외를 던져 캐시되지 않게 한다(다음 호출에서 재시도)."""
+    return connect_to_gsheet().worksheet(title)
+
 # --- 서식 강제 함수 ---
 def ensure_text_format(worksheet, column_name):
     # TEXT 서식은 시트에 영구 적용되므로, 매 load/add/update마다 다시 적용할 필요가 없다.
@@ -300,7 +308,7 @@ def log_change(action):
     if spreadsheet is None:
         return
     try:
-        log_sheet = spreadsheet.worksheet(LOG_SHEET_NAME)
+        log_sheet = get_stable_worksheet(LOG_SHEET_NAME)
         timestamp = datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')
         log_sheet.append_row([timestamp, action])
     except Exception as e:
@@ -312,7 +320,7 @@ def load_data_from_gsheet():
     if spreadsheet is None:
         return []
     try:
-        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        worksheet = get_stable_worksheet(MAIN_SHEET_NAME)
         ensure_text_format(worksheet, '씰 번호')
         ensure_sheet_headers(worksheet)
 
@@ -352,7 +360,7 @@ def add_row_to_gsheet(data):
     if spreadsheet is None:
         return False, "Google Sheets에 연결되지 않았습니다."
     try:
-        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        worksheet = get_stable_worksheet(MAIN_SHEET_NAME)
         ensure_text_format(worksheet, '씰 번호')
         ensure_sheet_headers(worksheet)
         data_copy = data.copy()
@@ -379,7 +387,7 @@ def add_rows_to_gsheet_batch(data_list):
     if spreadsheet is None:
         return False, "Google Sheets에 연결되지 않았습니다."
     try:
-        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        worksheet = get_stable_worksheet(MAIN_SHEET_NAME)
         ensure_text_format(worksheet, '씰 번호')
         ensure_sheet_headers(worksheet)
 
@@ -414,7 +422,7 @@ def update_row_in_gsheet(data):
     if spreadsheet is None:
         return False, "Google Sheets에 연결되지 않았습니다."
     try:
-        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        worksheet = get_stable_worksheet(MAIN_SHEET_NAME)
         ensure_text_format(worksheet, '씰 번호')
         ensure_sheet_headers(worksheet)
         container_no = data.get('컨테이너 번호')
@@ -448,7 +456,7 @@ def delete_row_from_gsheet(container_no):
     if spreadsheet is None:
         return False, "Google Sheets에 연결되지 않았습니다."
     try:
-        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        worksheet = get_stable_worksheet(MAIN_SHEET_NAME)
         row_num = find_row_by_container_no(worksheet, container_no)
         if row_num is None:
             return False, f"'{container_no}' 컨테이너를 시트에서 찾을 수 없습니다. '데이터 새로고침' 후 다시 시도해주세요."
@@ -469,7 +477,7 @@ def delete_rows_by_container_nos(container_nos):
     if spreadsheet is None:
         return False, "Google Sheets에 연결되지 않았습니다."
     try:
-        worksheet = spreadsheet.worksheet(MAIN_SHEET_NAME)
+        worksheet = get_stable_worksheet(MAIN_SHEET_NAME)
         target = set(container_nos)
         col_values = worksheet.col_values(1)  # A열 한 번만 읽기
         # 0-based 행 인덱스(헤더=0). 삭제 시 인덱스가 밀리므로 내림차순으로 처리해야 안전.
@@ -866,7 +874,7 @@ def archive_log_sheet(keep_rows=200):
     if spreadsheet is None:
         return False, "Google Sheets에 연결되지 않았습니다."
     try:
-        log_sheet = spreadsheet.worksheet(LOG_SHEET_NAME)
+        log_sheet = get_stable_worksheet(LOG_SHEET_NAME)
         all_values = log_sheet.get_all_values()
         total_rows = len(all_values)
 
