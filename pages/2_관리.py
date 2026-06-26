@@ -393,6 +393,7 @@ if spreadsheet:
                             column_config={
                                 "선택": st.column_config.CheckboxColumn(),
                                 "No.": {**st.column_config.NumberColumn(disabled=True, width=45), "alignment": "center"},
+                                "위치": {**st.column_config.TextColumn("위치", width=45, disabled=True), "alignment": "center"},
                                 "컨테이너 번호": st.column_config.TextColumn(disabled=True),
                                 "출고처": st.column_config.TextColumn(disabled=True),
                                 "피트수": {**st.column_config.TextColumn(disabled=True), "alignment": "center"},
