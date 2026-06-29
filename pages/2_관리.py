@@ -85,11 +85,16 @@ def mgmt_undo_last_completed():
         str(c.get('위치') or '').strip()
         for c in st.session_state.container_list if c.get('상태') == '선적중'
     }
-    if pos in positions and pos in occupied:
-        return False, f"위치 {pos}이(가) 이미 사용 중입니다. 해당 위치를 비운 뒤 다시 시도하세요."
+    note = None
     restore = dict(item)
     restore['상태'] = '선적중'
     restore['완료일시'] = None
+    if pos in positions and pos in occupied:
+        # 원래 위치가 차있으면 차단하지 않고 위치 없이 복원한다.
+        # → 등록 페이지 슬롯엔 안 보이고 관리 페이지 목록에서만 보인다.
+        restore['위치'] = ''
+        note = (f"'{cno}' 선적완료를 되돌렸습니다. 위치 {pos}이(가) 사용 중이라 "
+                f"위치 없이 복원했습니다 — 관리 페이지 목록에서 확인 후 위치를 지정하세요.")
     with st.spinner(f"'{cno}' 되돌리는 중..."):
         ok, msg = add_row_to_gsheet(restore)
         if not ok:
@@ -97,8 +102,8 @@ def mgmt_undo_last_completed():
         delete_from_backup_sheets([cno], snap['backup_sheet'])  # 백업 중복 제거(베스트에포트)
     st.session_state.container_list.append(restore)
     st.session_state.pop('mgmt_last_completed', None)
-    log_change(f"관리 페이지 선적완료 되돌리기: {cno}")
-    return True, None
+    log_change(f"관리 페이지 선적완료 되돌리기: {cno} (위치 {restore.get('위치') or '없음'})")
+    return True, note
 
 
 @st.dialog("✏️ 복구 컨테이너 정보 수정")
@@ -271,12 +276,15 @@ if st.session_state.container_list:
 
         if undo_clicked:
             _undo_cno = st.session_state.get('mgmt_last_completed', {}).get('item', {}).get('컨테이너 번호')
-            ok, err = mgmt_undo_last_completed()
+            ok, note = mgmt_undo_last_completed()
             if ok:
-                st.session_state["mgmt_action_msg"] = ("success", f"'{_undo_cno}' 선적완료를 되돌렸습니다.")
+                if note:
+                    st.session_state["mgmt_action_msg"] = ("warning", note)
+                else:
+                    st.session_state["mgmt_action_msg"] = ("success", f"'{_undo_cno}' 선적완료를 되돌렸습니다.")
                 st.rerun()
             else:
-                st.error(f"되돌리기 실패: {err}")
+                st.error(f"되돌리기 실패: {note}")
 
         if delete_clicked:
             confirm_delete_dialog(selected_for_edit)
@@ -289,12 +297,15 @@ else:
         if st.button(f"↩️ 방금 선적완료 되돌리기 ({_empty_snap['item'].get('컨테이너 번호')})",
                      use_container_width=True, key="mgmt_undo_btn_empty"):
             _undo_cno = _empty_snap['item'].get('컨테이너 번호')
-            ok, err = mgmt_undo_last_completed()
+            ok, note = mgmt_undo_last_completed()
             if ok:
-                st.session_state["mgmt_action_msg"] = ("success", f"'{_undo_cno}' 선적완료를 되돌렸습니다.")
+                if note:
+                    st.session_state["mgmt_action_msg"] = ("warning", note)
+                else:
+                    st.session_state["mgmt_action_msg"] = ("success", f"'{_undo_cno}' 선적완료를 되돌렸습니다.")
                 st.rerun()
             else:
-                st.error(f"되돌리기 실패: {err}")
+                st.error(f"되돌리기 실패: {note}")
 
 st.divider()
 st.markdown("#### ⬆️ 데이터 복구")

@@ -124,11 +124,16 @@ def undo_last_completed():
         str(c.get('위치') or '').strip()
         for c in st.session_state.container_list if c.get('상태') == '선적중'
     }
-    if pos in occupied:
-        return False, f"위치 {pos}이(가) 이미 사용 중입니다. 해당 위치를 비운 뒤 다시 시도하세요."
+    note = None
     restore = original.copy()
     restore['상태'] = '선적중'
     restore['완료일시'] = None
+    if pos and pos in occupied:
+        # 원래 위치가 차있으면 차단하지 않고 위치 없이 복원한다.
+        # → 등록 페이지 슬롯엔 안 보이고 관리 페이지 목록에서만 보인다.
+        restore['위치'] = ''
+        note = (f"'{cno}' 선적완료를 되돌렸습니다. 위치 {pos}이(가) 사용 중이라 "
+                f"위치 없이 복원했습니다 — 관리 페이지에서 확인 후 위치를 지정하세요.")
     with st.spinner(f"'{cno}' 되돌리는 중..."):
         ok, msg = add_row_to_gsheet(restore)
         if not ok:
@@ -136,8 +141,8 @@ def undo_last_completed():
         delete_from_backup_sheets([cno], snap['backup_sheet'])  # 백업 중복 제거(베스트에포트)
     st.session_state.container_list.append(restore)
     st.session_state.pop('last_completed', None)
-    log_change(f"선적완료 되돌리기: {cno} (위치 {pos})")
-    return True, None
+    log_change(f"선적완료 되돌리기: {cno} (위치 {restore.get('위치') or '없음'})")
+    return True, note
 
 def register_new_container(new_container):
     """신규 컨테이너를 시트에 추가하고 세션 목록에 반영한다."""
@@ -402,11 +407,14 @@ with st.container(border=True):
                   if last_snap else "↩️ 되돌리기 (최근 선적완료 없음)")
     if st.button(undo_label, use_container_width=True, disabled=not last_snap, key="undo_complete_btn"):
         _undo_cno = last_snap['item'].get('컨테이너 번호')
-        ok, err = undo_last_completed()
+        ok, note = undo_last_completed()
         if ok:
-            st.session_state["table_action_msg"] = ("success", f"'{_undo_cno}' 선적완료를 되돌렸습니다.")
+            if note:
+                st.session_state["table_action_msg"] = ("warning", note)
+            else:
+                st.session_state["table_action_msg"] = ("success", f"'{_undo_cno}' 선적완료를 되돌렸습니다.")
         else:
-            st.session_state["table_action_msg"] = ("error", f"되돌리기 실패: {err}")
+            st.session_state["table_action_msg"] = ("error", f"되돌리기 실패: {note}")
         st.rerun()
 
     # 미리보기 옵션은 선적중 컨테이너만
