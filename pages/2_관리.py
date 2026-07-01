@@ -399,9 +399,9 @@ if spreadsheet:
 
                         # ✏️ 체크 후 팝업을 닫으면 체크가 남아 재오픈되는 것을 막기 위해 키를 회전해 초기화
                         recovery_editor_key = f"recovery_editor_{selected_backup_sheet}_{st.session_state.get('recovery_editor_rev', 0)}"
-                        # 20행까지는 스크롤 없이 전부 보이고, 21행 이상이면 스크롤이 생기게 높이 고정
-                        # (헤더 1행 + 데이터 최대 20행, 한 행당 35px + 테두리 보정 3px)
-                        recovery_editor_height = (min(len(recoverable_df) + 1, 21)) * 35 + 3
+                        # 행 수만큼 높이를 잡아 스크롤 없이 전부 보이게 한다
+                        # (헤더 1행 + 데이터 전체, 한 행당 35px + 테두리 보정 3px)
+                        recovery_editor_height = (len(recoverable_df) + 1) * 35 + 3
                         edited_df = st.data_editor(
                             recoverable_df,
                             column_order=display_order,
