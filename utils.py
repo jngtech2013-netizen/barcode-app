@@ -236,6 +236,48 @@ def get_stable_worksheet(title):
     연결/조회 실패 시 예외를 던져 캐시되지 않게 한다(다음 호출에서 재시도)."""
     return connect_to_gsheet().worksheet(title)
 
+# --- 시트 읽기 세션 캐시 (읽기 쿼터 절약) ---
+# Streamlit은 위젯을 건드릴 때마다 페이지 전체를 재실행하므로, 재실행마다
+# spreadsheet.worksheets()나 get_all_values()를 다시 부르면 Sheets 읽기 쿼터
+# (분당 60회)를 금방 초과한다(예: 관리 페이지에서 씰 번호 연속 수정 시 429).
+# 데이터를 바꾸지 않는 재실행에서는 세션에 캐시한 값을 재사용하고, 실제 쓰기가
+# 일어나면 invalidate_sheet_caches()로 캐시를 비워 다음 읽기에서 최신값을 다시
+# 가져온다. → "내가 방금 한 수정"은 항상 즉시 반영된다.
+_WS_MAP_CACHE_KEY = "_ws_map_cache"
+_SHEET_VALUES_CACHE_KEY = "_sheet_values_cache"
+
+def get_worksheets_map(spreadsheet=None):
+    """{시트명: Worksheet} 맵을 세션에 캐시해 반환한다.
+    worksheets()는 호출당 읽기 1회이므로 재실행마다 다시 부르지 않도록 캐시한다."""
+    cache = st.session_state.get(_WS_MAP_CACHE_KEY)
+    if cache is None:
+        if spreadsheet is None:
+            spreadsheet = connect_to_gsheet()
+        if spreadsheet is None:
+            return {}
+        cache = {w.title: w for w in spreadsheet.worksheets()}
+        st.session_state[_WS_MAP_CACHE_KEY] = cache
+    return cache
+
+def get_worksheet_titles(spreadsheet=None):
+    """캐시된 워크시트 목록(제목 리스트)을 반환한다."""
+    return list(get_worksheets_map(spreadsheet).keys())
+
+def get_sheet_values_cached(title, spreadsheet=None):
+    """시트의 get_all_values() 결과를 세션에 캐시해 반환한다. 시트가 없으면 None."""
+    cache = st.session_state.setdefault(_SHEET_VALUES_CACHE_KEY, {})
+    if title not in cache:
+        ws = get_worksheets_map(spreadsheet).get(title)
+        if ws is None:
+            return None
+        cache[title] = ws.get_all_values()
+    return cache[title]
+
+def invalidate_sheet_caches():
+    """시트를 변경하는 쓰기 작업 후 호출해 세션 읽기 캐시를 무효화한다."""
+    st.session_state.pop(_WS_MAP_CACHE_KEY, None)
+    st.session_state.pop(_SHEET_VALUES_CACHE_KEY, None)
+
 # --- 서식 강제 함수 ---
 def ensure_text_format(worksheet, column_name):
     # TEXT 서식은 시트에 영구 적용되므로, 매 load/add/update마다 다시 적용할 필요가 없다.
@@ -376,6 +418,7 @@ def add_row_to_gsheet(data):
         ]
         worksheet.append_row(row_to_insert, value_input_option='USER_ENTERED')
         log_change(f"신규 등록: {data_copy.get('컨테이너 번호')}")
+        invalidate_sheet_caches()
         return True, "성공"
     except Exception as e:
         return False, str(e)
@@ -412,6 +455,7 @@ def add_rows_to_gsheet_batch(data_list):
 
         worksheet.append_rows(rows_to_insert, value_input_option='USER_ENTERED')
         log_change(f"일괄 복구: {len(data_list)}개 ({', '.join(container_nos)})")
+        invalidate_sheet_caches()
         return True, "성공"
     except Exception as e:
         return False, str(e)
@@ -446,6 +490,7 @@ def update_row_in_gsheet(data):
         ]
         worksheet.update(f'A{row_num}:{_last_col_letter()}{row_num}', [row_to_update], value_input_option='USER_ENTERED')
         log_change(f"데이터 수정: {container_no}")
+        invalidate_sheet_caches()
         return True, "성공"
     except Exception as e:
         return False, str(e)
@@ -462,6 +507,7 @@ def delete_row_from_gsheet(container_no):
             return False, f"'{container_no}' 컨테이너를 시트에서 찾을 수 없습니다. '데이터 새로고침' 후 다시 시도해주세요."
         worksheet.delete_rows(row_num)
         log_change(f"데이터 삭제: {container_no}")
+        invalidate_sheet_caches()
         return True, "성공"
     except Exception as e:
         return False, str(e)
@@ -503,6 +549,7 @@ def delete_rows_by_container_nos(container_nos):
         ]
         spreadsheet.batch_update({"requests": requests})
         log_change(f"데이터 삭제(일괄): {len(row_indices)}개 ({', '.join(container_nos)})")
+        invalidate_sheet_caches()
         return True, len(row_indices)
     except Exception as e:
         return False, str(e)
@@ -535,13 +582,13 @@ def delete_from_backup_sheets(container_nos, source_sheet_name):
             return False, f"시트명 형식을 인식할 수 없습니다: {source_sheet_name}"
 
         total_deleted = 0
-        all_sheet_titles = [s.title for s in spreadsheet.worksheets()]
+        ws_map = get_worksheets_map(spreadsheet)
 
         for sheet_name in target_sheets:
-            if sheet_name not in all_sheet_titles:
+            ws = ws_map.get(sheet_name)
+            if ws is None:
                 continue
             try:
-                ws = spreadsheet.worksheet(sheet_name)
                 all_values = ws.get_all_values()
                 if len(all_values) < 2:
                     continue
@@ -567,6 +614,7 @@ def delete_from_backup_sheets(container_nos, source_sheet_name):
                 continue
 
         log_change(f"백업 시트 정리: {len(container_nos)}개 복구 후 {target_sheets}에서 {total_deleted}행 삭제")
+        invalidate_sheet_caches()
         return True, total_deleted
 
     except Exception as e:
@@ -616,12 +664,12 @@ def update_row_in_backup_sheets(data, source_sheet_name):
             for header in SHEET_HEADERS
         ]
 
-        all_sheet_titles = [s.title for s in spreadsheet.worksheets()]
+        ws_map = get_worksheets_map(spreadsheet)
         updated_count = 0
         for sheet_name in target_sheets:
-            if sheet_name not in all_sheet_titles:
+            ws = ws_map.get(sheet_name)
+            if ws is None:
                 continue
-            ws = spreadsheet.worksheet(sheet_name)
             ensure_text_format(ws, '씰 번호')
             ensure_sheet_headers(ws)
             row_num = find_row_by_container_no(ws, container_no)
@@ -634,6 +682,7 @@ def update_row_in_backup_sheets(data, source_sheet_name):
             return False, f"'{container_no}'를 백업 시트에서 찾을 수 없습니다."
 
         log_change(f"백업 데이터 수정: {container_no} ({', '.join(target_sheets)})")
+        invalidate_sheet_caches()
         return True, updated_count
     except Exception as e:
         return False, str(e)
@@ -706,6 +755,7 @@ def backup_data_to_new_sheet(container_data):
             if not df_new.empty:
                 new_sheet.update('A2', df_new.values.tolist(), value_input_option='USER_ENTERED')
 
+        invalidate_sheet_caches()
         return True, None
     except Exception as e:
         return False, str(e)
@@ -830,6 +880,7 @@ def move_containers_between_backup_sheets(container_nos, source_sheet_name, targ
 
         log_change(f"백업 이동: {container_nos} → '{source_sheet_name}'에서 '{target_daily_name}'으로 이동" +
                    (" (완료일시 수정)" if update_completion_date else ""))
+        invalidate_sheet_caches()
         return True, len(rows_to_move)
 
     except Exception as e:
@@ -861,6 +912,7 @@ def cleanup_old_daily_sheets(months=3):
 
         if deleted_sheets:
             log_change(f"일별 백업 정리: {len(deleted_sheets)}개 시트 삭제 ({', '.join(deleted_sheets)})")
+            invalidate_sheet_caches()
 
         return True, deleted_sheets
 
@@ -910,6 +962,7 @@ def archive_log_sheet(keep_rows=200):
         log_sheet.update('A1', rows_to_keep, value_input_option='USER_ENTERED')
 
         log_change(f"로그 아카이브: {len(rows_to_archive)}행 → '{archive_name}'으로 이관, {len(rows_to_keep)}행 유지")
+        invalidate_sheet_caches()
         return True, (archive_name, len(rows_to_archive))
 
     except Exception as e:

@@ -17,6 +17,8 @@ from utils import (
     move_containers_between_backup_sheets,
     log_change,
     connect_to_gsheet,
+    get_worksheets_map,
+    get_sheet_values_cached,
     BACKUP_PREFIX,
     get_destinations,
     apply_sidebar_style,
@@ -312,9 +314,10 @@ st.markdown("#### ⬆️ 데이터 복구")
 st.info("실수로 데이터를 초기화했거나 이전 데이터를 추가할 때 사용하세요.")
 
 spreadsheet = connect_to_gsheet()
-# 워크시트 목록은 페이지당 1회만 조회해 모든 섹션에서 재사용한다.
-# (gspread는 .worksheet(이름) 호출마다 목록을 다시 읽어 Sheets 읽기 요청이 급증함)
-ws_by_title = {w.title: w for w in spreadsheet.worksheets()} if spreadsheet else {}
+# 워크시트 목록은 세션에 캐시해 재사용한다. 위젯 조작으로 페이지가 재실행돼도
+# 데이터를 바꾸지 않았으면 캐시를 그대로 써서 Sheets 읽기 요청을 아낀다.
+# (쓰기 작업 시 utils가 invalidate_sheet_caches()로 캐시를 비워 최신값을 다시 읽음)
+ws_by_title = get_worksheets_map(spreadsheet) if spreadsheet else {}
 all_worksheet_titles = list(ws_by_title.keys())
 if spreadsheet:
     all_sheets = all_worksheet_titles
@@ -337,8 +340,7 @@ if spreadsheet:
 
         if selected_backup_sheet:
             try:
-                backup_worksheet = ws_by_title.get(selected_backup_sheet)
-                all_values = backup_worksheet.get_all_values()
+                all_values = get_sheet_values_cached(selected_backup_sheet) or []
 
                 if len(all_values) < 2:
                     st.info("선택한 백업 시트에는 데이터가 없습니다.")
@@ -397,11 +399,15 @@ if spreadsheet:
 
                         # ✏️ 체크 후 팝업을 닫으면 체크가 남아 재오픈되는 것을 막기 위해 키를 회전해 초기화
                         recovery_editor_key = f"recovery_editor_{selected_backup_sheet}_{st.session_state.get('recovery_editor_rev', 0)}"
+                        # 20행까지는 스크롤 없이 전부 보이고, 21행 이상이면 스크롤이 생기게 높이 고정
+                        # (헤더 1행 + 데이터 최대 20행, 한 행당 35px + 테두리 보정 3px)
+                        recovery_editor_height = (min(len(recoverable_df) + 1, 21)) * 35 + 3
                         edited_df = st.data_editor(
                             recoverable_df,
                             column_order=display_order,
                             use_container_width=True,
                             hide_index=True,
+                            height=recovery_editor_height,
                             key=recovery_editor_key,
                             column_config={
                                 "선택": st.column_config.CheckboxColumn(),
@@ -544,8 +550,8 @@ with st.container(border=True):
     spreadsheet_log = connect_to_gsheet()
     if spreadsheet_log:
         try:
-            log_ws = ws_by_title.get("업데이트 로그")
-            log_row_count = len(log_ws.get_all_values()) if log_ws else 0
+            log_values = get_sheet_values_cached("업데이트 로그")
+            log_row_count = len(log_values) if log_values else 0
             if log_row_count > 1000:
                 st.warning(f"현재 로그: {log_row_count}행 — 아카이브를 권장합니다.")
             else:
@@ -587,8 +593,7 @@ if spreadsheet_move:
             # 원본 시트 데이터 로드
             if source_sheet:
                 try:
-                    source_ws = ws_by_title.get(source_sheet)
-                    source_values = source_ws.get_all_values()
+                    source_values = get_sheet_values_cached(source_sheet) or []
 
                     if len(source_values) < 2:
                         st.warning("선택한 시트에 데이터가 없습니다.")
