@@ -29,7 +29,7 @@ from utils import (
 
 st.set_page_config(page_title="관리 페이지", layout="wide", initial_sidebar_state="expanded")
 
-apply_sidebar_style('label, p { font-size: 15px !important; }')
+apply_sidebar_style('label, p { font-size: 15px !important; } [data-testid="stForm"] *, .st-key-edit_selector *, .st-key-edit_meta * { font-size: 17px !important; }')
 
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
@@ -178,10 +178,11 @@ if st.session_state.container_list:
     if selected_data:
         registration_time = selected_data.get('등록일시')
         completion_time = selected_data.get('완료일시')
-        if registration_time and pd.notna(registration_time):
-            st.info(f"등록일시: {pd.to_datetime(registration_time).strftime('%Y-%m-%d %H:%M')}")
-        if completion_time and pd.notna(completion_time):
-            st.info(f"완료일시: {pd.to_datetime(completion_time).strftime('%Y-%m-%d %H:%M')}")
+        with st.container(key="edit_meta"):
+            if registration_time and pd.notna(registration_time):
+                st.info(f"등록일시: {pd.to_datetime(registration_time).strftime('%Y-%m-%d %H:%M')}")
+            if completion_time and pd.notna(completion_time):
+                st.info(f"완료일시: {pd.to_datetime(completion_time).strftime('%Y-%m-%d %H:%M')}")
 
         with st.form(key=f"edit_form_{selected_for_edit}"):
             st.write(f"**'{selected_for_edit}' 정보 수정**")
