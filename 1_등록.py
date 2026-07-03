@@ -273,7 +273,7 @@ if st.session_state.get("submission_success", False):
     clear_form_inputs()
     st.session_state.submission_success = False
 
-apply_sidebar_style('.element-container:has(.reg-section-mk) ~ .element-container * { font-size: 18px !important; }')
+apply_sidebar_style('.element-container:has(.reg-section-mk) ~ .element-container * { font-size: 17px !important; }')
 
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
