@@ -273,7 +273,7 @@ if st.session_state.get("submission_success", False):
     clear_form_inputs()
     st.session_state.submission_success = False
 
-apply_sidebar_style('[data-testid="stTextInput"] input { font-size: 20px !important; }')
+apply_sidebar_style('.element-container:has(.reg-section-mk) ~ .element-container * { font-size: 18px !important; }')
 
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
@@ -452,6 +452,7 @@ st.divider()
 
 st.markdown("#### 📝 신규 컨테이너 등록")
 with st.container(border=True):
+    st.markdown('<div class="reg-section-mk" style="display:none"></div>', unsafe_allow_html=True)
     destinations = get_destinations()
     # '미정'(출고처 미지정)을 항상 선택할 수 있도록 옵션 앞에 추가
     dest_options = destinations if UNDECIDED in destinations else [UNDECIDED] + destinations
