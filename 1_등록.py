@@ -13,6 +13,7 @@ from utils import (
     backup_data_to_new_sheet,
     delete_from_backup_sheets,
     BACKUP_PREFIX,
+    RESTORE_SLOT,
     log_change,
     delete_rows_by_container_nos,
     apply_sidebar_style,
@@ -128,7 +129,7 @@ def undo_last_completed():
     restore = original.copy()
     restore['상태'] = '선적중'
     restore['완료일시'] = None
-    if pos and pos in occupied:
+    if pos and pos != RESTORE_SLOT and pos in occupied:  # 복원 슬롯은 여러 개 허용
         # 원래 위치가 차있으면 차단하지 않고 위치 없이 복원한다.
         # → 등록 페이지 슬롯엔 안 보이고 관리 페이지 목록에서만 보인다.
         restore['위치'] = ''
@@ -172,8 +173,11 @@ def edit_container_dialog(container_no):
     st.markdown(f"**{container_no}**")
 
     cur_pos = str(data.get('위치') or '').strip()
-    pos_index = POSITIONS.index(cur_pos) if cur_pos in POSITIONS else 0
-    new_pos = st.radio("위치", options=POSITIONS, index=pos_index, horizontal=True)
+    # 복원 슬롯에 있는 컨테이너는 '복원' 유지 또는 1~9로 이동을 선택할 수 있다.
+    # (일반 슬롯 컨테이너에게는 복원 슬롯 옵션을 노출하지 않는다 — 복원 전용)
+    pos_options = POSITIONS + [RESTORE_SLOT] if cur_pos == RESTORE_SLOT else POSITIONS
+    pos_index = pos_options.index(cur_pos) if cur_pos in pos_options else 0
+    new_pos = st.radio("위치", options=pos_options, index=pos_index, horizontal=True)
 
     dest_options = get_destinations()
     current_dest = data.get('출고처', '') if pd.notna(data.get('출고처')) else ''
@@ -201,7 +205,7 @@ def edit_container_dialog(container_no):
             for c in st.session_state.container_list
             if c.get('상태') == '선적중' and c.get('컨테이너 번호') != container_no
         }
-        if new_pos in occupied:
+        if new_pos != RESTORE_SLOT and new_pos in occupied:  # 복원 슬롯은 여러 개 허용
             st.error(f"위치 {new_pos}은(는) 이미 사용 중입니다. 다른 위치를 선택하세요.")
         else:
             updated = data.copy()
@@ -285,15 +289,18 @@ with st.container(border=True):
     printer_ip = st.session_state.get("printer_ip", "")
 
     # --- 위치(1~9) 슬롯 매핑: 위치가 지정된 선적중 컨테이너만 슬롯에 표시 ---
-    # 복구/레거시 등 위치값이 없는 컨테이너는 등록 슬롯에 들어오지 않으며,
-    # 관리(수정) 페이지에서만 다룬다.
+    # 위치가 '복원'인 컨테이너(관리 페이지에서 개별 복원한 것)는 복원 전용 슬롯에 표시한다.
+    # 그 외 위치값이 없는 레거시 컨테이너는 관리(수정) 페이지에서만 다룬다.
     slot_map = {}
+    restore_slot_containers = []  # 복원 슬롯은 여러 개가 동시에 들어올 수 있다
     for c in st.session_state.container_list:
         if c.get('상태') != '선적중':
             continue
         pos = str(c.get('위치') or '').strip()
         if pos in POSITIONS and pos not in slot_map:
             slot_map[pos] = c
+        elif pos == RESTORE_SLOT:
+            restore_slot_containers.append(c)
 
     def _fmt_dt(v):
         t = pd.to_datetime(v, errors='coerce')
@@ -305,26 +312,27 @@ with st.container(border=True):
     def _txt(v):
         return str(v) if v is not None and pd.notna(v) else ''
 
-    table_rows = []
-    for pos in POSITIONS:
-        c = slot_map.get(pos)
-        if c:
-            dest_val = _txt(c.get('출고처'))
-            table_rows.append({
-                '출력선택': False, '위치': pos,
-                '컨테이너 번호': _txt(c.get('컨테이너 번호')),
-                # 출고처가 미정이면 셀에서도 눈에 띄게 경고 표시
-                '출고처': (f"⚠️ {UNDECIDED}" if dest_val == UNDECIDED else dest_val),
-                '피트수': _txt(c.get('피트수')),
-                '씰 번호': _seal_str(c.get('씰 번호')),
-                '등록일시': _fmt_dt(c.get('등록일시')),
-                '선적완료': False, '수정': False,
-            })
-        else:
-            table_rows.append({
+    def _slot_row(pos, c):
+        if not c:
+            return {
                 '출력선택': False, '위치': pos, '컨테이너 번호': '', '출고처': '',
                 '피트수': '', '씰 번호': '', '등록일시': '', '선적완료': False, '수정': False,
-            })
+            }
+        dest_val = _txt(c.get('출고처'))
+        return {
+            '출력선택': False, '위치': pos,
+            '컨테이너 번호': _txt(c.get('컨테이너 번호')),
+            # 출고처가 미정이면 셀에서도 눈에 띄게 경고 표시
+            '출고처': (f"⚠️ {UNDECIDED}" if dest_val == UNDECIDED else dest_val),
+            '피트수': _txt(c.get('피트수')),
+            '씰 번호': _seal_str(c.get('씰 번호')),
+            '등록일시': _fmt_dt(c.get('등록일시')),
+            '선적완료': False, '수정': False,
+        }
+
+    table_rows = [_slot_row(pos, slot_map.get(pos)) for pos in POSITIONS]
+    # 복원 전용 슬롯: 관리 페이지에서 개별 복원한 컨테이너가 있을 때만 행이 나타난다
+    table_rows.extend(_slot_row(RESTORE_SLOT, c) for c in restore_slot_containers)
 
     display_df = pd.DataFrame(table_rows)
     column_order = ['출력선택', '위치', '컨테이너 번호', '출고처', '피트수', '씰 번호', '등록일시', '선적완료', '수정']
@@ -336,7 +344,7 @@ with st.container(border=True):
         column_order=column_order,
         use_container_width=True,
         hide_index=True,
-        height=(len(POSITIONS) + 1) * 35 + 3,  # 정확히 9개 행만 스크롤 없이 보이도록 (헤더 1 + 9행)
+        height=(len(table_rows) + 1) * 35 + 3,  # 모든 슬롯 행(1~9 + 복원)이 스크롤 없이 보이도록 (헤더 1 + 행 수)
         key=editor_key,
         column_config={
             "출력선택": st.column_config.CheckboxColumn("🖨️", default=False, width=50, help="해당 위치의 컨테이너를 출력 대상으로 선택합니다."),

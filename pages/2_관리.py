@@ -20,6 +20,7 @@ from utils import (
     get_worksheets_map,
     get_sheet_values_cached,
     BACKUP_PREFIX,
+    RESTORE_SLOT,
     get_destinations,
     apply_sidebar_style,
     render_app_title,
@@ -188,8 +189,10 @@ if st.session_state.container_list:
             st.write(f"**'{selected_for_edit}' 정보 수정**")
             _positions = [str(i) for i in range(1, 10)]
             cur_pos = str(selected_data.get('위치') or '').strip()
-            cur_pos_idx = _positions.index(cur_pos) if cur_pos in _positions else 0
-            new_position = st.radio("위치 수정", options=_positions, index=cur_pos_idx, horizontal=True)
+            # 복원 슬롯(개별 복원) 컨테이너는 '복원' 유지 옵션을 함께 보여준다
+            _pos_options = _positions + [RESTORE_SLOT] if cur_pos == RESTORE_SLOT else _positions
+            cur_pos_idx = _pos_options.index(cur_pos) if cur_pos in _pos_options else 0
+            new_position = st.radio("위치 수정", options=_pos_options, index=cur_pos_idx, horizontal=True)
             dest_options = get_destinations()
             current_dest = selected_data.get('출고처', '')
             # 설정에서 삭제된 출고처라도 기존 값이 보이도록 목록 앞에 추가
@@ -234,7 +237,7 @@ if st.session_state.container_list:
                 for c in st.session_state.container_list
                 if c.get('상태') == '선적중' and c.get('컨테이너 번호') != selected_for_edit
             }
-            if new_status == '선적중' and new_pos_val and new_pos_val in occupied:
+            if new_status == '선적중' and new_pos_val and new_pos_val != RESTORE_SLOT and new_pos_val in occupied:  # 복원 슬롯은 여러 개 허용
                 st.error(f"위치 {new_pos_val}은(는) 이미 사용 중입니다. 다른 위치를 선택하세요.")
             elif new_status == '선적완료' and str(new_dest or '').strip() == '미정':
                 undecided_block_dialog(selected_for_edit)
@@ -450,21 +453,24 @@ if spreadsheet:
                                     row_to_add = {k: v for k, v in row.to_dict().items() if k in SHEET_HEADERS}
                                     row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시'), errors='coerce')
                                     row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'), errors='coerce')
-                                    row_to_add['위치'] = ''  # 복구 데이터는 등록 페이지 슬롯에 들어가지 않게 위치를 비운다
+                                    row_to_add['위치'] = RESTORE_SLOT  # 개별 복구는 등록 페이지 '복원' 전용 슬롯으로 들어간다
+                                    # 등록 페이지 슬롯은 '선적중'만 표시하므로 되살릴 때 상태를 선적중으로 되돌린다
+                                    row_to_add['상태'] = '선적중'
+                                    row_to_add['완료일시'] = ''
                                     rows_to_add.append(row_to_add)
 
                                 # 메인 시트에 일괄 복구
                                 success, msg = add_rows_to_gsheet_batch(rows_to_add)
                                 if success:
                                     st.session_state.container_list.extend(rows_to_add)
-                                    log_change(f"데이터 복구: '{selected_backup_sheet}'에서 {len(rows_to_add)}개 선택 복구")
+                                    log_change(f"데이터 복구: '{selected_backup_sheet}'에서 {len(rows_to_add)}개 선택 복구 (복원 슬롯)")
 
                                     # 해당 일별/월별 시트에서만 삭제
                                     container_nos = [r.get('컨테이너 번호') for r in rows_to_add]
                                     with st.spinner('백업 시트에서 복구된 데이터를 정리하는 중...'):
                                         del_success, del_result = delete_from_backup_sheets(container_nos, selected_backup_sheet)
                                     if del_success:
-                                        st.success(f"{len(rows_to_add)}개 복구 완료, 백업 시트에서 {del_result}행 정리됐습니다.")
+                                        st.success(f"{len(rows_to_add)}개 복구 완료 — 등록 페이지 '복원' 슬롯에 표시됩니다. (백업 시트에서 {del_result}행 정리)")
                                     else:
                                         st.warning(f"복구는 완료됐으나 백업 시트 정리 중 오류 발생: {del_result}")
                                     st.rerun()
@@ -472,36 +478,13 @@ if spreadsheet:
                                     st.error(f"복구 중 오류 발생: {msg}")
 
                         st.divider()
-                        st.markdown("##### 시트 전체 복구 (현재 목록에 없는 데이터만)")
-                        st.warning("주의: 이 작업은 위 테이블에 보이는 모든 컨테이너를 한 번에 추가합니다.")
+                        st.markdown("##### 시트 전체 복구")
 
-                        button_marker("success")
+                        # 전체 복구는 사용하지 않는다 — 버튼을 누르면 안내 오류만 표시한다.
+                        button_marker("neutral")
                         if st.button(f"'{selected_backup_sheet}' 시트의 모든 데이터 추가하기", use_container_width=True):
-                            rows_to_add = []
-                            for index, row in recoverable_df.iterrows():
-                                row_to_add = {k: v for k, v in row.to_dict().items() if k in SHEET_HEADERS}
-                                row_to_add['등록일시'] = pd.to_datetime(row_to_add.get('등록일시'), errors='coerce')
-                                row_to_add['완료일시'] = pd.to_datetime(row_to_add.get('완료일시'), errors='coerce')
-                                row_to_add['위치'] = ''  # 복구 데이터는 등록 페이지 슬롯에 들어가지 않게 위치를 비운다
-                                rows_to_add.append(row_to_add)
-
-                            # 메인 시트에 일괄 복구
-                            success, msg = add_rows_to_gsheet_batch(rows_to_add)
-                            if success:
-                                st.session_state.container_list.extend(rows_to_add)
-                                log_change(f"데이터 복구: '{selected_backup_sheet}'에서 {len(rows_to_add)}개 전체 복구")
-
-                                # 해당 일별/월별 시트에서만 삭제
-                                container_nos = [r.get('컨테이너 번호') for r in rows_to_add]
-                                with st.spinner('백업 시트에서 복구된 데이터를 정리하는 중...'):
-                                    del_success, del_result = delete_from_backup_sheets(container_nos, selected_backup_sheet)
-                                if del_success:
-                                    st.success(f"{len(rows_to_add)}개 복구 완료, 백업 시트에서 {del_result}행 정리됐습니다.")
-                                else:
-                                    st.warning(f"복구는 완료됐으나 백업 시트 정리 중 오류 발생: {del_result}")
-                                st.rerun()
-                            else:
-                                st.error(f"복구 중 오류 발생: {msg}")
+                            st.error("⛔ 시트 전체 복구는 사용할 수 없습니다. "
+                                     "위의 '개별 컨테이너 선택 복구'에서 필요한 컨테이너만 선택해 복구하세요.")
 
             except Exception as e:
                 st.error(f"백업 시트 정보를 불러오는 중 오류가 발생했습니다: {e}")

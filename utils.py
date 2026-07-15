@@ -12,6 +12,7 @@ SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', 
 LOG_SHEET_NAME = "업데이트 로그"
 KST = timezone(timedelta(hours=9))
 BACKUP_PREFIX = "백업_"
+RESTORE_SLOT = "복원"  # 관리 페이지에서 개별 복원한 컨테이너가 들어가는 등록 페이지 전용 슬롯 위치값
 DEFAULT_DESTINATIONS = ['베트남', '박닌', '하택', '위해', '중원', '영성', '베트남전장', '흥옌', '북경', '락릉', '타이닌', '기타']
 DEFAULT_PRINTER_IP = "192.168.0.99"
 
@@ -406,9 +407,14 @@ def add_row_to_gsheet(data):
         ensure_text_format(worksheet, '씰 번호')
         ensure_sheet_headers(worksheet)
         data_copy = data.copy()
-        if isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
+        # NaT는 datetime의 서브클래스라 strftime에서 죽으므로 isna를 먼저 거른다
+        if data_copy.get('등록일시') is None or pd.isna(data_copy.get('등록일시')):
+            data_copy['등록일시'] = ''
+        elif isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
             data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')
-        if isinstance(data_copy.get('완료일시'), (datetime, pd.Timestamp)):
+        if data_copy.get('완료일시') is None or pd.isna(data_copy.get('완료일시')):
+            data_copy['완료일시'] = ''
+        elif isinstance(data_copy.get('완료일시'), (datetime, pd.Timestamp)):
             data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
 
         row_to_insert = [
@@ -438,14 +444,15 @@ def add_rows_to_gsheet_batch(data_list):
         container_nos = []
         for data in data_list:
             data_copy = data.copy()
-            if isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
-                data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')
-            if pd.isna(data_copy.get('등록일시')) or data_copy.get('등록일시') is None:
+            # NaT는 datetime의 서브클래스라 strftime에서 죽으므로 isna를 먼저 거른다
+            if data_copy.get('등록일시') is None or pd.isna(data_copy.get('등록일시')):
                 data_copy['등록일시'] = ''
-            if isinstance(data_copy.get('완료일시'), (datetime, pd.Timestamp)):
-                data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
-            if pd.isna(data_copy.get('완료일시')) or data_copy.get('완료일시') is None:
+            elif isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
+                data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')
+            if data_copy.get('완료일시') is None or pd.isna(data_copy.get('완료일시')):
                 data_copy['완료일시'] = ''
+            elif isinstance(data_copy.get('완료일시'), (datetime, pd.Timestamp)):
+                data_copy['완료일시'] = pd.to_datetime(data_copy['완료일시']).strftime('%Y-%m-%d %H:%M:%S')
             rows_to_insert.append([
                 force_text_seal(data_copy.get(header, "")) if header == '씰 번호'
                 else data_copy.get(header, "")
@@ -475,7 +482,10 @@ def update_row_in_gsheet(data):
             return False, f"'{container_no}' 컨테이너를 시트에서 찾을 수 없습니다. '데이터 새로고침' 후 다시 시도해주세요."
 
         data_copy = data.copy()
-        if isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
+        # NaT는 datetime의 서브클래스라 strftime에서 죽으므로 isna를 먼저 거른다
+        if data_copy.get('등록일시') is None or pd.isna(data_copy.get('등록일시')):
+            data_copy['등록일시'] = ''
+        elif isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
             data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')
 
         if data_copy.get('완료일시') is None or pd.isna(data_copy.get('완료일시')):
@@ -651,7 +661,10 @@ def update_row_in_backup_sheets(data, source_sheet_name):
 
         # 저장용 값 정규화 (update_row_in_gsheet와 동일 규칙)
         data_copy = data.copy()
-        if isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
+        # NaT는 datetime의 서브클래스라 strftime에서 죽으므로 isna를 먼저 거른다
+        if data_copy.get('등록일시') is None or pd.isna(data_copy.get('등록일시')):
+            data_copy['등록일시'] = ''
+        elif isinstance(data_copy.get('등록일시'), (datetime, pd.Timestamp)):
             data_copy['등록일시'] = pd.to_datetime(data_copy['등록일시']).strftime('%Y-%m-%d %H:%M:%S')
         if data_copy.get('완료일시') is None or pd.isna(data_copy.get('완료일시')):
             data_copy['완료일시'] = ''
