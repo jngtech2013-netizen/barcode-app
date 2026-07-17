@@ -359,10 +359,12 @@ apply_sidebar_style('''
 .st-key-cno_row div[data-testid="stColumn"]:last-child { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; }
 /* OCR 팝업: 파일 업로더의 영문 안내(드래그/용량 제한) 숨김 */
 .st-key-ocr_upload [data-testid="stFileUploaderDropzoneInstructions"] { display: none !important; }
-/* OCR 팝업: 카메라 로딩 중에만 높이를 미리 확보해 출렁임 완화.
-   (촬영 후에는 min-height를 풀어 Clear photo 아래 빈 여백이 생기지 않게 하고,
-   미리보기는 원본 비율 그대로 보여 찍히는 사진과 방향이 일치한다) */
-.st-key-ocr_camera [data-testid="stCameraInput"]:has(video) { min-height: 320px; }
+/* OCR 팝업: 카메라 미리보기 박스 높이를 항상 300px로 고정해 로딩/촬영 시
+   화면이 출렁이지 않게 한다. 영상과 촬영 결과는 비율을 유지한 채(contain)
+   박스 안에 담기므로 찍히는 사진과 방향도 일치한다. */
+.st-key-ocr_camera [data-testid="stCameraInputWebcamStyledBox"] { height: 300px !important; min-height: 300px !important; overflow: hidden; }
+.st-key-ocr_camera [data-testid="stCameraInputWebcamStyledBox"] video,
+.st-key-ocr_camera [data-testid="stCameraInput"] img { height: 300px !important; width: 100% !important; object-fit: contain !important; background: #000; }
 /* OCR 팝업: 안내 메시지 여백 축소 */
 [data-testid="stDialog"] [data-testid="stAlert"] { padding: 0.4rem 0.75rem; }
 ''')
