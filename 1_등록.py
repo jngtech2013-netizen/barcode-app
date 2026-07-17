@@ -291,21 +291,7 @@ def ocr_dialog():
     (위젯 키 충돌을 피하려고 값은 ocr_apply_no에 담아 다음 런에서 반영한다)"""
     tab_cam, tab_up = st.tabs(["📸 카메라 촬영", "🖼️ 사진 업로드"])
     with tab_cam:
-        # st.camera_input은 전면 카메라 고정 + 미리보기 영역 크기가 출렁여서
-        # 파일 입력에 capture="environment"를 부여해 폰 기본 카메라 앱(후면)을
-        # 바로 여는 방식을 쓴다. 원본 해상도로 찍혀 인식률에도 유리하다.
-        cam_img = st.file_uploader("아래 버튼을 누르면 카메라가 열립니다",
-                                   type=["jpg", "jpeg", "png"], key="ocr_camera_file")
-        components.html("""
-        <script>
-        const attach = () => {
-            const inp = window.parent.document.querySelector('.st-key-ocr_camera_file input[type="file"]');
-            if (inp) { inp.setAttribute('capture', 'environment'); }
-            else { setTimeout(attach, 300); }
-        };
-        attach();
-        </script>
-        """, height=0)
+        cam_img = st.camera_input("번호가 크고 정면으로 보이게 촬영하세요", key="ocr_camera")
     with tab_up:
         up_img = st.file_uploader("촬영해 둔 사진 선택", type=["jpg", "jpeg", "png"], key="ocr_upload")
     ocr_img = cam_img or up_img
@@ -371,7 +357,39 @@ apply_sidebar_style('''
 .st-key-cno_row div[data-testid="stHorizontalBlock"] { flex-direction: row !important; flex-wrap: nowrap !important; }
 .st-key-cno_row div[data-testid="stColumn"]:first-child { flex: 1 1 auto !important; width: auto !important; min-width: 0 !important; }
 .st-key-cno_row div[data-testid="stColumn"]:last-child { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; }
+/* OCR 팝업: 파일 업로더의 영문 안내(드래그/용량 제한) 숨김 */
+.st-key-ocr_upload [data-testid="stFileUploaderDropzoneInstructions"] { display: none !important; }
+/* OCR 팝업: 카메라 미리보기 높이를 미리 확보해 로딩 시 커졌다 줄어드는 출렁임 완화 */
+.st-key-ocr_camera [data-testid="stCameraInput"] { min-height: 320px; }
+.st-key-ocr_camera video { object-fit: cover; }
 ''')
+
+# 모바일에서 st.camera_input이 후면 카메라를 우선 사용하도록 브라우저의 카메라
+# 요청(getUserMedia)에 facingMode=environment 힌트를 심는다. (카메라 위젯이
+# 생성되기 전에 적용되도록 페이지 로드 시점에 한 번 실행. 데스크톱 웹캠은
+# 'ideal' 힌트라 영향 없음)
+components.html("""
+<script>
+(function() {
+    try {
+        const md = window.parent.navigator.mediaDevices;
+        if (md && !md._rearCameraPatched) {
+            const orig = md.getUserMedia.bind(md);
+            md.getUserMedia = (constraints) => {
+                try {
+                    if (constraints && constraints.video) {
+                        if (typeof constraints.video !== 'object') constraints.video = {};
+                        constraints.video.facingMode = { ideal: 'environment' };
+                    }
+                } catch (e) {}
+                return orig(constraints);
+            };
+            md._rearCameraPatched = true;
+        }
+    } catch (e) {}
+})();
+</script>
+""", height=0)
 
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
