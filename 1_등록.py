@@ -382,7 +382,11 @@ components.html("""
                 try {
                     if (constraints && constraints.video) {
                         if (typeof constraints.video !== 'object') constraints.video = {};
-                        constraints.video.facingMode = { ideal: 'environment' };
+                        // 특정 카메라를 지정한 요청(전환 버튼의 deviceId)은 그대로 두고,
+                        // 카메라 미지정 요청에만 후면 우선 힌트를 준다.
+                        if (!constraints.video.deviceId) {
+                            constraints.video.facingMode = { ideal: 'environment' };
+                        }
                     }
                 } catch (e) {}
                 return orig(constraints);
