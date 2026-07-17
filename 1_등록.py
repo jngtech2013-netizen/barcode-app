@@ -2,10 +2,16 @@ import streamlit as st
 import pandas as pd
 import qrcode
 import base64
+import hashlib
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
 import streamlit.components.v1 as components
 
+from container_ocr import (
+    recognize_container_numbers,
+    OcrError,
+    OCR_SPACE_DEMO_KEY,
+)
 from utils import (
     load_data_from_gsheet,
     add_row_to_gsheet,
@@ -41,6 +47,23 @@ def generate_qrcode(data: str) -> bytes:
     img.save(fp, format="PNG")
     fp.seek(0)
     return fp.getvalue()
+
+def run_container_ocr(image_bytes: bytes):
+    """사진 OCR 결과를 세션에 캐시해 rerun마다 API를 재호출하지 않는다.
+
+    반환: ("ok", 후보목록) 또는 ("error", 오류메시지).
+    오류도 캐시해 실패한 호출이 rerun마다 반복되지 않게 하고,
+    '다시 시도' 버튼이 해당 캐시를 지워 재호출한다.
+    """
+    key = hashlib.md5(image_bytes).hexdigest()
+    cache = st.session_state.setdefault("ocr_results", {})
+    if key not in cache:
+        api_key = st.secrets.get("ocrspace_api_key", OCR_SPACE_DEMO_KEY)
+        try:
+            cache[key] = ("ok", recognize_container_numbers(image_bytes, api_key))
+        except OcrError as e:
+            cache[key] = ("error", str(e))
+    return key, cache[key]
 
 def send_zpl_to_printer(printer_ip, zpl_code, result_key):
     """브라우저(스마트폰)가 직접 ZT411로 ZPL을 전송 (사내 로컬 네트워크 전용)
@@ -469,6 +492,41 @@ with st.container(border=True):
         st.session_state["form_destination"] = destinations[0] if destinations else UNDECIDED
     st.session_state.setdefault("form_position", "1")
     st.session_state.setdefault("form_seal_no", "")
+
+    with st.expander("📷 사진으로 컨테이너 번호 인식 (OCR)"):
+        tab_cam, tab_up = st.tabs(["📸 카메라 촬영", "🖼️ 사진 업로드"])
+        with tab_cam:
+            cam_img = st.camera_input("번호가 크고 정면으로 보이게 촬영하세요", key="ocr_camera")
+        with tab_up:
+            up_img = st.file_uploader("촬영해 둔 사진 선택", type=["jpg", "jpeg", "png"], key="ocr_upload")
+        ocr_img = cam_img or up_img
+        if ocr_img is not None:
+            with st.spinner("사진에서 컨테이너 번호를 인식하는 중..."):
+                cache_key, (ocr_status, ocr_payload) = run_container_ocr(ocr_img.getvalue())
+            if ocr_status == "error":
+                st.error(f"인식 실패: {ocr_payload}")
+                if st.button("🔄 다시 시도", key="ocr_retry"):
+                    st.session_state.get("ocr_results", {}).pop(cache_key, None)
+                    st.rerun()
+            elif not ocr_payload:
+                st.warning("사진에서 컨테이너 번호를 찾지 못했습니다. "
+                           "번호가 크고 선명하게 보이도록 다시 촬영해 주세요.")
+            else:
+                # 체크디지트(ISO 6346) 일치 후보는 ✅, 불일치는 ⚠️로 표시하고
+                # 버튼을 누르면 아래 컨테이너 번호 입력칸에 채워진다.
+                has_valid = any(ok for _, ok in ocr_payload)
+                if has_valid:
+                    st.success("인식된 번호를 누르면 아래 입력칸에 채워집니다.")
+                else:
+                    st.warning("검증(체크디지트)까지 통과한 번호가 없습니다. "
+                               "후보가 실제 번호와 맞는지 확인 후 사용하세요.")
+                for cno, check_ok in ocr_payload[:5]:
+                    label = f"{'✅' if check_ok else '⚠️'} {cno}"
+                    if st.button(label, key=f"ocr_pick_{cno}", use_container_width=True):
+                        st.session_state["form_container_no"] = cno
+            if st.secrets.get("ocrspace_api_key", OCR_SPACE_DEMO_KEY) == OCR_SPACE_DEMO_KEY:
+                st.caption("⚠️ 지금은 데모용 공용 키로 동작 중입니다 — ocr.space/ocrapi 에서 "
+                           "무료 키를 발급받아 secrets에 `ocrspace_api_key`로 넣어주세요.")
 
     container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
     position = st.radio("2. 위치", options=POSITIONS, horizontal=True, key="form_position")

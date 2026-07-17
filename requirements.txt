@@ -4,3 +4,4 @@ qrcode[pil]
 Pillow
 gspread
 google-auth
+requests
