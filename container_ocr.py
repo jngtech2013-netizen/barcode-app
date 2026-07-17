@@ -111,14 +111,15 @@ def _load_image(image_bytes: bytes) -> Image.Image:
     return img
 
 
-def _compress_pil(img: Image.Image) -> bytes:
+def _compress_pil(img: Image.Image, sides=(2000, 1600, 1280)) -> bytes:
     """무료 키 업로드 제한(1MB)에 맞게 축소/재압축한 JPEG 바이트를 반환.
 
     번호 글자가 작게 찍힌 사진이 많아 해상도를 최대한 지키는 쪽을 우선한다:
     큰 변부터 시도하며 품질을 낮춰 1MB에 맞추고, 안 되면 한 단계 줄인다.
+    (상단 크롭처럼 픽셀이 적은 이미지는 sides를 키워 더 높은 해상도로 보낸다)
     """
     buf = BytesIO()
-    for side in (2000, 1600, 1280):
+    for side in sides:
         scaled = img.copy()
         scaled.thumbnail((side, side))
         for quality in (85, 75, 65, 55):
@@ -177,25 +178,33 @@ def recognize_container_numbers(image_bytes: bytes, api_key: str):
     반환: (후보 목록, 실패한 시도의 오류 메시지 목록).
     모든 시도가 실패해 후보가 하나도 없으면 OcrError.
 
-    번호가 세로로 찍혔거나 사진이 돌아가 있으면 OCR이 글자를 놓치므로
-    원본에서 검증 통과 후보를 못 찾으면 90°/270° 회전으로 재시도하고,
-    그래도 없으면 대비를 강화한 이미지로 다시 한 바퀴 돈다. (API 최대 6회)
-    호출이 연속 실패하면(공용 데모 키 제한 등) 더 시도하지 않고 멈춘다.
+    컨테이너 번호는 문 상단에 찍히므로 각 회전 방향의 상단 40% 크롭을 먼저
+    시도한다 — 크롭은 픽셀이 적어 같은 1MB 제한에서 더 높은 해상도로 보낼 수
+    있어 작은 글자 인식률이 올라간다. 크롭에서 검증 통과 후보를 못 찾으면
+    전체 이미지로, 그래도 없으면 대비 강화 크롭으로 재시도한다. (API 최대 9회,
+    보통 1~3회에 끝난다) 호출이 연속 실패하면 더 시도하지 않고 멈춘다.
     """
     img = _load_image(image_bytes)
     candidates = []
     seen = set()
     errors = []
-    attempts = ([(a, False) for a in (0, 270, 90)]
-                + [(a, True) for a in (0, 270, 90)])
-    for angle, enhance in attempts:
+    # (회전각, 영역, 대비강화) 시도 순서: 상단 크롭 → 전체 → 대비강화 상단 크롭
+    attempts = ([(a, "top", False) for a in (0, 270, 90)]
+                + [(a, "full", False) for a in (0, 270, 90)]
+                + [(a, "top", True) for a in (0, 270, 90)])
+    for angle, region, enhance in attempts:
         if len(errors) >= 2:
             break  # 연속 실패 = 호출 제한에 걸렸을 가능성이 높아 중단
         variant = img if angle == 0 else img.rotate(angle, expand=True)
+        if region == "top":
+            variant = variant.crop((0, 0, variant.width, int(variant.height * 0.4)))
+            sides = (3000, 2400, 2000, 1600)  # 크롭은 픽셀이 적어 고해상도 허용
+        else:
+            sides = (2000, 1600, 1280)
         if enhance:
             variant = _enhance_for_ocr(variant)
         try:
-            text = ocr_space_parse(_compress_pil(variant), api_key)
+            text = ocr_space_parse(_compress_pil(variant, sides), api_key)
         except OcrError as e:
             errors.append(str(e))
             continue
