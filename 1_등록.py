@@ -51,9 +51,9 @@ def generate_qrcode(data: str) -> bytes:
 def run_container_ocr(image_bytes: bytes):
     """사진 OCR 결과를 세션에 캐시해 rerun마다 API를 재호출하지 않는다.
 
-    반환: ("ok", 후보목록) 또는 ("error", 오류메시지).
+    반환: ("ok", (후보목록, 실패시도 오류목록)) 또는 ("error", 오류메시지).
     오류도 캐시해 실패한 호출이 rerun마다 반복되지 않게 하고,
-    '다시 시도' 버튼이 해당 캐시를 지워 재호출한다.
+    '다시 인식' 버튼이 해당 캐시를 지워 재호출한다.
     """
     key = hashlib.md5(image_bytes).hexdigest()
     cache = st.session_state.setdefault("ocr_results", {})
@@ -508,24 +508,33 @@ with st.container(border=True):
                 if st.button("🔄 다시 시도", key="ocr_retry"):
                     st.session_state.get("ocr_results", {}).pop(cache_key, None)
                     st.rerun()
-            elif not ocr_payload:
-                st.warning("사진에서 컨테이너 번호를 찾지 못했습니다. "
-                           "번호가 크고 선명하게 보이도록 다시 촬영해 주세요.")
             else:
-                # 체크디지트(ISO 6346) 일치 후보는 ✅, 불일치는 ⚠️로 표시하고
-                # 버튼을 누르면 아래 컨테이너 번호 입력칸에 채워진다.
-                valid_candidates = [c for c in ocr_payload if c[1]]
-                if valid_candidates:
-                    st.success("인식된 번호를 누르면 아래 입력칸에 채워집니다.")
-                    show_candidates = valid_candidates[:3]
+                ocr_candidates, ocr_errors = ocr_payload
+                if not ocr_candidates:
+                    st.warning("사진에서 컨테이너 번호를 찾지 못했습니다. "
+                               "번호가 크고 선명하게 보이도록 다시 촬영해 주세요.")
                 else:
-                    st.warning("검증(체크디지트)까지 통과한 번호가 없습니다. "
-                               "후보가 실제 번호와 맞는지 확인 후 사용하세요.")
-                    show_candidates = ocr_payload[:5]
-                for cno, check_ok in show_candidates:
-                    label = f"{'✅' if check_ok else '⚠️'} {cno}"
-                    if st.button(label, key=f"ocr_pick_{cno}", use_container_width=True):
-                        st.session_state["form_container_no"] = cno
+                    # 체크디지트(ISO 6346) 일치 후보는 ✅, 불일치는 ⚠️로 표시하고
+                    # 버튼을 누르면 아래 컨테이너 번호 입력칸에 채워진다.
+                    valid_candidates = [c for c in ocr_candidates if c[1]]
+                    if valid_candidates:
+                        st.success("인식된 번호를 누르면 아래 입력칸에 채워집니다.")
+                        show_candidates = valid_candidates[:3]
+                    else:
+                        st.warning("검증(체크디지트)까지 통과한 번호가 없습니다. "
+                                   "후보가 실제 번호와 맞는지 확인 후 사용하세요.")
+                        show_candidates = ocr_candidates[:5]
+                    for cno, check_ok in show_candidates:
+                        label = f"{'✅' if check_ok else '⚠️'} {cno}"
+                        if st.button(label, key=f"ocr_pick_{cno}", use_container_width=True):
+                            st.session_state["form_container_no"] = cno
+                if ocr_errors:
+                    st.warning(f"인식 재시도 호출 {len(ocr_errors)}회가 실패했습니다 "
+                               f"(공용 데모 키의 호출 제한일 수 있습니다): {ocr_errors[-1]}")
+                if st.button("🔄 다시 인식", key="ocr_retry_ok",
+                             help="캐시된 결과를 지우고 이 사진을 다시 인식합니다."):
+                    st.session_state.get("ocr_results", {}).pop(cache_key, None)
+                    st.rerun()
             if st.secrets.get("ocrspace_api_key", OCR_SPACE_DEMO_KEY) == OCR_SPACE_DEMO_KEY:
                 st.caption("⚠️ 지금은 데모용 공용 키로 동작 중입니다 — ocr.space/ocrapi 에서 "
                            "무료 키를 발급받아 secrets에 `ocrspace_api_key`로 넣어주세요.")

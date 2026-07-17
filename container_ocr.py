@@ -13,7 +13,7 @@ import re
 from io import BytesIO
 
 import requests
-from PIL import Image, ImageOps
+from PIL import Image, ImageEnhance, ImageOps
 
 OCR_SPACE_URL = "https://api.ocr.space/parse/image"
 OCR_SPACE_DEMO_KEY = "helloworld"  # 공용 데모 키 (호출 제한 큼 — 테스트 전용)
@@ -165,30 +165,46 @@ def ocr_space_parse(image_bytes: bytes, api_key: str) -> str:
     return "\n".join(p.get("ParsedText", "") for p in parsed)
 
 
-def recognize_container_numbers(image_bytes: bytes, api_key: str) -> list:
-    """사진 바이트 → 압축 → OCR → 컨테이너 번호 후보 목록. 실패 시 OcrError.
+def _enhance_for_ocr(img: Image.Image) -> Image.Image:
+    """저대비 사진(밝은 색 문 + 흰 글씨) 대비 강화: 흑백 + 자동 대비 + 대비 증폭."""
+    gray = ImageOps.autocontrast(ImageOps.grayscale(img), cutoff=2)
+    return ImageEnhance.Contrast(gray).enhance(1.6).convert("RGB")
 
-    컨테이너 번호가 문에 세로로 찍혀 있거나 사진 자체가 돌아가 있으면 OCR이
-    글자를 놓치므로, 원본에서 체크디지트가 맞는 후보를 못 찾으면 사진을
-    90°/270° 돌려 다시 시도한다. (API 호출 최대 3회)
+
+def recognize_container_numbers(image_bytes: bytes, api_key: str):
+    """사진 바이트 → 압축 → OCR → 컨테이너 번호 후보.
+
+    반환: (후보 목록, 실패한 시도의 오류 메시지 목록).
+    모든 시도가 실패해 후보가 하나도 없으면 OcrError.
+
+    번호가 세로로 찍혔거나 사진이 돌아가 있으면 OCR이 글자를 놓치므로
+    원본에서 검증 통과 후보를 못 찾으면 90°/270° 회전으로 재시도하고,
+    그래도 없으면 대비를 강화한 이미지로 다시 한 바퀴 돈다. (API 최대 6회)
+    호출이 연속 실패하면(공용 데모 키 제한 등) 더 시도하지 않고 멈춘다.
     """
     img = _load_image(image_bytes)
     candidates = []
     seen = set()
-    last_error = None
-    for angle in (0, 270, 90):
-        rotated = img if angle == 0 else img.rotate(angle, expand=True)
+    errors = []
+    attempts = ([(a, False) for a in (0, 270, 90)]
+                + [(a, True) for a in (0, 270, 90)])
+    for angle, enhance in attempts:
+        if len(errors) >= 2:
+            break  # 연속 실패 = 호출 제한에 걸렸을 가능성이 높아 중단
+        variant = img if angle == 0 else img.rotate(angle, expand=True)
+        if enhance:
+            variant = _enhance_for_ocr(variant)
         try:
-            text = ocr_space_parse(_compress_pil(rotated), api_key)
+            text = ocr_space_parse(_compress_pil(variant), api_key)
         except OcrError as e:
-            last_error = e  # 한 각도 실패는 넘어가되, 전부 실패하면 오류로 알린다
+            errors.append(str(e))
             continue
         for cand in extract_container_numbers(text):
             if cand[0] not in seen:
                 seen.add(cand[0])
                 candidates.append(cand)
         if any(ok for _, ok in candidates):
-            break  # 검증 통과 후보를 찾았으면 추가 회전 시도 불필요
-    if not candidates and last_error is not None:
-        raise last_error
-    return _sort_candidates(candidates)
+            break  # 검증 통과 후보를 찾았으면 추가 시도 불필요
+    if not candidates and errors:
+        raise OcrError(errors[-1])
+    return _sort_candidates(candidates), errors
