@@ -359,43 +359,47 @@ apply_sidebar_style('''
 .st-key-cno_row div[data-testid="stColumn"]:last-child { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; }
 /* OCR 팝업: 파일 업로더의 영문 안내(드래그/용량 제한) 숨김 */
 .st-key-ocr_upload [data-testid="stFileUploaderDropzoneInstructions"] { display: none !important; }
-/* OCR 팝업: 카메라 미리보기 박스 높이를 항상 300px로 고정해 로딩/촬영 시
-   화면이 출렁이지 않게 한다. 영상과 촬영 결과는 비율을 유지한 채(contain)
-   박스 안에 담기므로 찍히는 사진과 방향도 일치한다. */
-.st-key-ocr_camera [data-testid="stCameraInputWebcamStyledBox"] { height: 300px !important; min-height: 300px !important; overflow: hidden; }
-.st-key-ocr_camera [data-testid="stCameraInputWebcamStyledBox"] video,
-.st-key-ocr_camera [data-testid="stCameraInput"] img { height: 300px !important; width: 100% !important; object-fit: contain !important; background: #000; }
+/* OCR 팝업 카메라: 위젯 기본 배치가 미리보기를 16:9 가로로 잘라 보여줘서
+   실제 찍히는 사진(전체 프레임)과 다르게 보이는 문제 + 로딩 시 출렁임을
+   해결한다. 박스를 300px 검은 배경으로 고정하고 영상 전체 프레임을 비율
+   그대로 안에 담아 '보이는 것 = 찍히는 것'이 되게 한다.
+   (카메라 위젯은 이 앱에서 OCR 팝업에만 있어 전역 셀렉터로 지정) */
+[data-testid="stCameraInputWebcamStyledBox"] {
+    height: 300px !important; min-height: 300px !important;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; background: #000;
+}
+[data-testid="stCameraInputWebcamStyledBox"] video {
+    height: 100% !important; width: auto !important; max-width: 100%;
+    object-fit: contain !important;
+}
+[data-testid="stCameraInput"] img {
+    height: 300px !important; width: 100% !important;
+    object-fit: contain !important; background: #000;
+}
 /* OCR 팝업: 안내 메시지 여백 축소 */
 [data-testid="stDialog"] [data-testid="stAlert"] { padding: 0.4rem 0.75rem; }
 ''')
 
-# 모바일에서 st.camera_input이 후면 카메라를 우선 사용하도록 브라우저의 카메라
-# 요청(getUserMedia)에 facingMode=environment 힌트를 심는다. (카메라 위젯이
-# 생성되기 전에 적용되도록 페이지 로드 시점에 한 번 실행. 데스크톱 웹캠은
-# 'ideal' 힌트라 영향 없음)
+# 모바일에서 st.camera_input이 후면 카메라로 시작하도록, 카메라가 새로 뜰 때마다
+# 위젯의 '카메라 전환' 버튼을 자동으로 한 번 눌러준다. (위젯 기본값은 전면.
+# 위젯 자체의 전환 기능을 쓰므로 이후 수동 전환도 정상 동작한다. 전환 버튼은
+# 카메라가 2개 이상인 기기에서만 나타나므로 데스크톱에는 영향 없음)
 components.html("""
 <script>
 (function() {
-    try {
-        const md = window.parent.navigator.mediaDevices;
-        if (md && !md._rearCameraPatched) {
-            const orig = md.getUserMedia.bind(md);
-            md.getUserMedia = (constraints) => {
-                try {
-                    if (constraints && constraints.video) {
-                        if (typeof constraints.video !== 'object') constraints.video = {};
-                        // 특정 카메라를 지정한 요청(전환 버튼의 deviceId)은 그대로 두고,
-                        // 카메라 미지정 요청에만 후면 우선 힌트를 준다.
-                        if (!constraints.video.deviceId) {
-                            constraints.video.facingMode = { ideal: 'environment' };
-                        }
-                    }
-                } catch (e) {}
-                return orig(constraints);
-            };
-            md._rearCameraPatched = true;
-        }
-    } catch (e) {}
+    const doc = window.parent.document;
+    const applyRearOnce = () => {
+        doc.querySelectorAll('[data-testid="stCameraInputSwitchButton"] button').forEach((btn) => {
+            const root = btn.closest('[data-testid="stCameraInput"]');
+            if (root && !root.dataset.rearApplied) {
+                root.dataset.rearApplied = '1';  // 카메라가 새로 마운트될 때마다 1회만
+                btn.click();
+            }
+        });
+    };
+    new MutationObserver(applyRearOnce).observe(doc.body, { childList: true, subtree: true });
+    applyRearOnce();
 })();
 </script>
 """, height=0)
