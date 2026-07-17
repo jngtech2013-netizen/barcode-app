@@ -68,6 +68,26 @@ def test_extract_across_two_lines():
     assert result[0] == ("HDFU5280144", True)
 
 
+def test_extract_scattered_door_layout():
+    # 실제 문짝 표기: 소유자코드/일련번호/체크디지트가 서로 떨어진 줄로 읽힘
+    # (실사진 OCR 결과 그대로 — HDFU 528056 [6])
+    text = ("HDFU\nMAX. WT.\nTARE WT.\nPAYLOAD\nCU. CAP.\n528056\n45G1\n6\n"
+            "32,500 KGS\n71,650 LBS\n3,700 KGS\n8,160 LBS\n28,800 KGS")
+    valid = [c for c, ok in extract_container_numbers(text) if ok]
+    assert valid == ["HDFU5280566"]
+
+
+def test_extract_scattered_wdfu_layout():
+    valid = [c for c, ok in extract_container_numbers("WDFU\n120850\n6\n22G1") if ok]
+    assert valid == ["WDFU1208506"]
+
+
+def test_extract_scattered_wrong_check_digit_rejected():
+    # 단독 숫자가 체크디지트와 다르면 조합이 만들어지지 않아야 한다
+    valid = [c for c, ok in extract_container_numbers("WDFU\n120850\n7\n22G1") if ok]
+    assert valid == []
+
+
 def test_extract_no_match():
     assert extract_container_numbers("아무 번호도 없는 텍스트") == []
     assert extract_container_numbers("") == []

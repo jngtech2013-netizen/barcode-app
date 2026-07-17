@@ -510,24 +510,17 @@ with st.container(border=True):
                     st.rerun()
             else:
                 ocr_candidates, ocr_errors = ocr_payload
-                if not ocr_candidates:
-                    st.warning("사진에서 컨테이너 번호를 찾지 못했습니다. "
-                               "번호가 크고 선명하게 보이도록 다시 촬영해 주세요.")
-                else:
-                    # 체크디지트(ISO 6346) 일치 후보는 ✅, 불일치는 ⚠️로 표시하고
-                    # 버튼을 누르면 아래 컨테이너 번호 입력칸에 채워진다.
-                    valid_candidates = [c for c in ocr_candidates if c[1]]
-                    if valid_candidates:
-                        st.success("인식된 번호를 누르면 아래 입력칸에 채워집니다.")
-                        show_candidates = valid_candidates[:3]
-                    else:
-                        st.warning("검증(체크디지트)까지 통과한 번호가 없습니다. "
-                                   "후보가 실제 번호와 맞는지 확인 후 사용하세요.")
-                        show_candidates = ocr_candidates[:5]
-                    for cno, check_ok in show_candidates:
-                        label = f"{'✅' if check_ok else '⚠️'} {cno}"
-                        if st.button(label, key=f"ocr_pick_{cno}", use_container_width=True):
+                # 등록 데이터는 정확해야 하므로 체크디지트(ISO 6346) 검증까지
+                # 통과한 번호만 보여준다. 검증 미통과 후보는 표시하지 않는다.
+                valid_candidates = [cno for cno, ok in ocr_candidates if ok]
+                if valid_candidates:
+                    st.success("인식된 번호를 누르면 아래 입력칸에 채워집니다.")
+                    for cno in valid_candidates[:3]:
+                        if st.button(f"✅ {cno}", key=f"ocr_pick_{cno}", use_container_width=True):
                             st.session_state["form_container_no"] = cno
+                else:
+                    st.warning("컨테이너 번호를 정확히 인식하지 못했습니다. "
+                               "번호 부분이 크고 선명하게 보이도록 가까이서 다시 촬영해 주세요.")
                 if ocr_errors:
                     st.warning(f"인식 재시도 호출 {len(ocr_errors)}회가 실패했습니다 "
                                f"(공용 데모 키의 호출 제한일 수 있습니다): {ocr_errors[-1]}")

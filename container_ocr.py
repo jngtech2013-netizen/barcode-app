@@ -100,6 +100,32 @@ def extract_container_numbers(text: str) -> list:
             if coerced and coerced not in seen:
                 seen.add(coerced)
                 candidates.append((coerced, is_valid_check_digit(coerced)))
+
+    # 실제 문짝 표기는 소유자코드(HDFU)·일련번호(528056)·체크디지트(6)가 서로
+    # 떨어져 있어 OCR 줄 순서상 인접하지 않게 읽히는 일이 많다. 텍스트 전체에서
+    # 4글자 토큰 × 6~7자리 숫자 (× 단독 한 자리 숫자) 조합을 만들어 체크디지트로
+    # 검증한다 — 우연히 맞을 확률이 낮아 검증을 통과한 조합만 후보로 삼는다.
+    owners, digit7, digit6, digit1 = [], [], [], []
+    for ln in lines:
+        for run in re.findall(r"[A-Z0-9]+", ln):
+            if len(run) == 4:
+                coerced = "".join(_DIGIT_TO_LETTER.get(c, c if c.isalpha() else "?")
+                                  for c in run)
+                if "?" not in coerced:
+                    owners.append(coerced)
+        for run in re.findall(r"\d+", ln):
+            if len(run) == 7:
+                digit7.append(run)
+            elif len(run) == 6:
+                digit6.append(run)
+        if len(ln) == 1 and ln.isdigit():  # 체크디지트는 단독 박스로 찍힘
+            digit1.append(ln)
+    combos = ([o + d for o in owners for d in digit7]
+              + [o + d + c for o in owners for d in digit6 for c in digit1])
+    for cand in combos:
+        if cand not in seen and is_valid_check_digit(cand):
+            seen.add(cand)
+            candidates.append((cand, True))
     return _sort_candidates(candidates)
 
 
