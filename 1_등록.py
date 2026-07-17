@@ -284,6 +284,50 @@ def confirm_slot_takeover():
             st.rerun()
 
 
+@st.dialog("📷 사진으로 컨테이너 번호 인식")
+def ocr_dialog():
+    """컨테이너 번호 입력칸 옆 OCR 버튼으로 여는 팝업.
+    촬영/업로드 → 인식 → 번호 버튼을 누르면 입력칸에 채워지고 팝업이 닫힌다.
+    (위젯 키 충돌을 피하려고 값은 ocr_apply_no에 담아 다음 런에서 반영한다)"""
+    tab_cam, tab_up = st.tabs(["📸 카메라 촬영", "🖼️ 사진 업로드"])
+    with tab_cam:
+        cam_img = st.camera_input("번호가 크고 정면으로 보이게 촬영하세요", key="ocr_camera")
+    with tab_up:
+        up_img = st.file_uploader("촬영해 둔 사진 선택", type=["jpg", "jpeg", "png"], key="ocr_upload")
+    ocr_img = cam_img or up_img
+    if ocr_img is not None:
+        with st.spinner("사진에서 컨테이너 번호를 인식하는 중..."):
+            cache_key, (ocr_status, ocr_payload) = run_container_ocr(ocr_img.getvalue())
+        if ocr_status == "error":
+            st.error(f"인식 실패: {ocr_payload}")
+            if st.button("🔄 다시 시도", key="ocr_retry"):
+                st.session_state.get("ocr_results", {}).pop(cache_key, None)
+                st.rerun(scope="fragment")
+        else:
+            ocr_candidates, ocr_errors = ocr_payload
+            # 등록 데이터는 정확해야 하므로 체크디지트(ISO 6346) 검증까지
+            # 통과한 번호만 보여준다.
+            valid_candidates = [cno for cno, ok in ocr_candidates if ok]
+            if valid_candidates:
+                st.success("번호를 누르면 입력칸에 채워집니다.")
+                for cno in valid_candidates[:3]:
+                    if st.button(f"✅ {cno}", key=f"ocr_pick_{cno}", use_container_width=True):
+                        st.session_state["ocr_apply_no"] = cno
+                        st.rerun()  # 전체 rerun → 팝업이 닫히고 입력칸에 반영
+            else:
+                st.warning("컨테이너 번호를 정확히 인식하지 못했습니다. "
+                           "번호 부분이 크고 선명하게 보이도록 가까이서 다시 촬영해 주세요.")
+            if ocr_errors:
+                st.warning(f"인식 재시도 호출 {len(ocr_errors)}회가 실패했습니다: {ocr_errors[-1]}")
+            if st.button("🔄 다시 인식", key="ocr_retry_ok",
+                         help="캐시된 결과를 지우고 이 사진을 다시 인식합니다."):
+                st.session_state.get("ocr_results", {}).pop(cache_key, None)
+                st.rerun(scope="fragment")
+    if st.secrets.get("ocrspace_api_key", OCR_SPACE_DEMO_KEY) == OCR_SPACE_DEMO_KEY:
+        st.caption("⚠️ 지금은 데모용 공용 키로 동작 중입니다 — ocr.space/ocrapi 에서 "
+                   "무료 키를 발급받아 secrets에 `ocrspace_api_key`로 넣어주세요.")
+
+
 @st.dialog("⚠️ 출고처 미정")
 def undecided_block_dialog(container_no):
     """출고처가 미정인 컨테이너의 선적완료(백업)를 막고 안내하는 팝업."""
@@ -299,6 +343,10 @@ def undecided_block_dialog(container_no):
 if st.session_state.get("submission_success", False):
     clear_form_inputs()
     st.session_state.submission_success = False
+
+# OCR 팝업에서 선택한 번호를 위젯 생성 전에 입력칸에 반영한다.
+if st.session_state.get("ocr_apply_no"):
+    st.session_state["form_container_no"] = st.session_state.pop("ocr_apply_no")
 
 apply_sidebar_style('.element-container:has(.reg-section-mk) ~ .element-container * { font-size: 17px !important; }')
 
@@ -493,46 +541,13 @@ with st.container(border=True):
     st.session_state.setdefault("form_position", "1")
     st.session_state.setdefault("form_seal_no", "")
 
-    with st.expander("📷 사진으로 컨테이너 번호 인식 (OCR)"):
-        tab_cam, tab_up = st.tabs(["📸 카메라 촬영", "🖼️ 사진 업로드"])
-        with tab_cam:
-            cam_img = st.camera_input("번호가 크고 정면으로 보이게 촬영하세요", key="ocr_camera")
-        with tab_up:
-            up_img = st.file_uploader("촬영해 둔 사진 선택", type=["jpg", "jpeg", "png"], key="ocr_upload")
-        ocr_img = cam_img or up_img
-        if ocr_img is not None:
-            with st.spinner("사진에서 컨테이너 번호를 인식하는 중..."):
-                cache_key, (ocr_status, ocr_payload) = run_container_ocr(ocr_img.getvalue())
-            if ocr_status == "error":
-                st.error(f"인식 실패: {ocr_payload}")
-                if st.button("🔄 다시 시도", key="ocr_retry"):
-                    st.session_state.get("ocr_results", {}).pop(cache_key, None)
-                    st.rerun()
-            else:
-                ocr_candidates, ocr_errors = ocr_payload
-                # 등록 데이터는 정확해야 하므로 체크디지트(ISO 6346) 검증까지
-                # 통과한 번호만 보여준다. 검증 미통과 후보는 표시하지 않는다.
-                valid_candidates = [cno for cno, ok in ocr_candidates if ok]
-                if valid_candidates:
-                    st.success("인식된 번호를 누르면 아래 입력칸에 채워집니다.")
-                    for cno in valid_candidates[:3]:
-                        if st.button(f"✅ {cno}", key=f"ocr_pick_{cno}", use_container_width=True):
-                            st.session_state["form_container_no"] = cno
-                else:
-                    st.warning("컨테이너 번호를 정확히 인식하지 못했습니다. "
-                               "번호 부분이 크고 선명하게 보이도록 가까이서 다시 촬영해 주세요.")
-                if ocr_errors:
-                    st.warning(f"인식 재시도 호출 {len(ocr_errors)}회가 실패했습니다 "
-                               f"(공용 데모 키의 호출 제한일 수 있습니다): {ocr_errors[-1]}")
-                if st.button("🔄 다시 인식", key="ocr_retry_ok",
-                             help="캐시된 결과를 지우고 이 사진을 다시 인식합니다."):
-                    st.session_state.get("ocr_results", {}).pop(cache_key, None)
-                    st.rerun()
-            if st.secrets.get("ocrspace_api_key", OCR_SPACE_DEMO_KEY) == OCR_SPACE_DEMO_KEY:
-                st.caption("⚠️ 지금은 데모용 공용 키로 동작 중입니다 — ocr.space/ocrapi 에서 "
-                           "무료 키를 발급받아 secrets에 `ocrspace_api_key`로 넣어주세요.")
-
-    container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
+    col_no, col_ocr = st.columns([4, 1], vertical_alignment="bottom")
+    with col_no:
+        container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
+    with col_ocr:
+        if st.button("📷 OCR", use_container_width=True, key="ocr_open_btn",
+                     help="사진을 찍거나 올려서 컨테이너 번호를 자동 인식합니다."):
+            ocr_dialog()
     position = st.radio("2. 위치", options=POSITIONS, horizontal=True, key="form_position")
     destination = st.radio("3. 출고처", options=dest_options, horizontal=True, key="form_destination")
     feet = st.radio("4. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
