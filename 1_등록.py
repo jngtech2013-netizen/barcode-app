@@ -373,9 +373,16 @@ apply_sidebar_style('''
     height: 100% !important; width: auto !important; max-width: 100%;
     object-fit: contain !important;
 }
-[data-testid="stCameraInput"] img {
-    height: 300px !important; width: 100% !important;
-    object-fit: contain !important; background: #000;
+/* 촬영 결과 박스: 라이브 미리보기 박스와 다른 요소(testid 없음)로 그려지며
+   기본값이 16:9 비율 높이라 촬영 전후 크기가 달라진다 → 같은 300px 규격 적용 */
+[data-testid="stCameraInput"] div:has(> img[alt="Snapshot"]) {
+    height: 300px !important; min-height: 300px !important;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; background: #000;
+}
+[data-testid="stCameraInput"] img[alt="Snapshot"] {
+    height: 100% !important; width: auto !important; max-width: 100%;
+    object-fit: contain !important;
 }
 /* OCR 팝업: 안내 메시지 여백 축소 */
 [data-testid="stDialog"] [data-testid="stAlert"] { padding: 0.4rem 0.75rem; }
