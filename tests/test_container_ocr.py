@@ -61,6 +61,13 @@ def test_extract_valid_candidates_first():
     assert result[0][1] is True
 
 
+def test_extract_across_two_lines():
+    # OCR이 소유자코드와 일련번호를 별개 줄로 읽는 경우 (실제 컨테이너 문 표기)
+    text = "HDFU\n528014 4\n45G1"
+    result = extract_container_numbers(text)
+    assert result[0] == ("HDFU5280144", True)
+
+
 def test_extract_no_match():
     assert extract_container_numbers("아무 번호도 없는 텍스트") == []
     assert extract_container_numbers("") == []

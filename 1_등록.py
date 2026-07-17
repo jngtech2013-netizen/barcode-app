@@ -514,13 +514,15 @@ with st.container(border=True):
             else:
                 # 체크디지트(ISO 6346) 일치 후보는 ✅, 불일치는 ⚠️로 표시하고
                 # 버튼을 누르면 아래 컨테이너 번호 입력칸에 채워진다.
-                has_valid = any(ok for _, ok in ocr_payload)
-                if has_valid:
+                valid_candidates = [c for c in ocr_payload if c[1]]
+                if valid_candidates:
                     st.success("인식된 번호를 누르면 아래 입력칸에 채워집니다.")
+                    show_candidates = valid_candidates[:3]
                 else:
                     st.warning("검증(체크디지트)까지 통과한 번호가 없습니다. "
                                "후보가 실제 번호와 맞는지 확인 후 사용하세요.")
-                for cno, check_ok in ocr_payload[:5]:
+                    show_candidates = ocr_payload[:5]
+                for cno, check_ok in show_candidates:
                     label = f"{'✅' if check_ok else '⚠️'} {cno}"
                     if st.button(label, key=f"ocr_pick_{cno}", use_container_width=True):
                         st.session_state["form_container_no"] = cno

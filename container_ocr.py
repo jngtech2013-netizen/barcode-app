@@ -71,43 +71,67 @@ def _coerce_window(window: str):
     return "".join(out)
 
 
+def _sort_candidates(candidates: list) -> list:
+    """체크디지트가 맞는 후보를 앞에, 그중 4번째 글자가 U(일반 화물용 컨테이너의
+    카테고리 문자)인 것을 가장 앞에 둔다."""
+    return sorted(candidates, key=lambda c: (not c[1], c[0][3] != "U"))
+
+
 def extract_container_numbers(text: str) -> list:
     """OCR 텍스트에서 컨테이너 번호 후보를 추출한다.
 
-    반환: (컨테이너번호, 체크디지트_일치여부) 튜플 목록.
-    체크디지트가 맞는 후보를 앞에, 그중에서도 4번째 글자가 U(일반 화물용
-    컨테이너의 카테고리 문자)인 것을 가장 앞에 둔다.
+    반환: (컨테이너번호, 체크디지트_일치여부) 튜플 목록 (체크디지트 일치 우선 정렬).
     """
     if not text:
         return []
-    # 컨테이너 번호는 'CSQU 305438 3'처럼 띄어 찍히는 일이 많아
-    # 줄 단위로 구분자만 제거해 이어붙인 뒤 11자 슬라이딩 윈도우로 훑는다.
+    # 컨테이너 번호는 'CSQU 305438 3'처럼 띄어 찍히는 일이 많아 줄 단위로
+    # 구분자만 제거해 이어붙인 뒤 11자 슬라이딩 윈도우로 훑는다.
+    # 소유자코드(HDFU)와 일련번호(528014 4)를 OCR이 별개 줄로 읽는 일도 많아
+    # 인접한 두 줄을 이어붙인 조합도 함께 훑는다. (잘못 이어진 조합에서 나온
+    # 오탐은 체크디지트 검증이 걸러낸다)
+    lines = [re.sub(r"[^A-Z0-9]", "", ln) for ln in text.upper().splitlines()]
+    lines = [ln for ln in lines if ln]
+    sequences = lines + [lines[i] + lines[i + 1] for i in range(len(lines) - 1)]
     candidates = []
     seen = set()
-    for line in text.upper().splitlines():
-        squashed = re.sub(r"[^A-Z0-9]", "", line)
-        for start in range(len(squashed) - 10):
-            coerced = _coerce_window(squashed[start:start + 11])
+    for seq in sequences:
+        for start in range(len(seq) - 10):
+            coerced = _coerce_window(seq[start:start + 11])
             if coerced and coerced not in seen:
                 seen.add(coerced)
                 candidates.append((coerced, is_valid_check_digit(coerced)))
-    candidates.sort(key=lambda c: (not c[1], c[0][3] != "U"))
-    return candidates
+    return _sort_candidates(candidates)
 
 
-def compress_image_for_ocr(image_bytes: bytes) -> bytes:
-    """무료 키 업로드 제한(1MB)에 맞게 이미지를 축소/재압축한 JPEG 바이트를 반환."""
+def _load_image(image_bytes: bytes) -> Image.Image:
     img = Image.open(BytesIO(image_bytes))
     img = ImageOps.exif_transpose(img)  # 스마트폰 세로 촬영 회전 반영
     if img.mode != "RGB":
         img = img.convert("RGB")
-    img.thumbnail((1600, 1600))
-    for quality in (85, 70, 55, 40):
-        buf = BytesIO()
-        img.save(buf, format="JPEG", quality=quality)
-        if buf.tell() <= _MAX_UPLOAD_BYTES:
-            return buf.getvalue()
-    return buf.getvalue()  # 최저 품질도 넘으면 그대로 전송(서버가 거부하면 오류 안내)
+    return img
+
+
+def _compress_pil(img: Image.Image) -> bytes:
+    """무료 키 업로드 제한(1MB)에 맞게 축소/재압축한 JPEG 바이트를 반환.
+
+    번호 글자가 작게 찍힌 사진이 많아 해상도를 최대한 지키는 쪽을 우선한다:
+    큰 변부터 시도하며 품질을 낮춰 1MB에 맞추고, 안 되면 한 단계 줄인다.
+    """
+    buf = BytesIO()
+    for side in (2000, 1600, 1280):
+        scaled = img.copy()
+        scaled.thumbnail((side, side))
+        for quality in (85, 75, 65, 55):
+            buf = BytesIO()
+            scaled.save(buf, format="JPEG", quality=quality)
+            if buf.tell() <= _MAX_UPLOAD_BYTES:
+                return buf.getvalue()
+    return buf.getvalue()  # 최저 단계도 넘으면 그대로 전송(서버가 거부하면 오류 안내)
+
+
+def compress_image_for_ocr(image_bytes: bytes) -> bytes:
+    """사진 바이트를 업로드 제한에 맞는 JPEG 바이트로 변환."""
+    return _compress_pil(_load_image(image_bytes))
 
 
 def ocr_space_parse(image_bytes: bytes, api_key: str) -> str:
@@ -120,6 +144,7 @@ def ocr_space_parse(image_bytes: bytes, api_key: str) -> str:
                 "apikey": api_key,
                 "OCREngine": "2",  # 엔진2가 영숫자 혼합(컨테이너 번호)에 더 정확
                 "scale": "true",
+                "detectOrientation": "true",  # 기울거나 돌아간 사진 자동 보정
                 "language": "eng",
             },
             timeout=30,
@@ -141,7 +166,29 @@ def ocr_space_parse(image_bytes: bytes, api_key: str) -> str:
 
 
 def recognize_container_numbers(image_bytes: bytes, api_key: str) -> list:
-    """사진 바이트 → 압축 → OCR → 컨테이너 번호 후보 목록. 실패 시 OcrError."""
-    compressed = compress_image_for_ocr(image_bytes)
-    text = ocr_space_parse(compressed, api_key)
-    return extract_container_numbers(text)
+    """사진 바이트 → 압축 → OCR → 컨테이너 번호 후보 목록. 실패 시 OcrError.
+
+    컨테이너 번호가 문에 세로로 찍혀 있거나 사진 자체가 돌아가 있으면 OCR이
+    글자를 놓치므로, 원본에서 체크디지트가 맞는 후보를 못 찾으면 사진을
+    90°/270° 돌려 다시 시도한다. (API 호출 최대 3회)
+    """
+    img = _load_image(image_bytes)
+    candidates = []
+    seen = set()
+    last_error = None
+    for angle in (0, 270, 90):
+        rotated = img if angle == 0 else img.rotate(angle, expand=True)
+        try:
+            text = ocr_space_parse(_compress_pil(rotated), api_key)
+        except OcrError as e:
+            last_error = e  # 한 각도 실패는 넘어가되, 전부 실패하면 오류로 알린다
+            continue
+        for cand in extract_container_numbers(text):
+            if cand[0] not in seen:
+                seen.add(cand[0])
+                candidates.append(cand)
+        if any(ok for _, ok in candidates):
+            break  # 검증 통과 후보를 찾았으면 추가 회전 시도 불필요
+    if not candidates and last_error is not None:
+        raise last_error
+    return _sort_candidates(candidates)
