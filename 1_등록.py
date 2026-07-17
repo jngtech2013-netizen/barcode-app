@@ -291,7 +291,21 @@ def ocr_dialog():
     (위젯 키 충돌을 피하려고 값은 ocr_apply_no에 담아 다음 런에서 반영한다)"""
     tab_cam, tab_up = st.tabs(["📸 카메라 촬영", "🖼️ 사진 업로드"])
     with tab_cam:
-        cam_img = st.camera_input("번호가 크고 정면으로 보이게 촬영하세요", key="ocr_camera")
+        # st.camera_input은 전면 카메라 고정 + 미리보기 영역 크기가 출렁여서
+        # 파일 입력에 capture="environment"를 부여해 폰 기본 카메라 앱(후면)을
+        # 바로 여는 방식을 쓴다. 원본 해상도로 찍혀 인식률에도 유리하다.
+        cam_img = st.file_uploader("아래 버튼을 누르면 카메라가 열립니다",
+                                   type=["jpg", "jpeg", "png"], key="ocr_camera_file")
+        components.html("""
+        <script>
+        const attach = () => {
+            const inp = window.parent.document.querySelector('.st-key-ocr_camera_file input[type="file"]');
+            if (inp) { inp.setAttribute('capture', 'environment'); }
+            else { setTimeout(attach, 300); }
+        };
+        attach();
+        </script>
+        """, height=0)
     with tab_up:
         up_img = st.file_uploader("촬영해 둔 사진 선택", type=["jpg", "jpeg", "png"], key="ocr_upload")
     ocr_img = cam_img or up_img
@@ -350,11 +364,13 @@ if st.session_state.get("ocr_apply_no"):
 
 apply_sidebar_style('''
 .element-container:has(.reg-section-mk) ~ .element-container * { font-size: 17px !important; }
-/* 등록 폼의 가로 배치(컨테이너 번호 입력창 + OCR 버튼)에도 같은 글씨 크기 적용 */
-.element-container:has(.reg-section-mk) ~ div[data-testid="stHorizontalBlock"] * { font-size: 17px !important; }
-/* 좁은 화면에서 컬럼이 세로로 쌓여 OCR 버튼이 아래로 내려가지 않게 한 줄 고정 */
-.element-container:has(.reg-section-mk) ~ div[data-testid="stHorizontalBlock"] { flex-wrap: nowrap !important; }
-.element-container:has(.reg-section-mk) ~ div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] { min-width: 0 !important; }
+/* 컨테이너 번호 입력창 + OCR 버튼 행(key=cno_row): 폼과 같은 17px 글씨 유지 */
+.st-key-cno_row * { font-size: 17px !important; }
+/* 좁은 화면에서 Streamlit이 컬럼을 세로로 쌓는 것(flex-direction: column)을 막고
+   입력창(가변폭) + 버튼(내용폭)이 항상 같은 줄에 있도록 고정 */
+.st-key-cno_row div[data-testid="stHorizontalBlock"] { flex-direction: row !important; flex-wrap: nowrap !important; }
+.st-key-cno_row div[data-testid="stColumn"]:first-child { flex: 1 1 auto !important; width: auto !important; min-width: 0 !important; }
+.st-key-cno_row div[data-testid="stColumn"]:last-child { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; }
 ''')
 
 if 'container_list' not in st.session_state:
@@ -548,13 +564,14 @@ with st.container(border=True):
     st.session_state.setdefault("form_position", "1")
     st.session_state.setdefault("form_seal_no", "")
 
-    col_no, col_ocr = st.columns([4, 1], vertical_alignment="bottom")
-    with col_no:
-        container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
-    with col_ocr:
-        if st.button("📷 OCR", use_container_width=True, key="ocr_open_btn",
-                     help="사진을 찍거나 올려서 컨테이너 번호를 자동 인식합니다."):
-            ocr_dialog()
+    with st.container(key="cno_row"):
+        col_no, col_ocr = st.columns([4, 1], vertical_alignment="bottom")
+        with col_no:
+            container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
+        with col_ocr:
+            if st.button("📷 OCR", key="ocr_open_btn",
+                         help="사진을 찍거나 올려서 컨테이너 번호를 자동 인식합니다."):
+                ocr_dialog()
     position = st.radio("2. 위치", options=POSITIONS, horizontal=True, key="form_position")
     destination = st.radio("3. 출고처", options=dest_options, horizontal=True, key="form_destination")
     feet = st.radio("4. 피트수", options=['40', '20'], horizontal=True, key="form_feet")
