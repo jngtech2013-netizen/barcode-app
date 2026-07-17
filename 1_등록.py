@@ -284,7 +284,7 @@ def confirm_slot_takeover():
             st.rerun()
 
 
-@st.dialog("📷 사진으로 컨테이너 번호 인식")
+@st.dialog("📷 번호 인식")
 def ocr_dialog():
     """컨테이너 번호 입력칸 옆 OCR 버튼으로 여는 팝업.
     촬영/업로드 → 인식 → 번호 버튼을 누르면 입력칸에 채워지고 팝업이 닫힌다.
@@ -359,9 +359,12 @@ apply_sidebar_style('''
 .st-key-cno_row div[data-testid="stColumn"]:last-child { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; }
 /* OCR 팝업: 파일 업로더의 영문 안내(드래그/용량 제한) 숨김 */
 .st-key-ocr_upload [data-testid="stFileUploaderDropzoneInstructions"] { display: none !important; }
-/* OCR 팝업: 카메라 미리보기 높이를 미리 확보해 로딩 시 커졌다 줄어드는 출렁임 완화 */
-.st-key-ocr_camera [data-testid="stCameraInput"] { min-height: 320px; }
-.st-key-ocr_camera video { object-fit: cover; }
+/* OCR 팝업: 카메라 로딩 중에만 높이를 미리 확보해 출렁임 완화.
+   (촬영 후에는 min-height를 풀어 Clear photo 아래 빈 여백이 생기지 않게 하고,
+   미리보기는 원본 비율 그대로 보여 찍히는 사진과 방향이 일치한다) */
+.st-key-ocr_camera [data-testid="stCameraInput"]:has(video) { min-height: 320px; }
+/* OCR 팝업: 안내 메시지 여백 축소 */
+[data-testid="stDialog"] [data-testid="stAlert"] { padding: 0.4rem 0.75rem; }
 ''')
 
 # 모바일에서 st.camera_input이 후면 카메라를 우선 사용하도록 브라우저의 카메라
