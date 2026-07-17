@@ -348,7 +348,14 @@ if st.session_state.get("submission_success", False):
 if st.session_state.get("ocr_apply_no"):
     st.session_state["form_container_no"] = st.session_state.pop("ocr_apply_no")
 
-apply_sidebar_style('.element-container:has(.reg-section-mk) ~ .element-container * { font-size: 17px !important; }')
+apply_sidebar_style('''
+.element-container:has(.reg-section-mk) ~ .element-container * { font-size: 17px !important; }
+/* 등록 폼의 가로 배치(컨테이너 번호 입력창 + OCR 버튼)에도 같은 글씨 크기 적용 */
+.element-container:has(.reg-section-mk) ~ div[data-testid="stHorizontalBlock"] * { font-size: 17px !important; }
+/* 좁은 화면에서 컬럼이 세로로 쌓여 OCR 버튼이 아래로 내려가지 않게 한 줄 고정 */
+.element-container:has(.reg-section-mk) ~ div[data-testid="stHorizontalBlock"] { flex-wrap: nowrap !important; }
+.element-container:has(.reg-section-mk) ~ div[data-testid="stHorizontalBlock"] > div[data-testid="stColumn"] { min-width: 0 !important; }
+''')
 
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
