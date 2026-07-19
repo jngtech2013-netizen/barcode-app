@@ -359,6 +359,8 @@ apply_sidebar_style('''
 .st-key-cno_row div[data-testid="stColumn"]:last-child { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; }
 /* OCR 팝업: 파일 업로더의 영문 안내(드래그/용량 제한) 숨김 */
 .st-key-ocr_upload [data-testid="stFileUploaderDropzoneInstructions"] { display: none !important; }
+/* 텍스트 입력 시 우측 하단에 뜨는 "Press Enter to apply" 영문 안내 숨김 */
+[data-testid="InputInstructions"] { display: none !important; }
 /* OCR 팝업 카메라: 위젯 기본 배치가 미리보기를 16:9 가로로 잘라 보여줘서
    실제 찍히는 사진(전체 프레임)과 다르게 보이는 문제 + 로딩 시 출렁임을
    해결한다. 박스를 300px 검은 배경으로 고정하고 영상 전체 프레임을 비율
