@@ -377,9 +377,9 @@ apply_sidebar_style('''
     padding: 0 6px !important;
     font-size: 0 !important;
 }
-.st-key-ocr_upload button[data-testid="stBaseButton-secondary"] * { font-size: 0 !important; }
-/* 원래 버튼 아이콘(svg)이 보이지 않아도 자리를 차지해 텍스트가 오른쪽으로 밀려 보이므로 완전히 제거 */
-.st-key-ocr_upload button[data-testid="stBaseButton-secondary"] svg { display: none !important; }
+/* font-size:0만으로는 자식 요소 자신의 padding/margin이 남아 보이지 않는 여백을 만들 수 있으므로
+   원본 아이콘·텍스트 자식 요소를 아예 display:none으로 완전히 제거한다 */
+.st-key-ocr_upload button[data-testid="stBaseButton-secondary"] > * { display: none !important; }
 .st-key-ocr_upload button[data-testid="stBaseButton-secondary"]::after {
     content: "📷 카메라/파일";
     font-size: 14px;
