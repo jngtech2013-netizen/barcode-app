@@ -376,9 +376,6 @@ apply_sidebar_style('''
    버튼 내부 텍스트(자식 요소 포함)를 전부 숨기고 ::after로 새 글자를 덧씌운다).
    absolute 오버레이 대신 흐름 안에 두어 버튼 크기가 새 글자 폭에 맞게 줄어들도록 한다. */
 .st-key-ocr_upload button[data-testid="stBaseButton-secondary"] {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
     width: fit-content !important;
     min-width: 0 !important;
     padding: 0 14px !important;
