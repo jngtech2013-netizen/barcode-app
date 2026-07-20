@@ -366,12 +366,6 @@ apply_sidebar_style('''
 .st-key-cno_row div[data-testid="stColumn"]:last-child { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; }
 /* OCR 팝업: 파일 업로더의 영문 안내(드래그/용량 제한) 숨김 */
 .st-key-ocr_upload [data-testid="stFileUploaderDropzoneInstructions"] { display: none !important; }
-/* OCR 팝업: 안내 문구를 숨긴 뒤 남은 아이콘+버튼이 왼쪽에 붙고, 박스도 내용 크기만큼만 차지하도록
-   (안내 문구가 있을 때 전체 폭을 채우던 드롭존 박스가 문구 제거 후 오른쪽에 빈 공간으로 남는 것 방지) */
-.st-key-ocr_upload [data-testid="stFileUploaderDropzone"] {
-    justify-content: flex-start !important;
-    width: fit-content !important;
-}
 /* OCR 팝업: "Browse files" 버튼 글자를 "📷 카메라/파일"로 교체 (Streamlit이 버튼 문구를 커스터마이즈하는 옵션을 제공하지 않아
    버튼 내부 텍스트(자식 요소 포함)를 전부 숨기고 ::after로 새 글자를 덧씌운다).
    absolute 오버레이 대신 흐름 안에 두어 버튼 크기가 새 글자 폭에 맞게 줄어들도록 한다. */
