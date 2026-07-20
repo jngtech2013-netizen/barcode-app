@@ -315,9 +315,9 @@ def ocr_dialog():
             else:
                 st.warning("컨테이너 번호를 정확히 인식하지 못했습니다. "
                            "번호 부분이 크고 선명하게 보이도록 가까이서 다시 촬영해 주세요.")
-                if ocr_texts:
-                    with st.expander("📄 사진에서 읽힌 글자 보기 (인식 실패 원인 확인용)"):
-                        st.text("\n──────────\n".join(t.strip() for t in ocr_texts))
+            if ocr_texts:
+                with st.expander("📄 사진에서 읽힌 글자 보기 (오인식 원인 확인용)"):
+                    st.text("\n──────────\n".join(t.strip() for t in ocr_texts))
             if ocr_errors:
                 st.warning(f"인식 재시도 호출 {len(ocr_errors)}회가 실패했습니다: {ocr_errors[-1]}")
             if st.button("🔄 다시 인식", key="ocr_retry_ok",

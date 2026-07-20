@@ -104,6 +104,14 @@ def test_extract_combo_dropped_when_contiguous_valid_exists():
     assert valid == ["CSQU3054383"]
 
 
+def test_extract_requires_category_u():
+    # 실사진 오탐 사례: 단위 표기 조각(CU.CAP → CAPB, LB/KG → LBKG)이 숫자
+    # 나열과 이어붙어 체크디지트를 우연히 통과한 가짜 번호 — 화물 컨테이너의
+    # 카테고리 문자(4번째 글자)는 항상 U이므로 후보에서 제외해야 한다
+    assert extract_container_numbers("CAPB8114561") == []
+    assert extract_container_numbers("LBKG1828800") == []
+
+
 def test_extract_no_match():
     assert extract_container_numbers("아무 번호도 없는 텍스트") == []
     assert extract_container_numbers("") == []

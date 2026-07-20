@@ -62,6 +62,11 @@ def _coerce_window(window: str, max_owner_fixes: int = 4):
     max_owner_fixes: 앞 4자리(영문 자리)에서 허용하는 숫자→영문 보정 개수.
     실제 소유자코드는 영문으로 찍혀 있어 보정이 거의 필요 없으므로, 신뢰가
     낮은 짜맞춤 후보는 1로 제한해 숫자 나열을 통째로 영문화한 가짜를 막는다.
+
+    화물 컨테이너의 카테고리 문자(4번째 글자)는 ISO 6346상 항상 U이므로
+    4번째 글자가 U가 아니면 후보에서 제외한다 — 단위 표기 조각(LB/KG,
+    CU.CAP 등)이 숫자와 이어붙어 체크디지트를 우연히 통과하는 가짜
+    (CAPB8114561, LBKG1828800 같은 실사진 오탐)를 구조적으로 막는다.
     """
     out = []
     owner_fixes = 0
@@ -78,6 +83,8 @@ def _coerce_window(window: str, max_owner_fixes: int = 4):
         if ch is None:
             return None
         out.append(ch)
+    if out[3] != "U":
+        return None
     return "".join(out)
 
 
@@ -114,7 +121,9 @@ def _extract_split(text: str):
                 out.append((coerced, is_valid_check_digit(coerced)))
 
     for ln in lines:
-        scan(ln, candidates)
+        # 실제 소유자코드가 4자 모두 숫자로 오인식되는 일은 없다시피 하므로
+        # 보정은 2자까지만 — 숫자 나열(무게 등)을 통째로 영문화한 가짜를 막는다
+        scan(ln, candidates, max_owner_fixes=2)
     # 소유자코드/일련번호가 여러 조각(HLHU / 8376 / 88 / 1)으로 나뉘어 읽히는
     # 일이 많아, 인접한 줄들을 순서대로 이어붙이며 훑는다. 11자(영문4+숫자7)가
     # 완성될 만큼 모이면 그 즉시 멈춘다 — 더 이어붙이면 무관한 표기(45G1 등)까지
@@ -138,11 +147,12 @@ def _extract_split(text: str):
     owners, digit7, digit6, digit1 = [], [], [], []
     for ln in lines:
         for run in re.findall(r"[A-Z0-9]+", ln):
-            # 소유자코드 후보도 같은 이유로 숫자→영문 보정을 1자까지만 허용
+            # 소유자코드 후보도 같은 이유로 숫자→영문 보정을 1자까지만 허용하고
+            # 카테고리 문자 U(4번째 글자)가 아니면 제외한다
             if len(run) == 4 and sum(c.isdigit() for c in run) <= 1:
                 coerced = "".join(_DIGIT_TO_LETTER.get(c, c if c.isalpha() else "?")
                                   for c in run)
-                if "?" not in coerced:
+                if "?" not in coerced and coerced[3] == "U":
                     owners.append(coerced)
         for run in re.findall(r"\d+", ln):
             if len(run) == 7:
