@@ -374,7 +374,7 @@ apply_sidebar_style('''
     justify-content: flex-start !important;
     width: fit-content !important;
     min-width: 0 !important;
-    padding: 0 10px !important;
+    padding: 0 20px !important;
     font-size: 0 !important;
 }
 /* font-size:0만으로는 자식 요소 자신의 padding/margin이 남아 보이지 않는 여백을 만들 수 있으므로
