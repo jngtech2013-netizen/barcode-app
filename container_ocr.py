@@ -167,6 +167,34 @@ def _extract_split(text: str):
         if cand not in seen and is_valid_check_digit(cand):
             seen.add(cand)
             assembled.append((cand, True))
+
+    # 열 단위 읽힘 대응: OCR이 사진을 열로 훑으면 소유자코드/일련번호 조각
+    # (HLHU / 8376) 뒤에 라벨 줄(MAX. GROSS 등)이 끼고 나머지 조각(88 11)이
+    # 한참 아래에 나온다. 소유자코드 바로 아랫줄이 숫자로 시작하면 이후의
+    # '순수 숫자 줄'만 순서대로 이어붙여 7자리(일련번호6+체크디지트)를 만든다.
+    # - 글자가 섞인 줄('3 KL', '8,160 LB.')의 숫자는 조각으로 신뢰하지 않는다
+    # - 마지막 조각은 필요한 자릿수만 앞에서 취한다(체크디지트 상자가 '11'처럼
+    #   겹쳐 읽히는 경우 대비)
+    # - 번호 블록의 끝을 뜻하는 규격코드(45G1 등)를 만나면 중단한다
+    # 체크디지트 검증을 통과해야만 후보가 된다.
+    for i, ln in enumerate(lines[:-1]):
+        if not (len(ln) == 4 and ln.isalpha() and ln[3] == "U"):
+            continue
+        if not lines[i + 1][:1].isdigit():
+            continue
+        serial = ""
+        for later in lines[i + 1:]:
+            if re.fullmatch(r"\d{2}[A-Z]\d", later):  # 45G1 같은 규격코드
+                break
+            if not later.isdigit():
+                continue
+            serial += later[:7 - len(serial)]
+            if len(serial) >= 7:
+                break
+        cand = ln + serial
+        if len(serial) == 7 and cand not in seen and is_valid_check_digit(cand):
+            seen.add(cand)
+            assembled.append((cand, True))
     return candidates, assembled
 
 

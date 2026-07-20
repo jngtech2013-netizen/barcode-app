@@ -104,6 +104,24 @@ def test_extract_combo_dropped_when_contiguous_valid_exists():
     assert valid == ["CSQU3054383"]
 
 
+def test_extract_column_layout_with_labels_between():
+    # 실사진 OCR 원문 그대로: 열 단위로 읽혀 번호 조각(HLHU/8376/88 11) 사이에
+    # 라벨 줄이 끼고, 체크디지트 상자가 '11'로 겹쳐 읽힌 레이아웃
+    text = ("Com\nHLHU\n8376\nMAX. GROSS\nTARE\nPAYLOAD\nCU. CAP.\n88 11\n"
+            "45G1\n32,500\n71,650\n3,700\n8.160\nKG.\nLB.\nKG.\nLB.\n28,800\n"
+            "KG.\n63.490\nLB.\n76.4 CU.M.\n2.700 CU.FT.")
+    assert extract_container_numbers(text) == [("HLHU8376881", True)]
+
+
+def test_extract_column_layout_rejects_mixed_lines():
+    # 같은 사진의 다른 시도: '3 KL', '88 M'처럼 글자 섞인 줄의 숫자로 조립한
+    # 가짜(HLHU8376388 — 체크디지트 우연 통과)는 후보가 되면 안 된다
+    text = ("G A\ncom\nHLHU\n8376\nMAX. GROSS\nTARE\nPAYLOAD\nCU. CAP.\n"
+            "3 KL\n88 M\n45G1\n32,500\n71.650\n3.700\n8.160\n28,800\nKG.\n"
+            "63.490\nLB.\n76.4\nCU.M.\n2.700 CU.FT.")
+    assert extract_container_numbers(text) == []
+
+
 def test_extract_requires_category_u():
     # 실사진 오탐 사례: 단위 표기 조각(CU.CAP → CAPB, LB/KG → LBKG)이 숫자
     # 나열과 이어붙어 체크디지트를 우연히 통과한 가짜 번호 — 화물 컨테이너의
