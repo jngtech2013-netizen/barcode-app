@@ -360,8 +360,6 @@ apply_sidebar_style('''
 .element-container:has(.reg-section-mk) ~ .element-container * { font-size: 17px !important; }
 /* 컨테이너 번호 입력창 + OCR 버튼 행(key=cno_row): 폼과 같은 17px 글씨 유지 */
 .st-key-cno_row * { font-size: 17px !important; }
-/* 컨테이너 번호 입력칸 안 글씨: OCR 인식 번호 버튼과 동일하게 크고 굵게 (20px/600) */
-.st-key-form_container_no input { font-size: 20px !important; font-weight: 600 !important; }
 /* 좁은 화면에서 Streamlit이 컬럼을 세로로 쌓는 것(flex-direction: column)을 막고
    입력창(가변폭) + 버튼(내용폭)이 항상 같은 줄에 있도록 고정 */
 .st-key-cno_row div[data-testid="stHorizontalBlock"] { flex-direction: row !important; flex-wrap: nowrap !important; }
@@ -373,8 +371,8 @@ apply_sidebar_style('''
    컨테이너 사진은 한 장만 인식하면 되므로 추가 업로드는 막는다.
    (다른 사진으로 바꾸려면 파일 칩의 ✕로 지우고 다시 선택) */
 .st-key-ocr_upload button[data-testid="stBaseButton-borderlessIcon"] { display: none !important; }
-/* OCR 팝업: 인식된 컨테이너 번호 버튼(✅ ...) 글씨 키우기 (key=ocr_pick_<번호>) */
-[class*="st-key-ocr_pick_"] button p { font-size: 20px !important; font-weight: 600 !important; }
+/* OCR 팝업: 인식된 컨테이너 번호 버튼(✅ ...) 글씨를 번호 입력칸과 동일하게 (17px/기본굵기) */
+[class*="st-key-ocr_pick_"] button p { font-size: 17px !important; }
 /* OCR 팝업: "Browse files" 버튼 글자를 "📷 카메라/파일"로 교체 (Streamlit이 버튼 문구를 커스터마이즈하는 옵션을 제공하지 않아
    버튼 내부 텍스트(자식 요소 포함)를 전부 숨기고 ::after로 새 글자를 덧씌운다).
    absolute 오버레이 대신 흐름 안에 두어 버튼 크기가 새 글자 폭에 맞게 줄어들도록 한다. */
