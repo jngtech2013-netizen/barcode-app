@@ -375,6 +375,7 @@ apply_sidebar_style('''
     width: fit-content !important;
     min-width: 0 !important;
     padding: 0 6px !important;
+    font-size: 0 !important;
 }
 .st-key-ocr_upload button[data-testid="stBaseButton-secondary"] * { font-size: 0 !important; }
 /* 원래 버튼 아이콘(svg)이 보이지 않아도 자리를 차지해 텍스트가 오른쪽으로 밀려 보이므로 완전히 제거 */
