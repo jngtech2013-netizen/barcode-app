@@ -161,6 +161,10 @@ def _extract_split(text: str):
                 digit6.append(run)
         if len(ln) == 1 and ln.isdigit():  # 체크디지트는 단독 박스로 찍힘
             digit1.append(ln)
+        elif len(ln) == 2 and ln.isdigit():
+            # 체크디지트 상자 테두리가 숫자로 겹쳐 읽히면 '1'이 '11'처럼 두
+            # 자리가 되기도 한다 — 각 자리를 후보로 삼고 검증에 맡긴다
+            digit1.extend(dict.fromkeys(ln))
     combos = ([o + d for o in owners for d in digit7]
               + [o + d + c for o in owners for d in digit6 for c in digit1])
     for cand in combos:

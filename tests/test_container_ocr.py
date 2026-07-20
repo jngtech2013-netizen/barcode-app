@@ -122,6 +122,14 @@ def test_extract_column_layout_rejects_mixed_lines():
     assert extract_container_numbers(text) == []
 
 
+def test_extract_check_digit_read_as_two_digits():
+    # 실사진(HDGU) OCR 원문: 체크디지트 상자 [1]이 테두리와 겹쳐 '11'로,
+    # 그것도 무게 표기 뒤 한참 아래 줄에서 읽힌 경우
+    text = "KR\nHYUNDAI\nGLOVIS\nHDGU\nMAX. GROSS\n500057\n45G1\n32.500\nKGS\n11"
+    valid = [c for c, ok in extract_container_numbers(text) if ok]
+    assert valid == ["HDGU5000571"]
+
+
 def test_extract_requires_category_u():
     # 실사진 오탐 사례: 단위 표기 조각(CU.CAP → CAPB, LB/KG → LBKG)이 숫자
     # 나열과 이어붙어 체크디지트를 우연히 통과한 가짜 번호 — 화물 컨테이너의
