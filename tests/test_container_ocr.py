@@ -88,6 +88,13 @@ def test_extract_scattered_wrong_check_digit_rejected():
     assert valid == []
 
 
+def test_extract_serial_split_multiline():
+    # 실사진 레이아웃: HLHU / 8376 / 88 / [1] / 45G1 — 일련번호가 여러 조각
+    # 줄로 나뉘어 읽혀도 11자가 완성될 때까지 이어붙여 인식해야 한다
+    assert extract_container_numbers("HLHU\n8376\n88\n1\n45G1") == [("HLHU8376881", True)]
+    assert extract_container_numbers("HLHU\n8376 88 1\n45G1") == [("HLHU8376881", True)]
+
+
 def test_extract_combo_dropped_when_contiguous_valid_exists():
     # 이어 읽힌 검증 통과 번호(CSQU3054383)가 있으면, 떨어진 토큰을 짜맞춘 조합
     # (TARE+1234560 — 사진에 실제로 없는 번호)이 우연히 체크디지트를 통과해도

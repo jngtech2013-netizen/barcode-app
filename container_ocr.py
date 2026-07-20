@@ -56,12 +56,21 @@ def is_valid_check_digit(container_no: str) -> bool:
     return compute_check_digit(container_no[:10]) == int(container_no[10])
 
 
-def _coerce_window(window: str):
-    """11자 알파넘 조각을 '영문4+숫자7' 형태로 위치별 보정. 불가능하면 None."""
+def _coerce_window(window: str, max_owner_fixes: int = 4):
+    """11자 알파넘 조각을 '영문4+숫자7' 형태로 위치별 보정. 불가능하면 None.
+
+    max_owner_fixes: 앞 4자리(영문 자리)에서 허용하는 숫자→영문 보정 개수.
+    실제 소유자코드는 영문으로 찍혀 있어 보정이 거의 필요 없으므로, 신뢰가
+    낮은 짜맞춤 후보는 1로 제한해 숫자 나열을 통째로 영문화한 가짜를 막는다.
+    """
     out = []
+    owner_fixes = 0
     for i, ch in enumerate(window):
         if i < 4:
             if ch.isdigit():
+                owner_fixes += 1
+                if owner_fixes > max_owner_fixes:
+                    return None
                 ch = _DIGIT_TO_LETTER.get(ch)
         else:
             if ch.isalpha():
@@ -97,20 +106,30 @@ def _extract_split(text: str):
     assembled = []    # 줄 결합·토큰 조합으로 짜맞춘 후보 (예비)
     seen = set()
 
-    def scan(seq, out):
+    def scan(seq, out, max_owner_fixes=4):
         for start in range(len(seq) - 10):
-            coerced = _coerce_window(seq[start:start + 11])
+            coerced = _coerce_window(seq[start:start + 11], max_owner_fixes)
             if coerced and coerced not in seen:
                 seen.add(coerced)
                 out.append((coerced, is_valid_check_digit(coerced)))
 
     for ln in lines:
         scan(ln, candidates)
-    # 소유자코드(HDFU)와 일련번호(528014 4)를 OCR이 별개 줄로 읽는 일도 많아
-    # 인접한 두 줄을 이어붙인 것도 훑는다 — 다만 무관한 줄이 잘못 이어지면
-    # 가짜 번호가 체크디지트를 통과할 수 있어 짜맞춤(예비) 후보로 분류한다.
-    for i in range(len(lines) - 1):
-        scan(lines[i] + lines[i + 1], assembled)
+    # 소유자코드/일련번호가 여러 조각(HLHU / 8376 / 88 / 1)으로 나뉘어 읽히는
+    # 일이 많아, 인접한 줄들을 순서대로 이어붙이며 훑는다. 11자(영문4+숫자7)가
+    # 완성될 만큼 모이면 그 즉시 멈춘다 — 더 이어붙이면 무관한 표기(45G1 등)까지
+    # 끌려 들어와 가짜 후보만 늘기 때문. 잘못 이어진 조합에서 나온 가짜 번호가
+    # 체크디지트를 우연히 통과할 수 있어 짜맞춤(예비) 후보로 분류한다.
+    for i, ln in enumerate(lines):
+        joined = ln[-10:]  # 줄 경계를 걸치는 윈도우에는 앞줄의 끝 10자만 관여
+        appended = False
+        for nxt in lines[i + 1:]:
+            if len(joined) >= 11:
+                break
+            joined += nxt
+            appended = True
+        if appended and len(joined) >= 11:
+            scan(joined, assembled, max_owner_fixes=1)
 
     # 실제 문짝 표기는 소유자코드(HDFU)·일련번호(528056)·체크디지트(6)가 서로
     # 떨어져 있어 OCR 줄 순서상 인접하지 않게 읽히는 일이 많다. 텍스트 전체에서
@@ -119,7 +138,8 @@ def _extract_split(text: str):
     owners, digit7, digit6, digit1 = [], [], [], []
     for ln in lines:
         for run in re.findall(r"[A-Z0-9]+", ln):
-            if len(run) == 4:
+            # 소유자코드 후보도 같은 이유로 숫자→영문 보정을 1자까지만 허용
+            if len(run) == 4 and sum(c.isdigit() for c in run) <= 1:
                 coerced = "".join(_DIGIT_TO_LETTER.get(c, c if c.isalpha() else "?")
                                   for c in run)
                 if "?" not in coerced:
@@ -225,7 +245,8 @@ def _enhance_for_ocr(img: Image.Image) -> Image.Image:
 def recognize_container_numbers(image_bytes: bytes, api_key: str):
     """사진 바이트 → 압축 → OCR → 컨테이너 번호 후보.
 
-    반환: (후보 목록, 실패한 시도의 오류 메시지 목록).
+    반환: (후보 목록, 실패한 시도의 오류 메시지 목록, OCR 원문 텍스트 목록).
+    원문 텍스트는 인식 실패 시 원인 파악(디버그 표시)용이다.
     모든 시도가 실패해 후보가 하나도 없으면 OcrError.
 
     컨테이너 번호는 문 상단에 찍히므로 각 회전 방향의 상단 40% 크롭을 먼저
@@ -242,6 +263,7 @@ def recognize_container_numbers(image_bytes: bytes, api_key: str):
     direct_cands, assembled_cands = [], []
     seen_d, seen_a = set(), set()
     errors = []
+    texts = []
 
     def try_variant(angle, region, enhance):
         variant = img if angle == 0 else img.rotate(angle, expand=True)
@@ -252,8 +274,8 @@ def recognize_container_numbers(image_bytes: bytes, api_key: str):
             sides = (2000, 1600, 1280)
         if enhance:
             variant = _enhance_for_ocr(variant)
-        return _extract_split(
-            ocr_space_parse(_compress_pil(variant, sides), api_key))
+        text = ocr_space_parse(_compress_pil(variant, sides), api_key)
+        return _extract_split(text), text
 
     # 단계 순서: 상단 크롭 → 전체 → 대비강화 상단 크롭 (각 단계 = 회전 3방향 병렬)
     stages = [[(a, "top", False) for a in (0, 270, 90)],
@@ -264,10 +286,12 @@ def recognize_container_numbers(image_bytes: bytes, api_key: str):
             futures = [pool.submit(try_variant, *attempt) for attempt in stage]
             for future in futures:  # 제출 순서대로 수집해 후보 순서를 결정적으로 유지
                 try:
-                    direct, assembled = future.result()
+                    (direct, assembled), text = future.result()
                 except OcrError as e:
                     errors.append(str(e))
                     continue
+                if text.strip():
+                    texts.append(text)
                 for cand in direct:
                     if cand[0] not in seen_d:
                         seen_d.add(cand[0])
@@ -291,4 +315,4 @@ def recognize_container_numbers(image_bytes: bytes, api_key: str):
         candidates = direct_cands + [c for c in assembled_cands if c[0] not in seen_d]
     if not candidates and errors:
         raise OcrError(errors[-1])
-    return _sort_candidates(candidates), errors
+    return _sort_candidates(candidates), errors, texts
