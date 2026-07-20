@@ -366,18 +366,18 @@ apply_sidebar_style('''
 .st-key-cno_row div[data-testid="stColumn"]:last-child { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; }
 /* OCR 팝업: 파일 업로더의 영문 안내(드래그/용량 제한) 숨김 */
 .st-key-ocr_upload [data-testid="stFileUploaderDropzoneInstructions"] { display: none !important; }
-/* OCR 팝업: "Browse files" 버튼 글자를 "카메라/파일"로 교체 (Streamlit이 버튼 문구를 커스터마이즈하는 옵션을 제공하지 않아
-   버튼 내부 텍스트(자식 요소 포함)를 전부 숨기고 ::after로 새 글자를 덧씌운다) */
-.st-key-ocr_upload button[data-testid="stBaseButton-secondary"] { position: relative; }
+/* OCR 팝업: "Browse files" 버튼 글자를 "📷 카메라/파일"로 교체 (Streamlit이 버튼 문구를 커스터마이즈하는 옵션을 제공하지 않아
+   버튼 내부 텍스트(자식 요소 포함)를 전부 숨기고 ::after로 새 글자를 덧씌운다).
+   absolute 오버레이 대신 흐름 안에 두어 버튼 크기가 새 글자 폭에 맞게 줄어들도록 한다. */
+.st-key-ocr_upload button[data-testid="stBaseButton-secondary"] {
+    width: fit-content !important;
+    min-width: 0 !important;
+    padding: 0 14px !important;
+}
 .st-key-ocr_upload button[data-testid="stBaseButton-secondary"] * { font-size: 0 !important; }
 .st-key-ocr_upload button[data-testid="stBaseButton-secondary"]::after {
-    content: "카메라/파일";
+    content: "📷 카메라/파일";
     font-size: 14px;
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
 }
 /* 텍스트 입력 시 우측 하단에 뜨는 "Press Enter to apply" 영문 안내 숨김 */
 [data-testid="InputInstructions"] { display: none !important; }
