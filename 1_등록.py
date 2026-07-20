@@ -360,6 +360,8 @@ apply_sidebar_style('''
 .element-container:has(.reg-section-mk) ~ .element-container * { font-size: 17px !important; }
 /* 컨테이너 번호 입력창 + OCR 버튼 행(key=cno_row): 폼과 같은 17px 글씨 유지 */
 .st-key-cno_row * { font-size: 17px !important; }
+/* 컨테이너 번호 입력칸 안 글씨: OCR 인식 번호 버튼과 동일하게 크고 굵게 (20px/600) */
+.st-key-form_container_no input { font-size: 20px !important; font-weight: 600 !important; }
 /* 좁은 화면에서 Streamlit이 컬럼을 세로로 쌓는 것(flex-direction: column)을 막고
    입력창(가변폭) + 버튼(내용폭)이 항상 같은 줄에 있도록 고정 */
 .st-key-cno_row div[data-testid="stHorizontalBlock"] { flex-direction: row !important; flex-wrap: nowrap !important; }
