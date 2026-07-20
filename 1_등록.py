@@ -370,9 +370,11 @@ apply_sidebar_style('''
    버튼 내부 텍스트(자식 요소 포함)를 전부 숨기고 ::after로 새 글자를 덧씌운다).
    absolute 오버레이 대신 흐름 안에 두어 버튼 크기가 새 글자 폭에 맞게 줄어들도록 한다. */
 .st-key-ocr_upload button[data-testid="stBaseButton-secondary"] {
+    display: flex !important;
+    justify-content: flex-start !important;
     width: fit-content !important;
     min-width: 0 !important;
-    padding: 0 14px !important;
+    padding: 0 6px !important;
 }
 .st-key-ocr_upload button[data-testid="stBaseButton-secondary"] * { font-size: 0 !important; }
 /* 원래 버튼 아이콘(svg)이 보이지 않아도 자리를 차지해 텍스트가 오른쪽으로 밀려 보이므로 완전히 제거 */
