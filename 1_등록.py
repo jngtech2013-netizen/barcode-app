@@ -375,6 +375,8 @@ apply_sidebar_style('''
     padding: 0 14px !important;
 }
 .st-key-ocr_upload button[data-testid="stBaseButton-secondary"] * { font-size: 0 !important; }
+/* 원래 버튼 아이콘(svg)이 보이지 않아도 자리를 차지해 텍스트가 오른쪽으로 밀려 보이므로 완전히 제거 */
+.st-key-ocr_upload button[data-testid="stBaseButton-secondary"] svg { display: none !important; }
 .st-key-ocr_upload button[data-testid="stBaseButton-secondary"]::after {
     content: "📷 카메라/파일";
     font-size: 14px;
