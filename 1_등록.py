@@ -288,13 +288,11 @@ def confirm_slot_takeover():
 def ocr_dialog():
     """컨테이너 번호 입력칸 옆 OCR 버튼으로 여는 팝업.
     촬영/업로드 → 인식 → 번호 버튼을 누르면 입력칸에 채워지고 팝업이 닫힌다.
-    (위젯 키 충돌을 피하려고 값은 ocr_apply_no에 담아 다음 런에서 반영한다)"""
-    tab_cam, tab_up = st.tabs(["📸 카메라 촬영", "🖼️ 사진 업로드"])
-    with tab_cam:
-        cam_img = st.camera_input("번호가 크고 정면으로 보이게 촬영하세요", key="ocr_camera")
-    with tab_up:
-        up_img = st.file_uploader("촬영해 둔 사진 선택", type=["jpg", "jpeg", "png"], key="ocr_upload")
-    ocr_img = cam_img or up_img
+    (위젯 키 충돌을 피하려고 값은 ocr_apply_no에 담아 다음 런에서 반영한다)
+    모바일 브라우저는 파일 선택 시 '카메라 촬영'도 함께 제공하므로
+    별도 카메라 탭 없이 업로더 하나로 촬영·업로드를 모두 처리한다."""
+    ocr_img = st.file_uploader("사진을 촬영하거나 선택하세요 (번호가 크고 정면으로 보이게)",
+                               type=["jpg", "jpeg", "png"], key="ocr_upload")
     if ocr_img is not None:
         with st.spinner("사진에서 컨테이너 번호를 인식하는 중..."):
             cache_key, (ocr_status, ocr_payload) = run_container_ocr(ocr_img.getvalue())
@@ -361,57 +359,9 @@ apply_sidebar_style('''
 .st-key-ocr_upload [data-testid="stFileUploaderDropzoneInstructions"] { display: none !important; }
 /* 텍스트 입력 시 우측 하단에 뜨는 "Press Enter to apply" 영문 안내 숨김 */
 [data-testid="InputInstructions"] { display: none !important; }
-/* OCR 팝업 카메라: 위젯 기본 배치가 미리보기를 16:9 가로로 잘라 보여줘서
-   실제 찍히는 사진(전체 프레임)과 다르게 보이는 문제 + 로딩 시 출렁임을
-   해결한다. 박스를 300px 검은 배경으로 고정하고 영상 전체 프레임을 비율
-   그대로 안에 담아 '보이는 것 = 찍히는 것'이 되게 한다.
-   (카메라 위젯은 이 앱에서 OCR 팝업에만 있어 전역 셀렉터로 지정) */
-[data-testid="stCameraInputWebcamStyledBox"] {
-    height: 300px !important; min-height: 300px !important;
-    display: flex; align-items: center; justify-content: center;
-    overflow: hidden; background: #000;
-}
-[data-testid="stCameraInputWebcamStyledBox"] video {
-    height: 100% !important; width: auto !important; max-width: 100%;
-    object-fit: contain !important;
-}
-/* 촬영 결과 박스: 라이브 미리보기 박스와 다른 요소(testid 없음)로 그려지며
-   기본값이 16:9 비율 높이라 촬영 전후 크기가 달라진다 → 같은 300px 규격 적용 */
-[data-testid="stCameraInput"] div:has(> img[alt="Snapshot"]) {
-    height: 300px !important; min-height: 300px !important;
-    display: flex; align-items: center; justify-content: center;
-    overflow: hidden; background: #000;
-}
-[data-testid="stCameraInput"] img[alt="Snapshot"] {
-    height: 100% !important; width: auto !important; max-width: 100%;
-    object-fit: contain !important;
-}
 /* OCR 팝업: 안내 메시지 여백 축소 */
 [data-testid="stDialog"] [data-testid="stAlert"] { padding: 0.4rem 0.75rem; }
 ''')
-
-# 모바일에서 st.camera_input이 후면 카메라로 시작하도록, 카메라가 새로 뜰 때마다
-# 위젯의 '카메라 전환' 버튼을 자동으로 한 번 눌러준다. (위젯 기본값은 전면.
-# 위젯 자체의 전환 기능을 쓰므로 이후 수동 전환도 정상 동작한다. 전환 버튼은
-# 카메라가 2개 이상인 기기에서만 나타나므로 데스크톱에는 영향 없음)
-components.html("""
-<script>
-(function() {
-    const doc = window.parent.document;
-    const applyRearOnce = () => {
-        doc.querySelectorAll('[data-testid="stCameraInputSwitchButton"] button').forEach((btn) => {
-            const root = btn.closest('[data-testid="stCameraInput"]');
-            if (root && !root.dataset.rearApplied) {
-                root.dataset.rearApplied = '1';  // 카메라가 새로 마운트될 때마다 1회만
-                btn.click();
-            }
-        });
-    };
-    new MutationObserver(applyRearOnce).observe(doc.body, { childList: true, subtree: true });
-    applyRearOnce();
-})();
-</script>
-""", height=0)
 
 if 'container_list' not in st.session_state:
     st.session_state.container_list = load_data_from_gsheet()
