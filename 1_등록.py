@@ -366,6 +366,9 @@ apply_sidebar_style('''
 .st-key-cno_row div[data-testid="stColumn"]:last-child { flex: 0 0 auto !important; width: auto !important; min-width: 0 !important; }
 /* OCR 팝업: 파일 업로더의 영문 안내(드래그/용량 제한) 숨김 */
 .st-key-ocr_upload [data-testid="stFileUploaderDropzoneInstructions"] { display: none !important; }
+/* OCR 팝업: "Browse files" 버튼 글자를 "카메라/이미지"로 교체 (Streamlit이 버튼 문구를 커스터마이즈하는 옵션을 제공하지 않아 텍스트를 숨기고 CSS content로 대체) */
+.st-key-ocr_upload button[data-testid="stBaseButton-secondary"] { font-size: 0 !important; }
+.st-key-ocr_upload button[data-testid="stBaseButton-secondary"]::after { content: "카메라/이미지"; font-size: 14px; }
 /* 텍스트 입력 시 우측 하단에 뜨는 "Press Enter to apply" 영문 안내 숨김 */
 [data-testid="InputInstructions"] { display: none !important; }
 /* OCR 팝업: 안내 메시지 여백 축소 */
