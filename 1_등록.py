@@ -5,6 +5,7 @@ import base64
 import hashlib
 from io import BytesIO
 from datetime import datetime, timedelta, timezone
+from PIL import Image, ImageOps
 import streamlit.components.v1 as components
 
 from container_ocr import (
@@ -294,7 +295,10 @@ def ocr_dialog():
     ocr_img = st.file_uploader("사진을 촬영하거나 선택하세요 (번호가 크고 정면으로 보이게)",
                                type=["jpg", "jpeg", "png"], key="ocr_upload")
     if ocr_img is not None:
-        st.image(ocr_img, caption="촬영/업로드한 사진 — 아래 인식 결과와 대조하세요", use_container_width=True)
+        # 휴대폰 사진은 EXIF에 회전 정보만 담고 실제 픽셀은 눕혀 저장되는 경우가 많아
+        # exif_transpose로 보정한 뒤 보여준다 (인식은 원본 바이트로 그대로 수행).
+        preview_img = ImageOps.exif_transpose(Image.open(BytesIO(ocr_img.getvalue())))
+        st.image(preview_img, caption="촬영/업로드한 사진 — 아래 인식 결과와 대조하세요", use_container_width=True)
         with st.spinner("사진에서 컨테이너 번호를 인식하는 중..."):
             cache_key, (ocr_status, ocr_payload) = run_container_ocr(ocr_img.getvalue())
         if ocr_status == "error":
