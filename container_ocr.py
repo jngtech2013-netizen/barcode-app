@@ -78,29 +78,39 @@ def _sort_candidates(candidates: list) -> list:
     return sorted(candidates, key=lambda c: (not c[1], c[0][3] != "U"))
 
 
-def extract_container_numbers(text: str) -> list:
-    """OCR 텍스트에서 컨테이너 번호 후보를 추출한다.
+def _extract_split(text: str):
+    """OCR 텍스트에서 후보를 '직접(한 줄에서 이어 읽힘)'과 '짜맞춤(줄 결합·토큰
+    조합)'으로 나눠 추출한다.
 
-    반환: (컨테이너번호, 체크디지트_일치여부) 튜플 목록 (체크디지트 일치 우선 정렬).
+    반환: (직접 후보 목록, 짜맞춤 후보 목록). 각 항목은 (번호, 체크디지트_일치여부).
+    짜맞춤 후보는 사진에 그대로 이어 찍혀 있지 않은 번호를 만들어내는 방식이라
+    우연히 체크디지트를 통과하는 오탐(약 10%/조합)이 가능하다 — 호출 측에서
+    직접 후보 중 검증 통과가 있으면 짜맞춤 후보를 버리는 식으로 써야 한다.
     """
     if not text:
-        return []
+        return [], []
     # 컨테이너 번호는 'CSQU 305438 3'처럼 띄어 찍히는 일이 많아 줄 단위로
     # 구분자만 제거해 이어붙인 뒤 11자 슬라이딩 윈도우로 훑는다.
-    # 소유자코드(HDFU)와 일련번호(528014 4)를 OCR이 별개 줄로 읽는 일도 많아
-    # 인접한 두 줄을 이어붙인 조합도 함께 훑는다. (잘못 이어진 조합에서 나온
-    # 오탐은 체크디지트 검증이 걸러낸다)
     lines = [re.sub(r"[^A-Z0-9]", "", ln) for ln in text.upper().splitlines()]
     lines = [ln for ln in lines if ln]
-    sequences = lines + [lines[i] + lines[i + 1] for i in range(len(lines) - 1)]
-    candidates = []
+    candidates = []   # 한 줄 안에서 이어 읽힌 후보 (가장 신뢰)
+    assembled = []    # 줄 결합·토큰 조합으로 짜맞춘 후보 (예비)
     seen = set()
-    for seq in sequences:
+
+    def scan(seq, out):
         for start in range(len(seq) - 10):
             coerced = _coerce_window(seq[start:start + 11])
             if coerced and coerced not in seen:
                 seen.add(coerced)
-                candidates.append((coerced, is_valid_check_digit(coerced)))
+                out.append((coerced, is_valid_check_digit(coerced)))
+
+    for ln in lines:
+        scan(ln, candidates)
+    # 소유자코드(HDFU)와 일련번호(528014 4)를 OCR이 별개 줄로 읽는 일도 많아
+    # 인접한 두 줄을 이어붙인 것도 훑는다 — 다만 무관한 줄이 잘못 이어지면
+    # 가짜 번호가 체크디지트를 통과할 수 있어 짜맞춤(예비) 후보로 분류한다.
+    for i in range(len(lines) - 1):
+        scan(lines[i] + lines[i + 1], assembled)
 
     # 실제 문짝 표기는 소유자코드(HDFU)·일련번호(528056)·체크디지트(6)가 서로
     # 떨어져 있어 OCR 줄 순서상 인접하지 않게 읽히는 일이 많다. 텍스트 전체에서
@@ -126,8 +136,21 @@ def extract_container_numbers(text: str) -> list:
     for cand in combos:
         if cand not in seen and is_valid_check_digit(cand):
             seen.add(cand)
-            candidates.append((cand, True))
-    return _sort_candidates(candidates)
+            assembled.append((cand, True))
+    return candidates, assembled
+
+
+def extract_container_numbers(text: str) -> list:
+    """OCR 텍스트에서 컨테이너 번호 후보를 추출한다.
+
+    반환: (컨테이너번호, 체크디지트_일치여부) 튜플 목록 (체크디지트 일치 우선 정렬).
+    한 줄에서 그대로 이어 읽힌 후보 중 검증 통과가 있으면 그것만 쓰고, 없을
+    때만 흩어진 문짝 표기용 짜맞춤 후보를 예비로 포함한다.
+    """
+    direct, assembled = _extract_split(text)
+    if any(ok for _, ok in direct):
+        return _sort_candidates(direct)
+    return _sort_candidates(direct + assembled)
 
 
 def _load_image(image_bytes: bytes) -> Image.Image:
@@ -216,8 +239,8 @@ def recognize_container_numbers(image_bytes: bytes, api_key: str):
     등) 중단한다. (API 최대 9회, 보통 첫 단계 3회로 끝)
     """
     img = _load_image(image_bytes)
-    candidates = []
-    seen = set()
+    direct_cands, assembled_cands = [], []
+    seen_d, seen_a = set(), set()
     errors = []
 
     def try_variant(angle, region, enhance):
@@ -229,7 +252,7 @@ def recognize_container_numbers(image_bytes: bytes, api_key: str):
             sides = (2000, 1600, 1280)
         if enhance:
             variant = _enhance_for_ocr(variant)
-        return extract_container_numbers(
+        return _extract_split(
             ocr_space_parse(_compress_pil(variant, sides), api_key))
 
     # 단계 순서: 상단 크롭 → 전체 → 대비강화 상단 크롭 (각 단계 = 회전 3방향 병렬)
@@ -241,18 +264,31 @@ def recognize_container_numbers(image_bytes: bytes, api_key: str):
             futures = [pool.submit(try_variant, *attempt) for attempt in stage]
             for future in futures:  # 제출 순서대로 수집해 후보 순서를 결정적으로 유지
                 try:
-                    found = future.result()
+                    direct, assembled = future.result()
                 except OcrError as e:
                     errors.append(str(e))
                     continue
-                for cand in found:
-                    if cand[0] not in seen:
-                        seen.add(cand[0])
-                        candidates.append(cand)
-        if any(ok for _, ok in candidates):
+                for cand in direct:
+                    if cand[0] not in seen_d:
+                        seen_d.add(cand[0])
+                        direct_cands.append(cand)
+                for cand in assembled:
+                    if cand[0] not in seen_a:
+                        seen_a.add(cand[0])
+                        assembled_cands.append(cand)
+        if any(ok for _, ok in direct_cands + assembled_cands):
             break  # 검증 통과 후보를 찾았으면 다음 단계 불필요
         if len(errors) >= 2:
             break  # 반복 실패 = 호출 제한에 걸렸을 가능성이 높아 중단
+
+    # 한 줄에서 그대로 이어 읽힌 검증 통과 후보가 있으면 그것만 신뢰한다.
+    # 줄 결합·토큰 조합으로 짜맞춘 후보는 흩어진 문짝 표기용 예비 수단으로,
+    # 우연히 체크디지트를 통과한 가짜 번호가 실제 번호와 나란히 화면에
+    # 노출되는 것을 막는다.
+    if any(ok for _, ok in direct_cands):
+        candidates = direct_cands
+    else:
+        candidates = direct_cands + [c for c in assembled_cands if c[0] not in seen_d]
     if not candidates and errors:
         raise OcrError(errors[-1])
     return _sort_candidates(candidates), errors

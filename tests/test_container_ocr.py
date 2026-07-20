@@ -88,6 +88,15 @@ def test_extract_scattered_wrong_check_digit_rejected():
     assert valid == []
 
 
+def test_extract_combo_dropped_when_contiguous_valid_exists():
+    # 이어 읽힌 검증 통과 번호(CSQU3054383)가 있으면, 떨어진 토큰을 짜맞춘 조합
+    # (TARE+1234560 — 사진에 실제로 없는 번호)이 우연히 체크디지트를 통과해도
+    # 화면에 나오지 않도록 버려야 한다
+    text = "CSQU 305438 3\nTARE\n1234560"
+    valid = [c for c, ok in extract_container_numbers(text) if ok]
+    assert valid == ["CSQU3054383"]
+
+
 def test_extract_no_match():
     assert extract_container_numbers("아무 번호도 없는 텍스트") == []
     assert extract_container_numbers("") == []
