@@ -295,14 +295,14 @@ def ocr_dialog():
     ocr_img = st.file_uploader("사진을 촬영하거나 선택하세요 (번호가 크고 정면으로 보이게)",
                                type=["jpg", "jpeg", "png"], key="ocr_upload")
     if ocr_img is not None:
+        with st.spinner("사진에서 컨테이너 번호를 인식하는 중..."):
+            cache_key, (ocr_status, ocr_payload) = run_container_ocr(ocr_img.getvalue())
         # 휴대폰 사진은 EXIF에 회전 정보만 담고 실제 픽셀은 눕혀 저장되는 경우가 많아
         # exif_transpose로 보정한 뒤 보여준다 (인식은 원본 바이트로 그대로 수행).
         preview_img = ImageOps.exif_transpose(Image.open(BytesIO(ocr_img.getvalue())))
-        st.image(preview_img, caption="촬영/업로드한 사진 — 아래 인식 결과와 대조하세요", use_container_width=True)
-        with st.spinner("사진에서 컨테이너 번호를 인식하는 중..."):
-            cache_key, (ocr_status, ocr_payload) = run_container_ocr(ocr_img.getvalue())
         if ocr_status == "error":
             st.error(f"인식 실패: {ocr_payload}")
+            st.image(preview_img, caption="촬영/업로드한 사진", use_container_width=True)
             if st.button("🔄 다시 시도", key="ocr_retry"):
                 st.session_state.get("ocr_results", {}).pop(cache_key, None)
                 st.rerun(scope="fragment")
@@ -320,6 +320,7 @@ def ocr_dialog():
             else:
                 st.warning("컨테이너 번호를 정확히 인식하지 못했습니다. "
                            "번호 부분이 크고 선명하게 보이도록 가까이서 다시 촬영해 주세요.")
+            st.image(preview_img, caption="촬영/업로드한 사진 — 인식 결과와 대조하세요", use_container_width=True)
             if ocr_texts:
                 with st.expander("📄 사진에서 읽힌 글자 보기 (오인식 원인 확인용)"):
                     st.text("\n──────────\n".join(t.strip() for t in ocr_texts))
