@@ -94,17 +94,67 @@ def _sort_candidates(candidates: list) -> list:
     return sorted(candidates, key=lambda c: (not c[1], c[0][3] != "U"))
 
 
-def _extract_split(text: str):
-    """OCR 텍스트에서 후보를 '직접(한 줄에서 이어 읽힘)'과 '짜맞춤(줄 결합·토큰
-    조합)'으로 나눠 추출한다.
+def _select_candidates(direct: list, assembled: list, derived: list) -> list:
+    """신뢰도 3단계(직접 → 짜맞춤 → 계산)에서 쓸 후보를 고른다.
 
-    반환: (직접 후보 목록, 짜맞춤 후보 목록). 각 항목은 (번호, 체크디지트_일치여부).
-    짜맞춤 후보는 사진에 그대로 이어 찍혀 있지 않은 번호를 만들어내는 방식이라
-    우연히 체크디지트를 통과하는 오탐(약 10%/조합)이 가능하다 — 호출 측에서
-    직접 후보 중 검증 통과가 있으면 짜맞춤 후보를 버리는 식으로 써야 한다.
+    위 단계에 체크디지트 검증을 통과한 후보가 하나라도 있으면 아래 단계는
+    버린다 — 아래 단계일수록 사진에 그대로 찍혀 있지 않은 번호를 만들어내므로,
+    우연히 검증을 통과한 가짜가 진짜 번호와 나란히 화면에 뜨는 것을 막는다.
+    """
+    chosen = list(direct)
+    for tier in (assembled, derived):
+        if any(ok for _, ok in chosen):
+            break
+        already = {cno for cno, _ in chosen}
+        chosen += [c for c in tier if c[0] not in already]
+    return _sort_candidates(chosen)
+
+
+def _derive_missing_check_digit(lines: list, seen: set) -> list:
+    """체크디지트를 못 읽었을 때 소유자코드 + 6자리 일련번호로 번호를 완성한다.
+
+    체크디지트는 앞 10자리로 유일하게 정해지므로(ISO 6346), 사진의 체크디지트
+    상자를 OCR이 통째로 놓쳐도(작은 네모 안에 한 글자라 자주 놓친다) 번호를
+    복원할 수 있다. 다만 이렇게 만든 번호는 체크디지트 검증으로 오인식을
+    걸러낼 수 없으므로(계산해서 붙인 값이라 항상 통과한다) 가장 낮은 신뢰
+    단계로 두고, 오작동 여지를 다음 조건으로 좁힌다:
+
+    - 소유자코드는 보정 없이 4자 모두 영문 + 카테고리 문자 U인 줄만 인정
+    - 일련번호는 정확히 6자리인 순수 숫자 조각만 인정
+    - 소유자코드·일련번호 후보가 각각 딱 하나일 때만 — 둘 이상이면 어느 쪽이
+      진짜인지 검증할 방법이 없다(무게 표기가 6자리로 읽히는 경우 등)
+    - 한 자리(또는 상자 테두리와 겹친 두 자리) 숫자 줄이 하나라도 있으면 포기 —
+      체크디지트로 읽힌 값이 있다는 뜻이고, 그 값과 계산값이 다르다면 일련번호
+      쪽이 잘못 읽혔을 수 있어 계산으로 덮어쓰면 안 된다
+    """
+    if any(len(ln) <= 2 and ln.isdigit() for ln in lines):
+        return []
+    owners = {ln for ln in lines if len(ln) == 4 and ln.isalpha() and ln[3] == "U"}
+    serials = {run for ln in lines for run in re.findall(r"\d+", ln) if len(run) == 6}
+    if len(owners) != 1 or len(serials) != 1:
+        return []
+    cno10 = owners.pop() + serials.pop()
+    cand = cno10 + str(compute_check_digit(cno10))
+    if cand in seen:
+        return []
+    seen.add(cand)
+    return [(cand, True)]
+
+
+def _extract_split(text: str):
+    """OCR 텍스트에서 후보를 신뢰도 3단계로 나눠 추출한다.
+
+    반환: (직접 후보, 짜맞춤 후보, 계산 후보). 각 항목은 (번호, 체크디지트_일치여부).
+    - 직접: 한 줄에서 그대로 이어 읽힌 번호 (가장 신뢰)
+    - 짜맞춤: 줄 결합·토큰 조합으로 만든 번호. 사진에 그대로 이어 찍혀 있지 않은
+      번호를 만들어내는 방식이라 우연히 체크디지트를 통과하는 오탐(약 10%/조합)이
+      가능하다
+    - 계산: 체크디지트를 못 읽어 직접 계산해 붙인 번호 (검증 효과 없음)
+
+    호출 측은 _select_candidates로 위 단계 우선 사용해야 한다.
     """
     if not text:
-        return [], []
+        return [], [], []
     # 컨테이너 번호는 'CSQU 305438 3'처럼 띄어 찍히는 일이 많아 줄 단위로
     # 구분자만 제거해 이어붙인 뒤 11자 슬라이딩 윈도우로 훑는다.
     lines = [re.sub(r"[^A-Z0-9]", "", ln) for ln in text.upper().splitlines()]
@@ -199,7 +249,9 @@ def _extract_split(text: str):
         if len(serial) == 7 and cand not in seen and is_valid_check_digit(cand):
             seen.add(cand)
             assembled.append((cand, True))
-    return candidates, assembled
+
+    derived = _derive_missing_check_digit(lines, seen)
+    return candidates, assembled, derived
 
 
 def extract_container_numbers(text: str) -> list:
@@ -207,12 +259,10 @@ def extract_container_numbers(text: str) -> list:
 
     반환: (컨테이너번호, 체크디지트_일치여부) 튜플 목록 (체크디지트 일치 우선 정렬).
     한 줄에서 그대로 이어 읽힌 후보 중 검증 통과가 있으면 그것만 쓰고, 없을
-    때만 흩어진 문짝 표기용 짜맞춤 후보를 예비로 포함한다.
+    때만 흩어진 문짝 표기용 짜맞춤 후보를, 그것도 없으면 체크디지트를 계산해
+    완성한 후보를 예비로 포함한다.
     """
-    direct, assembled = _extract_split(text)
-    if any(ok for _, ok in direct):
-        return _sort_candidates(direct)
-    return _sort_candidates(direct + assembled)
+    return _select_candidates(*_extract_split(text))
 
 
 def _load_image(image_bytes: bytes) -> Image.Image:
@@ -302,8 +352,8 @@ def recognize_container_numbers(image_bytes: bytes, api_key: str):
     등) 중단한다. (API 최대 9회, 보통 첫 단계 3회로 끝)
     """
     img = _load_image(image_bytes)
-    direct_cands, assembled_cands = [], []
-    seen_d, seen_a = set(), set()
+    tiers = ([], [], [])          # 직접 / 짜맞춤 / 계산 (신뢰도 순)
+    seen = (set(), set(), set())
     errors = []
     texts = []
 
@@ -328,33 +378,25 @@ def recognize_container_numbers(image_bytes: bytes, api_key: str):
             futures = [pool.submit(try_variant, *attempt) for attempt in stage]
             for future in futures:  # 제출 순서대로 수집해 후보 순서를 결정적으로 유지
                 try:
-                    (direct, assembled), text = future.result()
+                    found, text = future.result()
                 except OcrError as e:
                     errors.append(str(e))
                     continue
                 if text.strip():
                     texts.append(text)
-                for cand in direct:
-                    if cand[0] not in seen_d:
-                        seen_d.add(cand[0])
-                        direct_cands.append(cand)
-                for cand in assembled:
-                    if cand[0] not in seen_a:
-                        seen_a.add(cand[0])
-                        assembled_cands.append(cand)
-        if any(ok for _, ok in direct_cands + assembled_cands):
+                for tier, out, done in zip(found, tiers, seen):
+                    for cand in tier:
+                        if cand[0] not in done:
+                            done.add(cand[0])
+                            out.append(cand)
+        # 계산 후보(체크디지트를 직접 계산해 붙인 것)는 검증으로 걸러지지 않으므로
+        # 여기서 멈추지 않고 다음 단계에서 제대로 읽힌 번호를 계속 찾는다.
+        if any(ok for _, ok in tiers[0] + tiers[1]):
             break  # 검증 통과 후보를 찾았으면 다음 단계 불필요
         if len(errors) >= 2:
             break  # 반복 실패 = 호출 제한에 걸렸을 가능성이 높아 중단
 
-    # 한 줄에서 그대로 이어 읽힌 검증 통과 후보가 있으면 그것만 신뢰한다.
-    # 줄 결합·토큰 조합으로 짜맞춘 후보는 흩어진 문짝 표기용 예비 수단으로,
-    # 우연히 체크디지트를 통과한 가짜 번호가 실제 번호와 나란히 화면에
-    # 노출되는 것을 막는다.
-    if any(ok for _, ok in direct_cands):
-        candidates = direct_cands
-    else:
-        candidates = direct_cands + [c for c in assembled_cands if c[0] not in seen_d]
+    candidates = _select_candidates(*tiers)
     if not candidates and errors:
         raise OcrError(errors[-1])
-    return _sort_candidates(candidates), errors, texts
+    return candidates, errors, texts

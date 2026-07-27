@@ -138,6 +138,38 @@ def test_extract_requires_category_u():
     assert extract_container_numbers("LBKG1828800") == []
 
 
+def test_extract_derives_missing_check_digit():
+    # 실사진(HDFU) OCR 원문: 체크디지트 상자(작은 네모 속 [0])를 통째로 놓쳐
+    # 소유자코드와 6자리 일련번호만 읽힌 경우 — 체크디지트를 계산해 완성한다
+    text = "HDFU\nMAX GROSS\n527007\n45G1\n32,500 KGS\n71 650"
+    assert extract_container_numbers(text) == [("HDFU5270070", True)]
+
+
+def test_derived_skipped_when_check_digit_was_read():
+    # 체크디지트로 읽힌 숫자가 있으면(그 값이 계산값과 달라도) 계산으로 덮어쓰지
+    # 않는다 — 일련번호 쪽이 잘못 읽혔을 수 있어 확인이 필요한 상황이다
+    valid = [c for c, ok in extract_container_numbers("WDFU\n120850\n7\n22G1") if ok]
+    assert valid == []
+
+
+def test_derived_skipped_when_serial_ambiguous():
+    # 6자리로 읽힌 숫자가 둘 이상이면 어느 쪽이 일련번호인지 가릴 수 없다
+    text = "HDFU\n527007\n132500\n45G1"
+    assert [c for c, ok in extract_container_numbers(text) if ok] == []
+
+
+def test_derived_requires_plain_owner_code():
+    # 소유자코드는 보정 없이 영문 4자 + 카테고리 문자 U인 줄만 인정한다
+    assert extract_container_numbers("TARE\n527007\n45G1") == []   # 4번째 글자 ≠ U
+    assert extract_container_numbers("HDF0\n527007\n45G1") == []   # 숫자 섞임
+
+
+def test_derived_not_used_when_real_number_found():
+    # 제대로 읽힌 번호가 있으면 계산 후보는 화면에 나오지 않아야 한다
+    text = "CSQU 305438 3\nHDFU\n527007"
+    assert extract_container_numbers(text) == [("CSQU3054383", True)]
+
+
 def test_extract_no_match():
     assert extract_container_numbers("아무 번호도 없는 텍스트") == []
     assert extract_container_numbers("") == []
