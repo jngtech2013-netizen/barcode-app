@@ -27,7 +27,8 @@ from utils import (
     render_app_title,
     get_destinations,
     make_zpl,
-    is_valid_container_no,
+    container_no_error,
+    find_same_day_duplicate,
     DEFAULT_PRINTER_IP,
     load_config,
     button_marker
@@ -107,7 +108,9 @@ def clear_form_inputs():
 def complete_and_backup_container(container_no, record_undo=True):
     """컨테이너를 선적완료 처리해 일별/월별 백업으로 옮기고 메인 시트·세션에서 제거한다.
     (선적완료 = 자동 백업+제거. 데이터 백업 버튼을 대체한다.)
-    record_undo=True면 '방금 선적완료 되돌리기'용 스냅샷을 저장한다."""
+    record_undo=True면 '방금 선적완료 되돌리기'용 스냅샷을 저장한다.
+
+    반환: (성공여부, 실패 시 오류 메시지 / 성공 시 백업에서 덮어쓴 번호 목록)"""
     idx = next((i for i, c in enumerate(st.session_state.container_list)
                 if c.get('컨테이너 번호') == container_no), None)
     if idx is None:
@@ -117,9 +120,9 @@ def complete_and_backup_container(container_no, record_undo=True):
     item['상태'] = '선적완료'
     item['완료일시'] = pd.to_datetime(get_korea_now().replace(tzinfo=None))
     with st.spinner(f"'{container_no}' 선적완료 백업 중..."):
-        ok, err = backup_data_to_new_sheet([item])
+        ok, res = backup_data_to_new_sheet([item])
         if not ok:
-            return False, err
+            return False, res
         dok, dres = delete_rows_by_container_nos([container_no])
         if not dok:
             return False, dres
@@ -131,7 +134,7 @@ def complete_and_backup_container(container_no, record_undo=True):
             'backup_sheet': f"{BACKUP_PREFIX}{today_str}",
         }
     log_change(f"선적완료 자동 백업: {container_no} (위치 {item.get('위치')})")
-    return True, None
+    return True, res
 
 def undo_last_completed():
     """방금 선적완료한 컨테이너를 백업에서 빼내 다시 선적중 상태로 되돌린다."""
@@ -505,11 +508,13 @@ with st.container(border=True):
             st.session_state['editor_rev'] = st.session_state.get('editor_rev', 0) + 1
             st.session_state['undecided_block'] = cno
         else:
-            ok, err = complete_and_backup_container(cno)
+            ok, res = complete_and_backup_container(cno)
             if ok:
-                st.session_state["table_action_msg"] = ("success", f"'{cno}' 선적완료 — 백업 후 목록에서 제거했습니다.")
+                # 같은 번호가 이미 백업에 있었으면 조용히 바뀌지 않도록 안내한다(로그에도 남는다).
+                note = " (기존 백업 기록을 덮어썼습니다)" if res else ""
+                st.session_state["table_action_msg"] = ("success", f"'{cno}' 선적완료 — 백업 후 목록에서 제거했습니다.{note}")
             else:
-                st.session_state["table_action_msg"] = ("error", f"선적완료 처리 실패: {err}")
+                st.session_state["table_action_msg"] = ("error", f"선적완료 처리 실패: {res}")
         st.rerun()
 
     # 출고처 미정으로 선적완료가 차단된 경우 팝업 안내
@@ -591,7 +596,7 @@ with st.container(border=True):
     with st.container(key="cno_row"):
         col_no, col_ocr = st.columns([4, 1], vertical_alignment="bottom")
         with col_no:
-            container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCD1234567", key="form_container_no")
+            container_no = st.text_input("1. 컨테이너 번호", placeholder="예: ABCU1234560", key="form_container_no")
         with col_ocr:
             if st.button("📷 OCR", key="ocr_open_btn",
                          help="사진을 찍거나 올려서 컨테이너 번호를 자동 인식합니다."):
@@ -607,12 +612,19 @@ with st.container(border=True):
         st.session_state["form_success_message"] = ""
         st.session_state["form_error_message"] = ""
 
-        if not container_no:
-            st.session_state["form_error_message"] = "컨테이너 번호를 입력해주세요."
-        elif not is_valid_container_no(container_no):
-            st.session_state["form_error_message"] = "컨테이너 번호 형식이 올바르지 않습니다."
-        elif any(c.get('컨테이너 번호') == container_no for c in st.session_state.container_list):
-            st.session_state["form_error_message"] = f"이미 등록된 컨테이너 번호입니다: {container_no}"
+        # 빈 값 / 형식 / 4번째 자리 U / 체크디지트를 한 번에 검사하고 사유별 메시지를 띄운다.
+        cno_error = container_no_error(container_no)
+        # 중복은 '오늘 등록된 것'만 막는다 (번호는 재사용되므로 과거 등록분은 허용).
+        dup = None if cno_error else find_same_day_duplicate(
+            st.session_state.container_list, container_no, get_korea_now().date())
+        if cno_error:
+            st.session_state["form_error_message"] = cno_error
+        elif dup:
+            dup_pos = str(dup.get('위치') or '').strip()
+            where = f" (위치 {dup_pos})" if dup_pos else ""
+            st.session_state["form_error_message"] = (
+                f"오늘 이미 등록된 컨테이너 번호입니다: {container_no}{where}"
+            )
         else:
             naive_datetime = get_korea_now().replace(tzinfo=None)
             new_container = {

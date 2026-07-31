@@ -6,6 +6,10 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 
+# 체크디지트 계산은 OCR 모듈과 같은 규칙(ISO 6346)을 써야 하므로 그대로 가져다 쓴다.
+# (container_ocr는 utils를 import하지 않으므로 순환 import가 생기지 않는다)
+from container_ocr import compute_check_digit, is_valid_check_digit
+
 # --- 상수 정의 (공용) ---
 MAIN_SHEET_NAME = "현재 데이터"
 SHEET_HEADERS = ['컨테이너 번호', '출고처', '피트수', '씰 번호', '상태', '등록일시', '완료일시', '위치']
@@ -160,9 +164,89 @@ def render_app_title():
 # --- 공용 순수 헬퍼 (UI/네트워크 비종속, 단위 테스트 대상) ---
 CONTAINER_NO_PATTERN = re.compile(r'^[A-Z]{4}\d{7}$')
 
+def container_no_error(container_no):
+    """등록 가능한 컨테이너 번호인지 검사하고 문제가 있으면 오류 메시지를, 없으면 None을 반환한다.
+
+    ISO 6346 기준 3단계로 본다.
+      1) 형식     : 영문 대문자 4자 + 숫자 7자
+      2) 카테고리 : 4번째 글자는 화물 컨테이너를 뜻하는 'U'
+      3) 체크디지트: 마지막 1자리가 앞 10자리로 계산한 값과 일치
+    """
+    if not container_no:
+        return "컨테이너 번호를 입력해주세요."
+    if CONTAINER_NO_PATTERN.match(container_no) is None:
+        return "컨테이너 번호 형식이 올바르지 않습니다. (영문 대문자 4자 + 숫자 7자, 예: ABCU1234560)"
+    if container_no[3] != 'U':
+        return (f"컨테이너 번호 4번째 자리는 'U'여야 합니다. "
+                f"(입력한 값: '{container_no[3]}')")
+    if not is_valid_check_digit(container_no):
+        expected = compute_check_digit(container_no[:10])
+        return (f"체크디지트가 맞지 않습니다. 마지막 자리는 '{expected}'여야 합니다. "
+                f"(입력한 값: '{container_no[10]}') 번호를 다시 확인해주세요.")
+    return None
+
+
 def is_valid_container_no(container_no) -> bool:
-    """컨테이너 번호 형식 검증: 영문 대문자 4자리 + 숫자 7자리 (예: ABCD1234567)."""
-    return bool(container_no) and CONTAINER_NO_PATTERN.match(container_no) is not None
+    """컨테이너 번호가 등록 가능한지 여부만 bool로 돌려준다. 사유는 container_no_error 참고."""
+    return container_no_error(container_no) is None
+
+
+def normalize_container_no(value) -> str:
+    """비교용 정규화: 앞뒤 공백 제거 + 대문자. 빈 값/NaN은 ''."""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return ''
+    return str(value).strip().upper()
+
+
+def find_same_day_duplicate(container_list, container_no, today):
+    """오늘(KST) 등록된 것 중 같은 번호가 있으면 그 항목을, 없으면 None을 반환한다.
+
+    컨테이너 번호는 재사용되는 자산이라 과거에 쓰인 번호는 다시 등록할 수 있어야 한다.
+    따라서 '같은 날 같은 번호를 두 번 등록'하는 것(등록 버튼 중복 클릭, 다른 사람이
+    방금 등록한 줄 모르고 또 등록)만 막는다.
+    등록일시가 비어 있는 레거시 행은 날짜를 판단할 수 없으므로 검사 대상에서 뺀다.
+    """
+    target = normalize_container_no(container_no)
+    if not target:
+        return None
+    for c in container_list:
+        if normalize_container_no(c.get('컨테이너 번호')) != target:
+            continue
+        ts = pd.to_datetime(c.get('등록일시'), errors='coerce')
+        if pd.notna(ts) and ts.date() == today:
+            return c
+    return None
+
+
+def backup_values_to_frame(values):
+    """백업 시트의 get_all_values() 결과를 SHEET_HEADERS에 맞춘 DataFrame으로 만든다.
+
+    열 순서/구성이 어긋난 시트가 섞여도 헤더 기준으로 정렬하고, 씰 번호는
+    새로 쓸 값과 같은 규칙(force_text_seal)으로 맞춰 비교/병합이 어긋나지 않게 한다.
+    """
+    df = pd.DataFrame(values[1:], columns=values[0], dtype=str)
+    df = df.reindex(columns=SHEET_HEADERS, fill_value="")
+    df['씰 번호'] = df['씰 번호'].apply(force_text_seal)
+    return df
+
+
+def merge_backup_frames(df_existing, df_new):
+    """기존 백업 행과 새 행을 합쳐 컨테이너 번호당 최신 1건만 남긴다.
+    일별·월별 백업이 같은 규칙을 쓰도록 한 곳에 모아둔다."""
+    return pd.concat([df_existing, df_new]).drop_duplicates(subset=['컨테이너 번호'], keep='last')
+
+
+def overlapping_container_nos(df_existing, df_new):
+    """기존 백업 행과 새 행에 동시에 있는 컨테이너 번호 목록 = 덮어쓰게 될 대상.
+    merge_backup_frames가 조용히 교체해버리기 전에 로그로 남기려고 미리 뽑는다."""
+    existing = set(df_existing['컨테이너 번호'])
+    seen, dup = set(), []
+    for no in df_new['컨테이너 번호']:
+        if no in existing and no not in seen:
+            seen.add(no)
+            dup.append(no)
+    return dup
+
 
 def filter_backup_sheets(sheet_titles, kind="daily"):
     """시트 제목 목록에서 일별/월별 백업 시트만 골라 최신순으로 반환한다.
@@ -702,10 +786,17 @@ def update_row_in_backup_sheets(data, source_sheet_name):
 
 
 def backup_data_to_new_sheet(container_data):
+    """컨테이너를 일별/월별 백업 시트에 기록한다.
+
+    같은 컨테이너 번호가 이미 있으면 새 기록으로 덮어쓰되(일별·월별 동일 규칙),
+    조용히 바뀌지 않도록 덮어쓴 번호를 로그 시트에 남긴다.
+    반환: (성공여부, 실패 시 오류 메시지 / 성공 시 덮어쓴 번호 목록)
+    """
     spreadsheet = connect_to_gsheet()
     if spreadsheet is None:
         return False, "스프레드시트 연결 안됨"
     try:
+        overwritten = []  # 덮어쓴 컨테이너 번호 (호출한 쪽에서 안내에 쓸 수 있게 반환)
         df_new = pd.DataFrame(container_data)
 
         if '등록일시' in df_new.columns:
@@ -729,13 +820,14 @@ def backup_data_to_new_sheet(container_data):
             ensure_text_format(backup_sheet, '씰 번호')
             existing_values = backup_sheet.get_all_values()
             if len(existing_values) > 1:
-                df_existing = pd.DataFrame(existing_values[1:], columns=existing_values[0], dtype=str)
-                if '씰 번호' in df_existing.columns:
-                    df_existing['씰 번호'] = df_existing['씰 번호'].apply(force_text_seal)
-                df_combined = pd.concat([df_existing, df_new])
-                df_final = df_combined.drop_duplicates(subset=['컨테이너 번호'], keep='last')
+                existing_df = backup_values_to_frame(existing_values)
+                dup_nos = overlapping_container_nos(existing_df, df_new)
+                df_final = merge_backup_frames(existing_df, df_new)
                 backup_sheet.clear()
                 backup_sheet.update('A1', [SHEET_HEADERS] + df_final.values.tolist(), value_input_option='USER_ENTERED')
+                if dup_nos:
+                    overwritten.extend(dup_nos)
+                    log_change(f"백업 덮어쓰기: {', '.join(dup_nos)} ({daily_backup_name})")
             else:
                 # 헤더만 있거나 빈 시트인 경우 A1부터 명시적으로 덮어쓰기
                 backup_sheet.update('A1', [SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
@@ -754,12 +846,21 @@ def backup_data_to_new_sheet(container_data):
             ensure_text_format(backup_sheet, '씰 번호')
             existing_values = backup_sheet.get_all_values()
             if len(existing_values) > 1:
-                existing_df = pd.DataFrame(existing_values[1:], columns=existing_values[0], dtype=str)
-                new_unique_df = df_new[~df_new['컨테이너 번호'].isin(existing_df['컨테이너 번호'])]
-            else:
-                new_unique_df = df_new
-            if not new_unique_df.empty:
-                backup_sheet.append_rows(new_unique_df.values.tolist(), value_input_option='USER_ENTERED')
+                existing_df = backup_values_to_frame(existing_values)
+                dup_nos = overlapping_container_nos(existing_df, df_new)
+                if dup_nos:
+                    # 같은 번호가 이미 있으면 일별 백업과 똑같이 새 기록으로 덮어쓴다.
+                    # (예전에는 새 기록을 버려서 일별엔 최신, 월별엔 옛 기록이 남아 두 시트가 어긋났다)
+                    df_final = merge_backup_frames(existing_df, df_new)
+                    backup_sheet.clear()
+                    backup_sheet.update('A1', [SHEET_HEADERS] + df_final.values.tolist(), value_input_option='USER_ENTERED')
+                    overwritten.extend(dup_nos)
+                    log_change(f"백업 덮어쓰기: {', '.join(dup_nos)} ({monthly_backup_name})")
+                elif not df_new.empty:
+                    # 중복이 없으면 전체 재작성 없이 덧붙인다 (월별 시트는 크므로 쓰기 비용 절약)
+                    backup_sheet.append_rows(df_new.values.tolist(), value_input_option='USER_ENTERED')
+            elif not df_new.empty:
+                backup_sheet.update('A1', [SHEET_HEADERS] + df_new.values.tolist(), value_input_option='USER_ENTERED')
         except gspread.exceptions.WorksheetNotFound:
             # 월별 시트는 한 달 누적 데이터를 담으므로 넉넉하게 1000행으로 고정
             new_sheet = spreadsheet.add_worksheet(title=monthly_backup_name, rows=1000, cols=len(SHEET_HEADERS))
@@ -769,7 +870,7 @@ def backup_data_to_new_sheet(container_data):
                 new_sheet.update('A2', df_new.values.tolist(), value_input_option='USER_ENTERED')
 
         invalidate_sheet_caches()
-        return True, None
+        return True, sorted(set(overwritten))
     except Exception as e:
         return False, str(e)
 

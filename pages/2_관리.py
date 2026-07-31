@@ -72,6 +72,28 @@ def undecided_block_dialog(container_no):
         st.rerun()
 
 
+def mgmt_complete_and_backup(updated_data):
+    """선적완료된 컨테이너를 일별/월별 백업으로 옮기고 메인 시트·목록에서 제거한다.
+
+    반환: (성공여부, 실패 시 오류 메시지 / 성공 시 백업에서 덮어쓴 번호 목록)"""
+    cno = updated_data.get('컨테이너 번호')
+    with st.spinner('선적완료 백업 처리 중...'):
+        bok, bres = backup_data_to_new_sheet([updated_data])
+        dok, dres = delete_rows_by_container_nos([cno]) if bok else (False, bres)
+    if not (bok and dok):
+        return False, (bres if not bok else dres)
+    idx = next((i for i, c in enumerate(st.session_state.container_list)
+                if c.get('컨테이너 번호') == cno), None)
+    if idx is not None:
+        st.session_state.container_list.pop(idx)
+    today_str = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
+    st.session_state['mgmt_last_completed'] = {
+        'item': updated_data, 'backup_sheet': f"{BACKUP_PREFIX}{today_str}"
+    }
+    log_change(f"관리 페이지 선적완료 백업: {cno}")
+    return True, bres
+
+
 def mgmt_undo_last_completed():
     """관리 페이지에서 방금 선적완료(백업)한 컨테이너를 백업에서 빼내 다시 선적중으로 되돌린다."""
     snap = st.session_state.get('mgmt_last_completed')
@@ -256,20 +278,14 @@ if st.session_state.container_list:
                     if current_status == '선적중' or not pd.notna(selected_data.get('완료일시')):
                         aware_time = datetime.now(timezone(timedelta(hours=9)))
                         updated_data['완료일시'] = pd.to_datetime(aware_time.replace(tzinfo=None))
-                    with st.spinner('선적완료 백업 처리 중...'):
-                        bok, berr = backup_data_to_new_sheet([updated_data])
-                        dok, dres = delete_rows_by_container_nos([selected_for_edit]) if bok else (False, berr)
-                    if bok and dok:
-                        st.session_state.container_list.pop(selected_idx)
-                        today_str = datetime.now(timezone(timedelta(hours=9))).date().isoformat()
-                        st.session_state['mgmt_last_completed'] = {
-                            'item': updated_data, 'backup_sheet': f"{BACKUP_PREFIX}{today_str}"
-                        }
-                        log_change(f"관리 페이지 선적완료 백업: {selected_for_edit}")
-                        st.session_state["mgmt_action_msg"] = ("success", f"'{selected_for_edit}' 선적완료 처리 후 백업했습니다.")
+                    ok, res = mgmt_complete_and_backup(updated_data)
+                    if ok:
+                        # 같은 번호가 이미 백업에 있었으면 조용히 바뀌지 않도록 안내한다(로그에도 남는다).
+                        note = " (기존 백업 기록을 덮어썼습니다)" if res else ""
+                        st.session_state["mgmt_action_msg"] = ("success", f"'{selected_for_edit}' 선적완료 처리 후 백업했습니다.{note}")
                         st.rerun()
                     else:
-                        st.error(f"선적완료 백업 실패: {berr if not bok else dres}")
+                        st.error(f"선적완료 백업 실패: {res}")
                 else:
                     updated_data['완료일시'] = None
                     ok, msg = update_row_in_gsheet(updated_data)
