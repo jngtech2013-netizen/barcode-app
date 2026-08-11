@@ -458,6 +458,16 @@ with st.container(border=True):
     display_df = pd.DataFrame(table_rows)
     column_order = ['출력선택', '위치', '컨테이너 번호', '출고처', '피트수', '씰 번호', '등록일시', '선적완료', '수정']
 
+    # data_editor는 체크 상태를 '행 번호'에 묶어 위젯 키에 보관한다. 이 표는 컨테이너가
+    # 없어도 위치 슬롯 행을 항상 그리므로 행 수가 변하지 않고, 슬롯 내용만 바뀐다.
+    # 그래서 키를 그대로 두면 이전 컨테이너에 한 체크가 그 자리에 새로 온 컨테이너에
+    # 그대로 적용된다(선적완료 → 등록하자마자 백업, 출력선택 → 엉뚱한 라벨 인쇄).
+    # 슬롯↔컨테이너 구성이 달라지면 키를 회전해 이전 체크를 버린다.
+    table_sig = tuple((r['위치'], r['컨테이너 번호']) for r in table_rows)
+    if st.session_state.get('table_sig') != table_sig:
+        st.session_state['table_sig'] = table_sig
+        st.session_state['editor_rev'] = st.session_state.get('editor_rev', 0) + 1
+
     # ✏️ 체크 후 팝업을 닫으면 체크가 남아 재오픈되는 것을 막기 위해 키를 바꿔 초기화
     editor_key = f"merged_editor_{st.session_state.get('editor_rev', 0)}"
     edited_df = st.data_editor(
@@ -502,10 +512,12 @@ with st.container(border=True):
     ]
     if to_complete:
         cno = to_complete[0]
+        # 처리했으면 성공·실패·차단 어느 쪽이든 체크를 비운다.
+        # (실패해서 표 내용이 그대로면 위 table_sig 회전이 걸리지 않으므로 여기서 처리한다)
+        st.session_state['editor_rev'] = st.session_state.get('editor_rev', 0) + 1
         target = next((c for c in st.session_state.container_list if c.get('컨테이너 번호') == cno), None)
         if target and str(target.get('출고처') or '').strip() == UNDECIDED:
-            # 출고처 미정이면 백업 차단 → 팝업으로 안내 (체크는 키 회전으로 초기화)
-            st.session_state['editor_rev'] = st.session_state.get('editor_rev', 0) + 1
+            # 출고처 미정이면 백업 차단 → 팝업으로 안내
             st.session_state['undecided_block'] = cno
         else:
             ok, res = complete_and_backup_container(cno)
